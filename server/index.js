@@ -9,6 +9,7 @@ import { Storage } from "./storage.js";
 import { ThreadStore } from "./thread-store.js";
 import { listClaudeSessions, loadSessionHistory } from "./claude-sessions.js";
 import { JsonlWatcher } from "./jsonl-watcher.js";
+import { listClaudeTmuxPanes, TmuxSessionManager } from "./tmux-session.js";
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -94,8 +95,21 @@ app.get("*", (req, res) => {
 
 const storage = new Storage();
 const sessionManager = new SessionManager(storage);
+const tmuxSessionManager = new TmuxSessionManager();
 const threadStore = new ThreadStore(storage);
 const jsonlWatcher = new JsonlWatcher();
+
+function findSession(id) {
+  return sessionManager.getSession(id) || tmuxSessionManager.getSession(id);
+}
+
+function allSessions() {
+  return [...sessionManager.listSessions(), ...tmuxSessionManager.listSessions()];
+}
+
+function broadcastSessionList() {
+  broadcast({ type: "session_list", sessions: allSessions() });
+}
 
 // ping/pong で接続切れを検知
 const PING_INTERVAL = 30_000;
@@ -120,7 +134,7 @@ wss.on("connection", (ws) => {
   ws.send(
     JSON.stringify({
       type: "session_list",
-      sessions: sessionManager.listSessions(),
+      sessions: allSessions(),
     })
   );
 
@@ -164,15 +178,12 @@ wss.on("connection", (ws) => {
           onMessage: (chatMsg) => broadcast(chatMsg),
         });
 
-        broadcast({
-          type: "session_list",
-          sessions: sessionManager.listSessions(),
-        });
+        broadcastSessionList();
         break;
       }
 
       case "input": {
-        const session = sessionManager.getSession(msg.sessionId);
+        const session = findSession(msg.sessionId);
         if (session) {
           session.write(msg.text);
         } else {
@@ -189,7 +200,7 @@ wss.on("connection", (ws) => {
       }
 
       case "resize": {
-        const session = sessionManager.getSession(msg.sessionId);
+        const session = findSession(msg.sessionId);
         if (session) {
           session.resize(msg.cols, msg.rows);
         }
@@ -199,10 +210,7 @@ wss.on("connection", (ws) => {
       case "kill_session": {
         jsonlWatcher.stopWatching(msg.sessionId);
         sessionManager.killSession(msg.sessionId);
-        broadcast({
-          type: "session_list",
-          sessions: sessionManager.listSessions(),
-        });
+        broadcastSessionList();
         break;
       }
 
@@ -224,19 +232,13 @@ wss.on("connection", (ws) => {
             });
           });
         }
-        broadcast({
-          type: "session_list",
-          sessions: sessionManager.listSessions(),
-        });
+        broadcastSessionList();
         break;
       }
 
       case "remove_past_session": {
         sessionManager.removePastSession(msg.sessionId);
-        broadcast({
-          type: "session_list",
-          sessions: sessionManager.listSessions(),
-        });
+        broadcastSessionList();
         break;
       }
 
@@ -260,7 +262,7 @@ wss.on("connection", (ws) => {
         });
 
         // スレッドの返信内容を Claude Code に送信
-        const session = sessionManager.getSession(msg.sessionId);
+        const session = findSession(msg.sessionId);
         if (session) {
           const thread = threadStore
             .getThreadsForSession(msg.sessionId)
@@ -341,7 +343,7 @@ wss.on("connection", (ws) => {
       }
 
       case "send_comment_to_claude": {
-        const s = sessionManager.getSession(msg.sessionId);
+        const s = findSession(msg.sessionId);
         if (s) {
           s.write(msg.text + "\r");
         }
@@ -408,24 +410,78 @@ wss.on("connection", (ws) => {
           onMessage: (chatMsg) => broadcast(chatMsg),
         });
 
-        broadcast({
-          type: "session_list",
-          sessions: sessionManager.listSessions(),
-        });
+        broadcastSessionList();
         break;
       }
 
       case "get_buffer": {
-        const session = sessionManager.getSession(msg.sessionId);
+        const session = findSession(msg.sessionId);
         if (session) {
+          Promise.resolve(session.getOutputBuffer()).then((data) => {
+            ws.send(
+              JSON.stringify({
+                type: "output_buffer",
+                sessionId: msg.sessionId,
+                data,
+              })
+            );
+          });
+        }
+        break;
+      }
+
+      case "list_tmux_panes": {
+        listClaudeTmuxPanes().then((panes) => {
           ws.send(
             JSON.stringify({
-              type: "output_buffer",
-              sessionId: msg.sessionId,
-              data: session.getOutputBuffer(),
+              type: "tmux_panes",
+              panes,
             })
           );
+        });
+        break;
+      }
+
+      case "attach_tmux_pane": {
+        const session = tmuxSessionManager.attachPane({
+          paneId: msg.paneId,
+          name: msg.name || `tmux: ${msg.target}`,
+          cwd: msg.cwd,
+          target: msg.target,
+        });
+
+        // 既存セッションの履歴を読み込んで返す
+        const found = jsonlWatcher.findSessionForCwd(msg.cwd);
+        if (found) {
+          loadSessionHistory(found.sessionId, found.projectDir).then(
+            (history) => {
+              ws.send(
+                JSON.stringify({
+                  type: "session_history",
+                  bridgeSessionId: session.id,
+                  messages: history,
+                })
+              );
+            }
+          );
         }
+
+        // JSONL 監視開始（新規メッセージのみ配信）
+        jsonlWatcher.startWatching({
+          bridgeSessionId: session.id,
+          cwd: msg.cwd,
+          attachExisting: true,
+          onMessage: (chatMsg) => broadcast(chatMsg),
+        });
+
+        broadcastSessionList();
+        break;
+      }
+
+      case "detach_tmux_pane": {
+        jsonlWatcher.stopWatching(msg.sessionId);
+        tmuxSessionManager.detachSession(msg.sessionId);
+        broadcastSessionList();
         break;
       }
 

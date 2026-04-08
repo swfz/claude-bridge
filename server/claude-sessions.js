@@ -38,6 +38,42 @@ function extractFirstUserMessage(lines) {
   return "";
 }
 
+function extractToolUses(msg) {
+  if (!msg || typeof msg === "string") return [];
+  const content = msg.content;
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((b) => b.type === "tool_use")
+    .map((b) => ({
+      id: b.id,
+      name: b.name,
+      input: b.input,
+      summary: toolUseSummary(b.name, b.input),
+    }));
+}
+
+function toolUseSummary(name, input) {
+  if (!input) return name;
+  switch (name) {
+    case "Bash":
+      return input.description || input.command?.slice(0, 120) || "Bash";
+    case "Read": case "Edit": case "Write":
+      return shortPath(input.file_path);
+    case "Grep": case "Glob":
+      return `${input.pattern}${input.path ? " in " + shortPath(input.path) : ""}`;
+    case "Agent":
+      return input.description || "Agent";
+    default:
+      return name;
+  }
+}
+
+function shortPath(p) {
+  if (!p) return "";
+  const parts = p.split("/");
+  return parts.length > 2 ? ".../" + parts.slice(-2).join("/") : p;
+}
+
 // message オブジェクトからテキストを取り出す（maxLen=0 で全文）
 function extractTextContent(msg, maxLen = 100) {
   let text = "";
@@ -152,12 +188,20 @@ export async function loadSessionHistory(sessionId, projectDir) {
             timestamp: record.timestamp || record.updatedAt || "",
           });
         }
+      } else if (record.type === "queue-operation" && record.operation === "enqueue" && record.content) {
+        messages.push({
+          role: "human",
+          content: record.content,
+          timestamp: record.timestamp || "",
+        });
       } else if (record.type === "assistant") {
         const text = extractTextContent(record.message, 0);
-        if (text) {
+        const toolUses = extractToolUses(record.message);
+        if (text || toolUses.length > 0) {
           messages.push({
             role: "assistant",
             content: text,
+            toolUses: toolUses.length > 0 ? toolUses : undefined,
             timestamp: record.timestamp || record.updatedAt || "",
           });
         }

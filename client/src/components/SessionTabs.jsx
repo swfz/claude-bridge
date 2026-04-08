@@ -7,6 +7,7 @@ export default function SessionTabs({
   onKill,
   onRestart,
   onRemovePast,
+  onDetachTmux,
   onNew,
 }) {
   return (
@@ -18,6 +19,9 @@ export default function SessionTabs({
             className={`tab ${session.id === activeSessionId ? "active" : ""} ${!session.alive ? "dead" : ""}`}
             onClick={() => session.alive && onSelect(session.id)}
           >
+            {session.type === "tmux" && (
+              <span className="tab-badge">tmux</span>
+            )}
             <span className="tab-name">{session.name}</span>
             <span className="tab-cwd" title={session.cwd}>
               {session.cwd.split("/").pop()}
@@ -27,9 +31,13 @@ export default function SessionTabs({
                 className="tab-close"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onKill(session.id);
+                  if (session.type === "tmux") {
+                    onDetachTmux(session.id);
+                  } else {
+                    onKill(session.id);
+                  }
                 }}
-                title="セッションを終了"
+                title={session.type === "tmux" ? "切断" : "セッションを終了"}
               >
                 x
               </button>

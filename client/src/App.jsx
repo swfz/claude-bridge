@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useWebSocket } from "./hooks/useWebSocket.js";
 import SessionTabs from "./components/SessionTabs.jsx";
 import TerminalView from "./components/TerminalView.jsx";
@@ -12,6 +12,7 @@ import "./App.css";
 export default function App() {
   const { send, on, connected } = useWebSocket();
   const [sessions, setSessions] = useState([]);
+  const sessionsRef = useRef(sessions);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [showNewSession, setShowNewSession] = useState(false);
   const [viewMode, setViewMode] = useState("chat");
@@ -20,18 +21,29 @@ export default function App() {
   const [comments, setComments] = useState([]);
   const [showThreadPanel, setShowThreadPanel] = useState(false);
   const [claudeSessions, setClaudeSessions] = useState(null);
+  const [tmuxPanes, setTmuxPanes] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [drawerOpenedAt, setDrawerOpenedAt] = useState(null);
+  const pendingTmuxAttach = useRef(false);
 
   useEffect(() => {
     return on("session_list", (msg) => {
       setSessions(msg.sessions);
+      sessionsRef.current = msg.sessions;
       const aliveSessions = msg.sessions.filter((s) => s.alive);
       if (aliveSessions.length > 0) {
-        // 今のactiveがaliveでなければ、最新のaliveセッションに切り替え
-        const currentAlive = aliveSessions.find((s) => s.id === activeSessionId);
-        if (!currentAlive) {
-          setActiveSessionId(aliveSessions[aliveSessions.length - 1].id);
+        if (pendingTmuxAttach.current) {
+          // tmux 接続直後: 最新セッションに切り替え
+          pendingTmuxAttach.current = false;
+          const newest = aliveSessions[aliveSessions.length - 1];
+          setActiveSessionId(newest.id);
+          setMessages([]);
+        } else {
+          // 今のactiveがaliveでなければ、最新のaliveセッションに切り替え
+          const currentAlive = aliveSessions.find((s) => s.id === activeSessionId);
+          if (!currentAlive) {
+            setActiveSessionId(aliveSessions[aliveSessions.length - 1].id);
+          }
         }
       }
     });
@@ -63,11 +75,14 @@ export default function App() {
   }, [on]);
 
   // JSONL ベースの chat_message を受信
-  // human メッセージは addUserMessage で即座に追加済みなのでスキップ
-  // assistant メッセージのみ追加
+  // node-pty セッション: human メッセージは addUserMessage で即座に追加済みなのでスキップ
+  // tmux セッション: human メッセージも JSONL 経由で取得するため全て追加
   useEffect(() => {
     return on("chat_message", (msg) => {
-      if (msg.bridgeSessionId === activeSessionId && msg.role === "assistant") {
+      if (msg.bridgeSessionId !== activeSessionId) return;
+      const activeSession = sessionsRef.current.find((s) => s.id === activeSessionId);
+      const isTmux = activeSession?.type === "tmux";
+      if (msg.role === "assistant" || (isTmux && msg.role === "human")) {
         const id = `jsonl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         setMessages((prev) => [
           ...prev,
@@ -75,6 +90,7 @@ export default function App() {
             id,
             role: msg.role,
             content: msg.content,
+            toolUses: msg.toolUses,
             timestamp: msg.timestamp || new Date().toISOString(),
           },
         ]);
@@ -105,12 +121,19 @@ export default function App() {
   }, [on]);
 
   useEffect(() => {
+    return on("tmux_panes", (msg) => {
+      setTmuxPanes(msg.panes);
+    });
+  }, [on]);
+
+  useEffect(() => {
     return on("session_history", (msg) => {
       if (msg.messages && msg.messages.length > 0) {
         const loaded = msg.messages.map((m, i) => ({
           id: `history-${i}-${Date.now()}`,
           role: m.role,
           content: m.content,
+          toolUses: m.toolUses,
           timestamp: m.timestamp || new Date().toISOString(),
           isHistory: true,
         }));
@@ -160,6 +183,13 @@ export default function App() {
     [send]
   );
 
+  const handleDetachTmux = useCallback(
+    (sessionId) => {
+      send({ type: "detach_tmux_pane", sessionId });
+    },
+    [send]
+  );
+
   const handleResumeSession = useCallback(
     ({ claudeSessionId, name, cwd, projectDir }) => {
       // 履歴を先に取得
@@ -178,6 +208,21 @@ export default function App() {
 
   const handleRequestClaudeSessions = useCallback(() => {
     send({ type: "list_claude_sessions" });
+  }, [send]);
+
+  const handleAttachTmux = useCallback(
+    ({ paneId, name, cwd, target }) => {
+      // pendingTmuxAttach を使って、session_list 更新後に履歴をリクエスト
+      pendingTmuxAttach.current = true;
+      send({ type: "attach_tmux_pane", paneId, name, cwd, target });
+      setShowNewSession(false);
+      setTmuxPanes(null);
+    },
+    [send]
+  );
+
+  const handleRequestTmuxPanes = useCallback(() => {
+    send({ type: "list_tmux_panes" });
   }, [send]);
 
   const addUserMessage = useCallback((text) => {
@@ -375,6 +420,7 @@ export default function App() {
         onKill={handleKillSession}
         onRestart={handleRestartSession}
         onRemovePast={handleRemovePastSession}
+        onDetachTmux={handleDetachTmux}
         onNew={() => setShowNewSession(true)}
       />
 
@@ -432,11 +478,15 @@ export default function App() {
           onClose={() => {
             setShowNewSession(false);
             setClaudeSessions(null);
+            setTmuxPanes(null);
           }}
           onCreate={handleCreateSession}
           onResume={handleResumeSession}
+          onAttachTmux={handleAttachTmux}
           onRequestClaudeSessions={handleRequestClaudeSessions}
+          onRequestTmuxPanes={handleRequestTmuxPanes}
           claudeSessions={claudeSessions}
+          tmuxPanes={tmuxPanes}
         />
       )}
 

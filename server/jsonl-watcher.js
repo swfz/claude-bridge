@@ -25,6 +25,49 @@ function extractText(msg) {
   return "";
 }
 
+// message オブジェクトから tool_use ブロックを抽出
+function extractToolUses(msg) {
+  if (!msg || typeof msg === "string") return [];
+  const content = msg.content;
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((b) => b.type === "tool_use")
+    .map((b) => ({
+      id: b.id,
+      name: b.name,
+      input: b.input,
+      summary: toolUseSummary(b.name, b.input),
+    }));
+}
+
+function toolUseSummary(name, input) {
+  if (!input) return name;
+  switch (name) {
+    case "Bash":
+      return input.description || input.command?.slice(0, 120) || "Bash";
+    case "Read":
+      return shortPath(input.file_path);
+    case "Edit":
+      return shortPath(input.file_path);
+    case "Write":
+      return shortPath(input.file_path);
+    case "Grep":
+      return `${input.pattern}${input.path ? " in " + shortPath(input.path) : ""}`;
+    case "Glob":
+      return `${input.pattern}${input.path ? " in " + shortPath(input.path) : ""}`;
+    case "Agent":
+      return input.description || "Agent";
+    default:
+      return name;
+  }
+}
+
+function shortPath(p) {
+  if (!p) return "";
+  const parts = p.split("/");
+  return parts.length > 2 ? ".../" + parts.slice(-2).join("/") : p;
+}
+
 export class JsonlWatcher {
   constructor() {
     // sessionId -> watcher state
@@ -34,7 +77,7 @@ export class JsonlWatcher {
   // セッション開始時に呼ぶ
   // resumeSessionId がある場合はそのファイルを直接監視
   // ない場合は cwd のプロジェクトディレクトリ内の最新ファイルを検出
-  startWatching({ bridgeSessionId, cwd, resumeSessionId, onMessage }) {
+  startWatching({ bridgeSessionId, cwd, resumeSessionId, attachExisting, onMessage }) {
     const projectDir = cwdToProjectDir(cwd);
     const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
 
@@ -50,6 +93,18 @@ export class JsonlWatcher {
       } catch {
         // ファイルがまだない場合
       }
+    } else if (attachExisting) {
+      // tmux 等の既存セッションに接続: 最新ファイルを即座に特定（recency チェックなし）
+      targetFile = this._findLatestJsonl(projectPath);
+      // 既存行はスキップし、新規メッセージのみ配信
+      if (targetFile) {
+        try {
+          const existing = readFileSync(targetFile, "utf-8");
+          linesRead = existing.split("\n").filter((l) => l.trim()).length;
+        } catch {
+          // ignore
+        }
+      }
     }
 
     const state = {
@@ -58,6 +113,7 @@ export class JsonlWatcher {
       projectPath,
       targetFile,
       linesRead,
+      attachExisting: !!attachExisting,
       onMessage,
       fsWatcher: null,
       pollTimer: null,
@@ -76,33 +132,50 @@ export class JsonlWatcher {
     this._startFileWatch(state);
   }
 
-  // プロジェクトディレクトリ内の最新 JSONL を検出
-  _detectNewFile(state) {
+  // cwd からプロジェクトディレクトリと最新セッション ID を返す
+  findSessionForCwd(cwd) {
+    const projectDir = cwdToProjectDir(cwd);
+    const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
+    const filePath = this._findLatestJsonl(projectPath);
+    if (!filePath) return null;
+    const sessionId = basename(filePath, ".jsonl");
+    return { sessionId, projectDir };
+  }
+
+  // プロジェクトディレクトリ内の最新 JSONL ファイルパスを返す
+  _findLatestJsonl(projectPath) {
     try {
-      const files = readdirSync(state.projectPath)
+      const files = readdirSync(projectPath)
         .filter((f) => f.endsWith(".jsonl"))
         .map((f) => ({
-          name: f,
-          path: join(state.projectPath, f),
-          mtime: statSync(join(state.projectPath, f)).mtime,
+          path: join(projectPath, f),
+          mtime: statSync(join(projectPath, f)).mtime,
         }))
         .sort((a, b) => b.mtime - a.mtime);
+      return files.length > 0 ? files[0].path : null;
+    } catch {
+      return null;
+    }
+  }
 
-      if (files.length > 0) {
-        const newest = files[0];
-        // 直近 10 秒以内に更新されたファイルのみ
-        if (Date.now() - newest.mtime.getTime() < 10000) {
-          if (state.targetFile !== newest.path) {
-            state.targetFile = newest.path;
-            state.linesRead = 0;
-            clearInterval(state.pollTimer);
-            state.pollTimer = null;
-            this._startFileWatch(state);
-            // 既存行を読む
-            this._readNewLines(state);
-          }
-        }
+  // プロジェクトディレクトリ内の最新 JSONL を検出
+  _detectNewFile(state) {
+    const newestPath = this._findLatestJsonl(state.projectPath);
+    if (!newestPath || state.targetFile === newestPath) return;
+
+    try {
+      // 新規セッション検出時は直近10秒以内のファイルのみ対象
+      if (!state.attachExisting) {
+        const mtime = statSync(newestPath).mtime;
+        if (Date.now() - mtime.getTime() >= 10000) return;
       }
+
+      state.targetFile = newestPath;
+      state.linesRead = 0;
+      clearInterval(state.pollTimer);
+      state.pollTimer = null;
+      this._startFileWatch(state);
+      this._readNewLines(state);
     } catch {
       // ディレクトリがまだない等
     }
@@ -177,14 +250,24 @@ export class JsonlWatcher {
               timestamp: record.timestamp || "",
             });
           }
+        } else if (record.type === "queue-operation" && record.operation === "enqueue" && record.content) {
+          state.onMessage({
+            type: "chat_message",
+            bridgeSessionId: state.bridgeSessionId,
+            role: "human",
+            content: record.content,
+            timestamp: record.timestamp || "",
+          });
         } else if (record.type === "assistant") {
           const text = extractText(record.message);
-          if (text) {
+          const toolUses = extractToolUses(record.message);
+          if (text || toolUses.length > 0) {
             state.onMessage({
               type: "chat_message",
               bridgeSessionId: state.bridgeSessionId,
               role: "assistant",
               content: text,
+              toolUses: toolUses.length > 0 ? toolUses : undefined,
               timestamp: record.timestamp || "",
             });
           }

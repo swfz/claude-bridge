@@ -5,10 +5,13 @@ export default function NewSessionDialog({
   onClose,
   onCreate,
   onResume,
+  onAttachTmux,
   onRequestClaudeSessions,
+  onRequestTmuxPanes,
   claudeSessions,
+  tmuxPanes,
 }) {
-  const [tab, setTab] = useState("new"); // "new" | "resume"
+  const [tab, setTab] = useState("new"); // "new" | "resume" | "tmux"
   const [name, setName] = useState("");
   const [cwd, setCwd] = useState("");
   const [filter, setFilter] = useState("");
@@ -17,7 +20,10 @@ export default function NewSessionDialog({
     if (tab === "resume" && onRequestClaudeSessions) {
       onRequestClaudeSessions();
     }
-  }, [tab, onRequestClaudeSessions]);
+    if (tab === "tmux" && onRequestTmuxPanes) {
+      onRequestTmuxPanes();
+    }
+  }, [tab, onRequestClaudeSessions, onRequestTmuxPanes]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -56,9 +62,55 @@ export default function NewSessionDialog({
           >
             既存セッションを再開
           </button>
+          <button
+            className={`dialog-tab ${tab === "tmux" ? "active" : ""}`}
+            onClick={() => setTab("tmux")}
+          >
+            tmux ペイン
+          </button>
         </div>
 
-        {tab === "new" ? (
+        {tab === "tmux" ? (
+          <div className="resume-panel">
+            <div className="session-list">
+              {!tmuxPanes ? (
+                <p className="session-list-empty">読み込み中...</p>
+              ) : tmuxPanes.length === 0 ? (
+                <p className="session-list-empty">
+                  Claude を実行中の tmux ペインが見つかりません
+                </p>
+              ) : (
+                tmuxPanes.map((p) => (
+                  <div
+                    key={p.paneId}
+                    className="session-list-item"
+                    onClick={() =>
+                      onAttachTmux({
+                        paneId: p.paneId,
+                        name: `tmux: ${p.target}`,
+                        cwd: p.cwd,
+                        target: p.target,
+                      })
+                    }
+                  >
+                    <div className="session-item-main">
+                      <span className="session-item-cwd">{p.cwd}</span>
+                      <span className="session-item-time">{p.target}</span>
+                    </div>
+                    <div className="session-item-id">
+                      pane: {p.paneId} / pid: {p.panePid}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="dialog-actions">
+              <button className="btn btn-ghost" onClick={onClose}>
+                キャンセル
+              </button>
+            </div>
+          </div>
+        ) : tab === "new" ? (
           <form onSubmit={handleSubmit}>
             <div className="dialog-field">
               <label>セッション名</label>
