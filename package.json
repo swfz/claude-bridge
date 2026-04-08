@@ -8,6 +8,7 @@
     "dev:client": "npm --prefix client run dev",
     "build": "npm --prefix client run build",
     "start": "node server/index.js",
+    "test": "node --experimental-test-module-mocks --test 'test/**/*.test.js'",
     "install:all": "npm install && npm --prefix client install"
   },
   "dependencies": {
