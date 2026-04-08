@@ -499,6 +499,20 @@
   color: #3fb950;
 }
 
+.tool-file-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tool-file-preview .file-preview-inline {
+  font-size: 12px;
+}
+
+.tool-file-preview .file-path-display {
+  display: none;
+}
+
 /* diff 行の文字色は highlight.js に任せる。ハイライトなしの場合のみフォールバック */
 .diff-line > span:not(.diff-sign) {
   color: var(--text-primary);

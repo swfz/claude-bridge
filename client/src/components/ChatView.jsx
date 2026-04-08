@@ -48,21 +48,31 @@ const TOOL_ICONS = {
   Agent: "A",
 };
 
-function ToolUseItem({ tool }) {
+const FILE_TOOLS = new Set(["Read", "Edit", "Write"]);
+
+function ToolUseItem({ tool, onOpenPreview, onOpenFileReview }) {
   const [expanded, setExpanded] = useState(false);
   const icon = TOOL_ICONS[tool.name] || "T";
+  const filePath = FILE_TOOLS.has(tool.name) ? tool.input?.file_path : null;
 
   return (
     <div className="tool-use-item">
-      <button
-        className="tool-use-summary"
-        onClick={() => setExpanded(!expanded)}
-      >
+      <div className="tool-use-summary" onClick={() => setExpanded(!expanded)}>
         <span className="tool-icon">{icon}</span>
         <span className="tool-name">{tool.name}</span>
-        <span className="tool-desc">{tool.summary}</span>
+        {filePath ? (
+          <span className="tool-file-preview" onClick={(e) => e.stopPropagation()}>
+            <FilePreview
+              href={`file://${filePath}`}
+              onOpenPreview={onOpenPreview}
+              onOpenFileReview={onOpenFileReview}
+            />
+          </span>
+        ) : (
+          <span className="tool-desc">{tool.summary}</span>
+        )}
         <span className="tool-expand">{expanded ? "−" : "+"}</span>
-      </button>
+      </div>
       {expanded && (
         <div className="tool-use-detail">
           {tool.name === "Edit" ? (
@@ -365,7 +375,7 @@ function ChatMessage({
       {message.toolUses && message.toolUses.length > 0 && (
         <div className="tool-uses">
           {message.toolUses.map((tool) => (
-            <ToolUseItem key={tool.id} tool={tool} />
+            <ToolUseItem key={tool.id} tool={tool} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
           ))}
         </div>
       )}
