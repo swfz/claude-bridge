@@ -196,7 +196,7 @@ export default function App() {
     (text) => {
       if (activeSessionId) {
         addUserMessage(text);
-        send({ type: "input", sessionId: activeSessionId, text: text + "\n" });
+        send({ type: "input", sessionId: activeSessionId, text: text + "\r" });
       }
     },
     [send, activeSessionId, addUserMessage]
@@ -301,7 +301,7 @@ export default function App() {
       send({
         type: "input",
         sessionId: activeSessionId,
-        text: prompt + "\n",
+        text: prompt + "\r",
       });
     },
     [send, activeSessionId, addUserMessage]
@@ -457,7 +457,7 @@ export default function App() {
               ? `[レビュー: ${fileName}] ${items[0].replace(/\n/g, " ")}`
               : `[レビュー: ${fileName} ${items.length}件] ${items.map((t) => t.replace(/\n/g, " ")).join(" / ")}`;
             addUserMessage(prompt);
-            send({ type: "input", sessionId: activeSessionId, text: prompt + "\n" });
+            send({ type: "input", sessionId: activeSessionId, text: prompt + "\r" });
           }}
           responses={
             drawerOpenedAt != null

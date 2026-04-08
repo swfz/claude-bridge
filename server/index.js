@@ -251,7 +251,7 @@ wss.on("connection", (ws) => {
           const context = thread
             ? `[スレッド: "${thread.selectedText}" への返信]\n${msg.text}`
             : msg.text;
-          session.write(context + "\n");
+          session.write(context + "\r");
         }
 
         broadcast({
@@ -326,7 +326,7 @@ wss.on("connection", (ws) => {
       case "send_comment_to_claude": {
         const s = sessionManager.getSession(msg.sessionId);
         if (s) {
-          s.write(msg.text + "\n");
+          s.write(msg.text + "\r");
         }
         break;
       }
