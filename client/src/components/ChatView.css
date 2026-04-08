@@ -18,7 +18,6 @@
 
 .chat-message {
   max-width: 95%;
-  padding: 12px 16px;
   border-radius: 12px;
   font-size: 14px;
   line-height: 1.6;
@@ -68,6 +67,29 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-header-action {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: all 0.1s;
+}
+
+.btn-header-action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .chat-role {
@@ -78,11 +100,11 @@
 }
 
 .human .chat-role {
-  color: var(--accent);
+  color: #58a6ff;
 }
 
 .assistant .chat-role {
-  color: var(--success);
+  color: #f0883e;
 }
 
 .chat-time {
@@ -355,4 +377,136 @@
   border-color: var(--success);
   color: var(--success);
   opacity: 0.7;
+}
+
+/* Tool use items */
+.tool-uses {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.tool-use-item {
+  font-size: 12px;
+}
+
+.tool-use-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.tool-use-summary:hover {
+  background: var(--bg-secondary);
+}
+
+.tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tool-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.tool-desc {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-expand {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.tool-use-detail {
+  margin: 4px 0 0 24px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  max-height: 300px;
+  overflow: auto;
+  color: var(--text-primary);
+}
+
+.tool-detail-pre {
+  margin: 0;
+  padding: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.diff-file-path {
+  padding: 4px 8px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-block {
+  margin: 0;
+  padding: 4px 0;
+}
+
+.diff-line {
+  padding: 1px 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.diff-removed {
+  background: rgba(248, 81, 73, 0.15);
+}
+
+.diff-removed > .diff-sign {
+  color: #f85149;
+}
+
+.diff-added {
+  background: rgba(63, 185, 80, 0.15);
+}
+
+.diff-added > .diff-sign {
+  color: #3fb950;
+}
+
+/* diff 行の文字色は highlight.js に任せる。ハイライトなしの場合のみフォールバック */
+.diff-line > span:not(.diff-sign) {
+  color: var(--text-primary);
+}
+
+.diff-sign {
+  display: inline-block;
+  width: 14px;
+  font-weight: 700;
+  user-select: none;
 }

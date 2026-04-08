@@ -1,12 +1,178 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import hljs from "highlight.js/lib/core";
+import javascript from "highlight.js/lib/languages/javascript";
+import typescript from "highlight.js/lib/languages/typescript";
+import python from "highlight.js/lib/languages/python";
+import ruby from "highlight.js/lib/languages/ruby";
+import go from "highlight.js/lib/languages/go";
+import rust from "highlight.js/lib/languages/rust";
+import css from "highlight.js/lib/languages/css";
+import xml from "highlight.js/lib/languages/xml";
+import json from "highlight.js/lib/languages/json";
+import yaml from "highlight.js/lib/languages/yaml";
+import bash from "highlight.js/lib/languages/bash";
+import markdown from "highlight.js/lib/languages/markdown";
+import sql from "highlight.js/lib/languages/sql";
+
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("python", python);
+hljs.registerLanguage("ruby", ruby);
+hljs.registerLanguage("go", go);
+hljs.registerLanguage("rust", rust);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("xml", xml);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("yaml", yaml);
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("sql", sql);
+
 import CommentPopover from "./CommentPopover.jsx";
 import ReviewPanel from "./ReviewPanel.jsx";
 import FilePreview from "./FilePreview.jsx";
+import "highlight.js/styles/github-dark.css";
 import "./ChatView.css";
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
+
+const TOOL_ICONS = {
+  Bash: "$",
+  Read: "R",
+  Edit: "E",
+  Write: "W",
+  Grep: "G",
+  Glob: "G",
+  Agent: "A",
+};
+
+function ToolUseItem({ tool }) {
+  const [expanded, setExpanded] = useState(false);
+  const icon = TOOL_ICONS[tool.name] || "T";
+
+  return (
+    <div className="tool-use-item">
+      <button
+        className="tool-use-summary"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="tool-icon">{icon}</span>
+        <span className="tool-name">{tool.name}</span>
+        <span className="tool-desc">{tool.summary}</span>
+        <span className="tool-expand">{expanded ? "−" : "+"}</span>
+      </button>
+      {expanded && (
+        <div className="tool-use-detail">
+          {tool.name === "Edit" ? (
+            <EditDiff input={tool.input} />
+          ) : (
+            <pre className="tool-detail-pre">{formatToolInput(tool.name, tool.input)}</pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const EXT_TO_LANG = {
+  js: "javascript", jsx: "javascript", mjs: "javascript",
+  ts: "typescript", tsx: "typescript",
+  py: "python", rb: "ruby", go: "go", rs: "rust",
+  css: "css", html: "xml", htm: "xml", xml: "xml", svg: "xml",
+  json: "json", yaml: "yaml", yml: "yaml",
+  sh: "bash", bash: "bash", zsh: "bash",
+  md: "markdown", sql: "sql",
+};
+
+function highlightLine(text, lang) {
+  if (!lang || !hljs.getLanguage(lang)) return null;
+  try {
+    return hljs.highlight(text, { language: lang }).value;
+  } catch {
+    return null;
+  }
+}
+
+function DiffLine({ sign, className, html, text }) {
+  return (
+    <div className={`diff-line ${className}`}>
+      <span className="diff-sign">{sign}</span>
+      {html
+        ? <span dangerouslySetInnerHTML={{ __html: html }} />
+        : <span>{text}</span>}
+    </div>
+  );
+}
+
+function EditDiff({ input }) {
+  if (!input) return null;
+  const filePath = input.file_path || "";
+  const oldStr = input.old_string || "";
+  const newStr = input.new_string || "";
+
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  const lang = EXT_TO_LANG[ext];
+
+  const oldLines = oldStr.split("\n");
+  const newLines = newStr.split("\n");
+
+  const oldHighlighted = useMemo(
+    () => oldLines.map((line) => highlightLine(line, lang)),
+    [oldStr, lang]
+  );
+  const newHighlighted = useMemo(
+    () => newLines.map((line) => highlightLine(line, lang)),
+    [newStr, lang]
+  );
+
+  return (
+    <>
+      <div className="diff-file-path">{filePath}</div>
+      <pre className="diff-block">
+        {oldLines.map((line, i) => (
+          <DiffLine
+            key={`old-${i}`}
+            sign="-"
+            className="diff-removed"
+            html={oldHighlighted?.[i]}
+            text={line}
+          />
+        ))}
+        {newLines.map((line, i) => (
+          <DiffLine
+            key={`new-${i}`}
+            sign="+"
+            className="diff-added"
+            html={newHighlighted?.[i]}
+            text={line}
+          />
+        ))}
+      </pre>
+    </>
+  );
+}
+
+function formatToolInput(name, input) {
+  if (!input) return "";
+  switch (name) {
+    case "Bash":
+      return input.command || "";
+    case "Edit":
+      return input.file_path || "";
+    case "Write":
+      return `${input.file_path || ""}\n${(input.content || "").slice(0, 500)}${(input.content || "").length > 500 ? "\n..." : ""}`;
+    case "Read":
+      return input.file_path || "";
+    case "Grep":
+      return `pattern: ${input.pattern || ""}${input.path ? `\npath: ${input.path}` : ""}`;
+    case "Glob":
+      return `pattern: ${input.pattern || ""}${input.path ? `\npath: ${input.path}` : ""}`;
+    default:
+      return JSON.stringify(input, null, 2).slice(0, 500);
+  }
+}
 
 function CodeBlock({ children, className }) {
   const codeRef = useRef(null);
@@ -168,13 +334,56 @@ function ChatMessage({
             {expanded ? "折りたたむ" : "全文表示"}
           </button>
         )}
+        {!isHuman && (
+          <div className="header-actions">
+            <button
+              className="btn-header-action"
+              onClick={() => onPreviewMarkdown(message.content, `Claude #${message.id}`)}
+              title="サイドパネルでプレビュー"
+            >
+              Preview
+            </button>
+            <button
+              className="btn-header-action"
+              onClick={() => setShowReview(!showReview)}
+              title="レビューコメントを書く"
+            >
+              Review
+            </button>
+            <button
+              className="btn-header-action"
+              onClick={() => onStartThread(message.id, "")}
+              title="スレッドを開始"
+            >
+              Thread
+            </button>
+            <button
+              className="btn-header-action"
+              onClick={() => setShowComments(!showComments)}
+              title="コメント"
+            >
+              {messageComments.length > 0
+                ? `Memo(${messageComments.length})`
+                : "Memo"}
+            </button>
+          </div>
+        )}
       </div>
-      <div
-        className={`chat-message-body ${shouldCollapse ? "collapsed" : ""}`}
-        onMouseUp={!isHuman ? handleTextSelect : undefined}
-      >
-        <MarkdownContent content={message.content} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
-      </div>
+      {message.toolUses && message.toolUses.length > 0 && (
+        <div className="tool-uses">
+          {message.toolUses.map((tool) => (
+            <ToolUseItem key={tool.id} tool={tool} />
+          ))}
+        </div>
+      )}
+      {message.content && (
+        <div
+          className={`chat-message-body ${shouldCollapse ? "collapsed" : ""}`}
+          onMouseUp={!isHuman ? handleTextSelect : undefined}
+        >
+          <MarkdownContent content={message.content} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
+        </div>
+      )}
 
       {shouldCollapse && (
         <button
@@ -185,40 +394,6 @@ function ChatMessage({
         </button>
       )}
 
-      {!isHuman && (
-        <div className="chat-message-actions">
-          <button
-            className="btn-action btn-action-primary"
-            onClick={() => onPreviewMarkdown(message.content, `Claude #${message.id}`)}
-            title="サイドパネルでプレビュー"
-          >
-            プレビュー
-          </button>
-          <button
-            className="btn-action"
-            onClick={() => setShowReview(!showReview)}
-            title="レビューコメントを書く"
-          >
-            レビュー
-          </button>
-          <button
-            className="btn-action"
-            onClick={() => onStartThread(message.id, "")}
-            title="スレッドを開始"
-          >
-            + スレッド
-          </button>
-          <button
-            className="btn-action"
-            onClick={() => setShowComments(!showComments)}
-            title="コメント"
-          >
-            {messageComments.length > 0
-              ? `メモ (${messageComments.length})`
-              : "メモ"}
-          </button>
-        </div>
-      )}
 
       {messageThreads.length > 0 && (
         <div className="inline-threads">

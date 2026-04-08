@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import "./ThreadPanel.css";
 
 function ThreadItem({ thread, onReply, onResolve, onDelete }) {
@@ -83,9 +83,34 @@ function ThreadItem({ thread, onReply, onResolve, onDelete }) {
 
 export default function ThreadPanel({ threads, onReply, onResolve, onDelete }) {
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
+  const [width, setWidth] = useState(480);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const onDragStart = useCallback((e) => {
+    e.preventDefault();
+    dragging.current = true;
+    startX.current = e.clientX;
+    startWidth.current = width;
+
+    const onMove = (ev) => {
+      if (!dragging.current) return;
+      const delta = startX.current - ev.clientX;
+      setWidth(Math.max(240, Math.min(startWidth.current + delta, 800)));
+    };
+    const onUp = () => {
+      dragging.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [width]);
 
   return (
-    <div className="thread-panel">
+    <div className="thread-panel" style={{ width, minWidth: width }}>
+      <div className="thread-resize-handle" onMouseDown={onDragStart} />
       <div className="thread-panel-header">
         <h3>
           スレッド
