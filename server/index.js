@@ -97,8 +97,25 @@ const sessionManager = new SessionManager(storage);
 const threadStore = new ThreadStore(storage);
 const jsonlWatcher = new JsonlWatcher();
 
+// ping/pong で接続切れを検知
+const PING_INTERVAL = 30_000;
+const pingInterval = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.isAlive) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, PING_INTERVAL);
+
+wss.on("close", () => clearInterval(pingInterval));
+
 wss.on("connection", (ws) => {
   console.log("WebSocket client connected");
+  ws.isAlive = true;
+  ws.on("pong", () => { ws.isAlive = true; });
 
   ws.send(
     JSON.stringify({
@@ -395,6 +412,20 @@ wss.on("connection", (ws) => {
           type: "session_list",
           sessions: sessionManager.listSessions(),
         });
+        break;
+      }
+
+      case "get_buffer": {
+        const session = sessionManager.getSession(msg.sessionId);
+        if (session) {
+          ws.send(
+            JSON.stringify({
+              type: "output_buffer",
+              sessionId: msg.sessionId,
+              data: session.getOutputBuffer(),
+            })
+          );
+        }
         break;
       }
 

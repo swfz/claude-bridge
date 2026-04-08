@@ -386,6 +386,7 @@ export default function App() {
                 sessionId={activeSessionId}
                 on={on}
                 onResize={handleResize}
+                send={send}
               />
             ) : (
               <ChatView

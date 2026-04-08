@@ -11,6 +11,9 @@ export class Session {
     this._outputCallbacks = [];
     this._exitCallbacks = [];
     this._process = null;
+    this._outputBuffer = [];
+    this._outputBufferSize = 0;
+    this._maxBufferSize = 1024 * 1024; // 1MB
   }
 
   start() {
@@ -23,6 +26,12 @@ export class Session {
     });
 
     this._process.onData((data) => {
+      this._outputBuffer.push(data);
+      this._outputBufferSize += data.length;
+      while (this._outputBufferSize > this._maxBufferSize) {
+        const removed = this._outputBuffer.shift();
+        this._outputBufferSize -= removed.length;
+      }
       for (const cb of this._outputCallbacks) {
         cb(data);
       }
@@ -54,6 +63,10 @@ export class Session {
       this._process.kill();
       this._process = null;
     }
+  }
+
+  getOutputBuffer() {
+    return this._outputBuffer.join("");
   }
 
   onOutput(cb) {

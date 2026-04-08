@@ -5,7 +5,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalView.css";
 
-export default function TerminalView({ sessionId, on, onResize }) {
+export default function TerminalView({ sessionId, on, onResize, send }) {
   const containerRef = useRef(null);
   const termRef = useRef(null);
   const fitRef = useRef(null);
@@ -45,18 +45,27 @@ export default function TerminalView({ sessionId, on, onResize }) {
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(containerRef.current);
 
-    const unsubscribe = on("output", (msg) => {
+    const unsubOutput = on("output", (msg) => {
       if (msg.sessionId === sessionId) {
         term.write(msg.data);
       }
     });
 
+    const unsubBuffer = on("output_buffer", (msg) => {
+      if (msg.sessionId === sessionId && msg.data) {
+        term.write(msg.data);
+      }
+    });
+
+    send({ type: "get_buffer", sessionId });
+
     return () => {
-      unsubscribe();
+      unsubOutput();
+      unsubBuffer();
       resizeObserver.disconnect();
       term.dispose();
     };
-  }, [sessionId, on, onResize]);
+  }, [sessionId, on, onResize, send]);
 
   return <div className="terminal-view" ref={containerRef} />;
 }
