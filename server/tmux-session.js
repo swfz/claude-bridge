@@ -26,7 +26,15 @@ export async function listClaudeTmuxPanes() {
 }
 
 // tmux ペインにテキストを送信
+function validatePaneId(paneId) {
+  // tmux pane ID は %<数字> の形式
+  if (!/^%\d+$/.test(paneId)) {
+    throw new Error(`Invalid paneId format: ${paneId}`);
+  }
+}
+
 export async function sendKeysToPane(paneId, text) {
+  validatePaneId(paneId);
   try {
     const escaped = escapeForShell(text);
     await execAsync(
@@ -44,6 +52,7 @@ function escapeForShell(str) {
 // tmux ペインをラップするセッションクラス
 export class TmuxSession {
   constructor({ id, name, cwd, paneId, target }) {
+    validatePaneId(paneId);
     this.id = id;
     this.name = name;
     this.cwd = cwd;

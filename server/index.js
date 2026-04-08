@@ -1,8 +1,8 @@
 import express from "express";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
-import { existsSync, statSync } from "fs";
-import { extname, join, dirname } from "path";
+import { existsSync, statSync, lstatSync } from "fs";
+import { extname, join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { SessionManager } from "./session.js";
 import { Storage } from "./storage.js";
@@ -42,33 +42,36 @@ app.get("/preview", (req, res) => {
     return res.status(400).send("path parameter required");
   }
 
-  // セキュリティ: ホームディレクトリ配下のみ許可
-  const home = process.env.HOME || "/home";
-  if (!filePath.startsWith(home) && !filePath.startsWith("/tmp")) {
+  // セキュリティ: パス正規化でトラバーサル攻撃を防止
+  const canonical = resolve(filePath);
+  const home = resolve(process.env.HOME || "/home");
+  const tmp = resolve("/tmp");
+  if (!canonical.startsWith(home + "/") && canonical !== home &&
+      !canonical.startsWith(tmp + "/") && canonical !== tmp) {
     return res.status(403).send("Access denied: path must be under home or /tmp");
   }
 
-  if (!existsSync(filePath)) {
-    return res.status(404).send("File not found");
-  }
-
   try {
-    const stat = statSync(filePath);
-    if (!stat.isFile()) {
+    // シンボリックリンクを辿らず検査（リンク先への脱出を防止）
+    const lstat = lstatSync(canonical);
+    if (lstat.isSymbolicLink()) {
+      return res.status(403).send("Access denied: symlinks not allowed");
+    }
+    if (!lstat.isFile()) {
       return res.status(400).send("Not a file");
     }
     // 100MB 上限
-    if (stat.size > 100 * 1024 * 1024) {
+    if (lstat.size > 100 * 1024 * 1024) {
       return res.status(413).send("File too large");
     }
   } catch {
-    return res.status(500).send("Cannot stat file");
+    return res.status(404).send("File not found");
   }
 
-  const ext = extname(filePath).toLowerCase();
+  const ext = extname(canonical).toLowerCase();
   const mime = MIME_MAP[ext] || "application/octet-stream";
   res.setHeader("Content-Type", mime);
-  res.sendFile(filePath);
+  res.sendFile(canonical);
 });
 
 // クライアントのビルド成果物を配信
