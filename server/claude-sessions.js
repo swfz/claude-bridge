@@ -1,10 +1,12 @@
 import { readdirSync, statSync, createReadStream } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { homedir } from "os";
 import { createInterface } from "readline";
-
-const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
+import {
+  CLAUDE_PROJECTS_DIR,
+  extractTextContent,
+  extractToolUses,
+} from "./jsonl-utils.js";
 
 // JSONL の先頭 N 行だけ非同期で読む
 function readFirstLines(filePath, maxLines) {
@@ -29,71 +31,13 @@ function extractFirstUserMessage(lines) {
     try {
       const record = JSON.parse(line);
       if (record.type === "user") {
-        return extractTextContent(record.message);
+        return extractTextContent(record.message, 100);
       }
     } catch {
       continue;
     }
   }
   return "";
-}
-
-function extractToolUses(msg) {
-  if (!msg || typeof msg === "string") return [];
-  const content = msg.content;
-  if (!Array.isArray(content)) return [];
-  return content
-    .filter((b) => b.type === "tool_use")
-    .map((b) => ({
-      id: b.id,
-      name: b.name,
-      input: b.input,
-      summary: toolUseSummary(b.name, b.input),
-    }));
-}
-
-function toolUseSummary(name, input) {
-  if (!input) return name;
-  switch (name) {
-    case "Bash":
-      return input.description || input.command?.slice(0, 120) || "Bash";
-    case "Read": case "Edit": case "Write":
-      return shortPath(input.file_path);
-    case "Grep": case "Glob":
-      return `${input.pattern}${input.path ? " in " + shortPath(input.path) : ""}`;
-    case "Agent":
-      return input.description || "Agent";
-    default:
-      return name;
-  }
-}
-
-function shortPath(p) {
-  if (!p) return "";
-  const parts = p.split("/");
-  return parts.length > 2 ? ".../" + parts.slice(-2).join("/") : p;
-}
-
-// message オブジェクトからテキストを取り出す（maxLen=0 で全文）
-function extractTextContent(msg, maxLen = 100) {
-  let text = "";
-  if (typeof msg === "string") {
-    text = msg;
-  } else if (!msg) {
-    return "";
-  } else {
-    const content = msg.content;
-    if (typeof content === "string") {
-      text = content;
-    } else if (Array.isArray(content)) {
-      // 全テキストブロックを結合
-      text = content
-        .filter((b) => b.type === "text")
-        .map((b) => b.text)
-        .join("\n\n");
-    }
-  }
-  return maxLen > 0 ? text.slice(0, maxLen) : text;
 }
 
 // ~/.claude/projects/ 以下のセッションを非同期で一覧

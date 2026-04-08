@@ -1,72 +1,11 @@
 import { watch, readFileSync, readdirSync, statSync } from "fs";
 import { join, basename } from "path";
-import { homedir } from "os";
-
-const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
-
-// cwd からプロジェクトディレクトリ名を算出
-// e.g. /path/to/project → -path-to-project
-function cwdToProjectDir(cwd) {
-  return cwd.replace(/\//g, "-");
-}
-
-// message オブジェクトからテキストを取り出す
-function extractText(msg) {
-  if (!msg) return "";
-  if (typeof msg === "string") return msg;
-  const content = msg.content;
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("\n\n");
-  }
-  return "";
-}
-
-// message オブジェクトから tool_use ブロックを抽出
-function extractToolUses(msg) {
-  if (!msg || typeof msg === "string") return [];
-  const content = msg.content;
-  if (!Array.isArray(content)) return [];
-  return content
-    .filter((b) => b.type === "tool_use")
-    .map((b) => ({
-      id: b.id,
-      name: b.name,
-      input: b.input,
-      summary: toolUseSummary(b.name, b.input),
-    }));
-}
-
-function toolUseSummary(name, input) {
-  if (!input) return name;
-  switch (name) {
-    case "Bash":
-      return input.description || input.command?.slice(0, 120) || "Bash";
-    case "Read":
-      return shortPath(input.file_path);
-    case "Edit":
-      return shortPath(input.file_path);
-    case "Write":
-      return shortPath(input.file_path);
-    case "Grep":
-      return `${input.pattern}${input.path ? " in " + shortPath(input.path) : ""}`;
-    case "Glob":
-      return `${input.pattern}${input.path ? " in " + shortPath(input.path) : ""}`;
-    case "Agent":
-      return input.description || "Agent";
-    default:
-      return name;
-  }
-}
-
-function shortPath(p) {
-  if (!p) return "";
-  const parts = p.split("/");
-  return parts.length > 2 ? ".../" + parts.slice(-2).join("/") : p;
-}
+import {
+  CLAUDE_PROJECTS_DIR,
+  cwdToProjectDir,
+  extractTextContent,
+  extractToolUses,
+} from "./jsonl-utils.js";
 
 export class JsonlWatcher {
   constructor() {
@@ -240,7 +179,7 @@ export class JsonlWatcher {
       try {
         const record = JSON.parse(line);
         if (record.type === "user") {
-          const text = extractText(record.message);
+          const text = extractTextContent(record.message);
           if (text) {
             state.onMessage({
               type: "chat_message",
@@ -259,7 +198,7 @@ export class JsonlWatcher {
             timestamp: record.timestamp || "",
           });
         } else if (record.type === "assistant") {
-          const text = extractText(record.message);
+          const text = extractTextContent(record.message);
           const toolUses = extractToolUses(record.message);
           if (text || toolUses.length > 0) {
             state.onMessage({

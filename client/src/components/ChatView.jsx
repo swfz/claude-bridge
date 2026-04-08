@@ -86,10 +86,10 @@ const EXT_TO_LANG = {
   md: "markdown", sql: "sql",
 };
 
-function highlightLine(text, lang) {
+function highlightBlock(text, lang) {
   if (!lang || !hljs.getLanguage(lang)) return null;
   try {
-    return hljs.highlight(text, { language: lang }).value;
+    return hljs.highlight(text, { language: lang }).value.split("\n");
   } catch {
     return null;
   }
@@ -115,17 +115,11 @@ function EditDiff({ input }) {
   const ext = filePath.split(".").pop()?.toLowerCase();
   const lang = EXT_TO_LANG[ext];
 
+  const oldHighlighted = useMemo(() => highlightBlock(oldStr, lang), [oldStr, lang]);
+  const newHighlighted = useMemo(() => highlightBlock(newStr, lang), [newStr, lang]);
+
   const oldLines = oldStr.split("\n");
   const newLines = newStr.split("\n");
-
-  const oldHighlighted = useMemo(
-    () => oldLines.map((line) => highlightLine(line, lang)),
-    [oldStr, lang]
-  );
-  const newHighlighted = useMemo(
-    () => newLines.map((line) => highlightLine(line, lang)),
-    [newStr, lang]
-  );
 
   return (
     <>
@@ -165,9 +159,7 @@ function formatToolInput(name, input) {
       return `${input.file_path || ""}\n${(input.content || "").slice(0, 500)}${(input.content || "").length > 500 ? "\n..." : ""}`;
     case "Read":
       return input.file_path || "";
-    case "Grep":
-      return `pattern: ${input.pattern || ""}${input.path ? `\npath: ${input.path}` : ""}`;
-    case "Glob":
+    case "Grep": case "Glob":
       return `pattern: ${input.pattern || ""}${input.path ? `\npath: ${input.path}` : ""}`;
     default:
       return JSON.stringify(input, null, 2).slice(0, 500);
@@ -288,6 +280,10 @@ function ChatMessage({
   onPreviewMarkdown,
   onOpenFileReview,
 }) {
+  const [showComments, setShowComments] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
   const isHuman = message.role === "human";
   const isSystem = message.role === "system";
   const isHistory = message.isHistory;
@@ -301,9 +297,6 @@ function ChatMessage({
       </div>
     );
   }
-  const [showComments, setShowComments] = useState(false);
-  const [showReview, setShowReview] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const messageThreads = threads.filter((t) => t.messageId === message.id);
   const messageComments = comments.filter((c) => c.messageId === message.id);
 

@@ -84,6 +84,8 @@ function ThreadItem({ thread, onReply, onResolve, onDelete }) {
 export default function ThreadPanel({ threads, onReply, onResolve, onDelete }) {
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
   const [width, setWidth] = useState(480);
+  const widthRef = useRef(width);
+  widthRef.current = width;
   const dragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
@@ -92,7 +94,7 @@ export default function ThreadPanel({ threads, onReply, onResolve, onDelete }) {
     e.preventDefault();
     dragging.current = true;
     startX.current = e.clientX;
-    startWidth.current = width;
+    startWidth.current = widthRef.current;
 
     const onMove = (ev) => {
       if (!dragging.current) return;
@@ -106,7 +108,7 @@ export default function ThreadPanel({ threads, onReply, onResolve, onDelete }) {
     };
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
-  }, [width]);
+  }, []);
 
   return (
     <div className="thread-panel" style={{ width, minWidth: width }}>
