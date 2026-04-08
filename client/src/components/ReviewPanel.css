@@ -1,0 +1,134 @@
+.review-panel {
+  margin-top: 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.review-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(233, 69, 96, 0.08);
+  border-bottom: 1px solid var(--border);
+}
+
+.review-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.review-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.review-close-btn:hover {
+  color: var(--accent);
+}
+
+.review-items {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.review-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.review-item-number {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(233, 69, 96, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.review-item-remove {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 4px;
+}
+
+.review-item-remove:hover {
+  color: var(--accent);
+}
+
+.review-item-input {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.review-item-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.review-item-send-one {
+  display: block;
+  margin-top: 4px;
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.review-item-send-one:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.review-item-send-one:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.review-panel-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.review-add-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}

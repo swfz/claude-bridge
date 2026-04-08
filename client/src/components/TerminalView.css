@@ -1,0 +1,9 @@
+.terminal-view {
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+}
+
+.terminal-view .xterm {
+  height: 100%;
+}

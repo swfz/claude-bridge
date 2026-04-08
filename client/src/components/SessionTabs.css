@@ -1,0 +1,102 @@
+.session-tabs {
+  display: flex;
+  align-items: center;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  min-height: 36px;
+}
+
+.tabs-list {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  flex: 1;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--tab-inactive);
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.tab:hover {
+  background: var(--bg-surface);
+}
+
+.tab.active {
+  background: var(--tab-active);
+  color: white;
+}
+
+.tab.dead {
+  opacity: 0.5;
+  cursor: default;
+  border-left: 2px solid var(--text-secondary);
+}
+
+.tab-name {
+  font-weight: 500;
+}
+
+.tab-cwd {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.tab-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.tab-close:hover {
+  color: var(--accent);
+}
+
+.tab-dead-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.tab-restart {
+  background: none;
+  border: none;
+  color: var(--success);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.tab-restart:hover {
+  color: var(--accent-hover);
+}
+
+.tab-new {
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 2px 10px;
+  border-radius: 6px;
+  margin-left: 4px;
+  transition: all 0.15s;
+}
+
+.tab-new:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

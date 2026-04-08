@@ -1,0 +1,475 @@
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+  animation: overlay-in 0.15s ease-out;
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.drawer {
+  width: 60%;
+  max-width: 1000px;
+  min-width: 400px;
+  height: 100%;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  animation: drawer-slide-in 0.2s ease-out;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.drawer-with-review {
+  width: 85%;
+  max-width: 1400px;
+}
+
+@keyframes drawer-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+
+.drawer-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.drawer-filename {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.drawer-btn {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  padding: 3px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+  background: none;
+  cursor: pointer;
+}
+
+.drawer-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.drawer-btn-submit {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.drawer-btn-submit:hover {
+  background: var(--accent-hover);
+}
+
+.drawer-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.drawer-close:hover {
+  color: var(--accent);
+}
+
+.drawer-hint {
+  padding: 4px 16px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(233, 69, 96, 0.05);
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.drawer-body {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+.drawer-image {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.drawer-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: white;
+}
+
+.drawer-text {
+  margin: 0;
+  padding: 16px;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.drawer-unsupported {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: var(--text-secondary);
+}
+
+/* Markdown プレビュー */
+.drawer-markdown {
+  padding: 24px 32px;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.7;
+  user-select: text;
+}
+
+.drawer-markdown h1,
+.drawer-markdown h2,
+.drawer-markdown h3 {
+  margin: 20px 0 10px;
+  color: var(--text-primary);
+}
+
+.drawer-markdown h1 { font-size: 24px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.drawer-markdown h2 { font-size: 20px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.drawer-markdown h3 { font-size: 16px; }
+
+.drawer-markdown p { margin: 8px 0; }
+
+.drawer-markdown ul,
+.drawer-markdown ol { padding-left: 24px; margin: 8px 0; }
+.drawer-markdown li { margin: 4px 0; }
+
+.drawer-markdown table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.drawer-markdown th,
+.drawer-markdown td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+.drawer-markdown thead { background: rgba(255, 255, 255, 0.06); }
+.drawer-markdown th { font-weight: 600; }
+.drawer-markdown tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+
+.drawer-markdown code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 13px;
+}
+
+.drawer-markdown pre { background: #0d0d1a; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
+.drawer-markdown pre code { background: none; padding: 0; }
+.drawer-markdown blockquote { border-left: 3px solid var(--accent); margin: 8px 0; padding: 4px 12px; color: var(--text-secondary); }
+.drawer-markdown a { color: var(--accent); }
+.drawer-markdown hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.drawer-markdown img { max-width: 100%; border-radius: 4px; }
+
+/* テキスト選択ポップアップ */
+.selection-popup {
+  position: absolute;
+  z-index: 10;
+  animation: popup-in 0.1s ease-out;
+}
+
+@keyframes popup-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.selection-popup-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+
+.selection-popup-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* レビューペイン */
+.drawer-review-pane {
+  width: 480px;
+  min-width: 480px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+}
+
+.review-pane-header {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.review-pane-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-pane-item {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.review-pane-item.resolved {
+  opacity: 0.5;
+}
+
+.review-pane-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.review-pane-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(233, 69, 96, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.review-pane-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.review-pane-resolve,
+.review-pane-remove {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 3px;
+}
+
+.review-pane-resolve:hover { color: var(--success); }
+.review-pane-remove:hover { color: var(--accent); }
+
+.review-pane-selected {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.review-pane-input {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.review-pane-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.review-pane-edit-btn {
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+}
+
+.review-pane-edit-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.review-pane-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-pane-send-area {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.review-thread-sent {
+  margin-top: 4px;
+}
+
+.review-thread-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  padding: 6px 0 4px;
+}
+
+.review-pane-num.sent {
+  background: rgba(76, 175, 80, 0.15);
+  color: var(--success);
+}
+
+.review-pane-comment-sent {
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 4px 0;
+}
+
+.review-pane-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.review-pane-submit {
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+}
+
+.review-pane-status {
+  font-size: 12px;
+  color: var(--success);
+  text-align: center;
+  padding: 4px 0;
+  font-weight: 600;
+}
+
+/* Claude からの返信 */
+.review-pane-responses {
+  border-top: 2px solid var(--border);
+}
+
+.review-pane-response {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-pane-response-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.review-pane-response-role {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--success);
+}
+
+.review-pane-response-time {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.review-pane-response-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.review-pane-response-body p { margin: 4px 0; }
+.review-pane-response-body p:last-child { margin-bottom: 0; }
+.review-pane-response-body code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.review-pane-response-body ul,
+.review-pane-response-body ol { padding-left: 16px; margin: 4px 0; }

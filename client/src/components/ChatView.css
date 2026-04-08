@@ -1,0 +1,358 @@
+.chat-view {
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.chat-message {
+  max-width: 95%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.chat-message.human {
+  max-width: 75%;
+}
+
+.chat-message.human {
+  align-self: flex-end;
+  background: var(--bg-surface);
+  border-bottom-right-radius: 4px;
+}
+
+.chat-message.assistant {
+  align-self: flex-start;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-message.system {
+  align-self: center;
+  background: rgba(233, 69, 96, 0.15);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 13px;
+  max-width: 70%;
+}
+
+.chat-message.history {
+  opacity: 0.6;
+}
+
+.history-divider {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+  margin-bottom: 8px;
+}
+
+.chat-message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.chat-role {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.human .chat-role {
+  color: var(--accent);
+}
+
+.assistant .chat-role {
+  color: var(--success);
+}
+
+.chat-time {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.chat-message-body {
+  word-wrap: break-word;
+}
+
+.chat-message-body p {
+  margin: 0 0 8px;
+}
+
+.chat-message-body p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-body h1,
+.chat-message-body h2,
+.chat-message-body h3 {
+  margin: 12px 0 6px;
+}
+
+.chat-message-body ul,
+.chat-message-body ol {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+
+.chat-message-body li {
+  margin: 2px 0;
+}
+
+.chat-message-body li > p {
+  margin: 0;
+}
+
+/* テーブル */
+.chat-message-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.chat-message-body thead {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chat-message-body th,
+.chat-message-body td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.chat-message-body th {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-message-body td {
+  color: var(--text-secondary);
+}
+
+.chat-message-body tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.chat-message-body tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* blockquote */
+.chat-message-body blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 8px 0;
+  padding: 4px 12px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 0 4px 4px 0;
+}
+
+.chat-message-body blockquote p {
+  margin: 0;
+}
+
+/* hr */
+.chat-message-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+/* リンク */
+.chat-message-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.chat-message-body a:hover {
+  text-decoration: underline;
+}
+
+/* タスクリスト */
+.chat-message-body input[type="checkbox"] {
+  margin-right: 6px;
+}
+
+/* 画像 */
+.chat-message-body img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.inline-code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 13px;
+}
+
+.code-block-wrapper {
+  margin: 8px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0d0d1a;
+}
+
+.code-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+
+.code-lang {
+  color: var(--text-secondary);
+}
+
+.code-copy-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.code-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.code-block-wrapper pre {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.code-block-wrapper code {
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* 折りたたみ */
+.chat-message-body.collapsed {
+  max-height: 300px;
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+}
+
+.expand-toggle {
+  background: rgba(233, 69, 96, 0.1);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 10px;
+  border-radius: 4px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.expand-toggle:hover {
+  background: rgba(233, 69, 96, 0.2);
+}
+
+.expand-bar {
+  display: block;
+  width: 100%;
+  background: rgba(233, 69, 96, 0.06);
+  border: 1px dashed var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  padding: 4px;
+  margin-top: 4px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.expand-bar:hover {
+  background: rgba(233, 69, 96, 0.12);
+}
+
+/* アクションボタン */
+.chat-message-actions {
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  display: flex;
+  gap: 6px;
+}
+
+.chat-message:hover .chat-message-actions {
+  opacity: 1;
+}
+
+.btn-action {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-action-primary {
+  background: rgba(233, 69, 96, 0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.inline-threads {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.inline-thread-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 152, 0, 0.15);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+}
+
+.inline-thread-badge.resolved {
+  background: rgba(76, 175, 80, 0.15);
+  border-color: var(--success);
+  color: var(--success);
+  opacity: 0.7;
+}

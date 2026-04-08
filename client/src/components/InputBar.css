@@ -1,0 +1,42 @@
+.input-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.input-textarea {
+  flex: 1;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  padding: 10px 14px;
+  resize: none;
+  overflow-y: auto;
+  max-height: 200px;
+  line-height: 1.5;
+}
+
+.input-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.input-textarea:disabled {
+  opacity: 0.5;
+}
+
+.input-send {
+  padding: 10px 20px;
+  flex-shrink: 0;
+}
+
+.input-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
