@@ -19,6 +19,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [threads, setThreads] = useState([]);
   const [comments, setComments] = useState([]);
+  const messageCache = useRef(new Map());
   const [showThreadPanel, setShowThreadPanel] = useState(false);
   const [claudeSessions, setClaudeSessions] = useState(null);
   const [tmuxPanes, setTmuxPanes] = useState(null);
@@ -75,25 +76,36 @@ export default function App() {
   }, [on]);
 
   // JSONL ベースの chat_message を受信
-  // node-pty セッション: human メッセージは addUserMessage で即座に追加済みなのでスキップ
-  // tmux セッション: human メッセージも JSONL 経由で取得するため全て追加
+  // human メッセージは addUserMessage で即座に追加済みの場合があるため重複チェック
   useEffect(() => {
     return on("chat_message", (msg) => {
-      if (msg.bridgeSessionId !== activeSessionId) return;
-      const activeSession = sessionsRef.current.find((s) => s.id === activeSessionId);
-      const isTmux = activeSession?.type === "tmux";
-      if (msg.role === "assistant" || (isTmux && msg.role === "human")) {
-        const id = `jsonl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id,
-            role: msg.role,
-            content: msg.content,
-            toolUses: msg.toolUses,
-            timestamp: msg.timestamp || new Date().toISOString(),
-          },
-        ]);
+      const session = sessionsRef.current.find((s) => s.id === msg.bridgeSessionId);
+      const isTmux = session?.type === "tmux";
+      if (!(msg.role === "assistant" || (isTmux && msg.role === "human"))) return;
+
+      const newMsg = {
+        id: `jsonl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        role: msg.role,
+        content: msg.content,
+        toolUses: msg.toolUses,
+        timestamp: msg.timestamp || new Date().toISOString(),
+      };
+
+      if (msg.bridgeSessionId === activeSessionId) {
+        setMessages((prev) => {
+          if (msg.role === "human") {
+            const dup = prev.some((m) => m.role === "human" && m.content === msg.content);
+            if (dup) return prev;
+          }
+          return [...prev, newMsg];
+        });
+      } else {
+        // バックグラウンドセッションのメッセージはキャッシュに追加
+        const cached = messageCache.current.get(msg.bridgeSessionId) || [];
+        if (msg.role === "human" && cached.some((m) => m.role === "human" && m.content === msg.content)) {
+          return;
+        }
+        messageCache.current.set(msg.bridgeSessionId, [...cached, newMsg]);
       }
     });
   }, [on, activeSessionId]);
@@ -141,6 +153,13 @@ export default function App() {
       }
     });
   }, [on]);
+
+  // メッセージをキャッシュに同期
+  useEffect(() => {
+    if (activeSessionId && messages.length > 0) {
+      messageCache.current.set(activeSessionId, messages);
+    }
+  }, [messages, activeSessionId]);
 
   // セッション切り替え時にスレッドとコメントを取得
   useEffect(() => {
@@ -259,7 +278,7 @@ export default function App() {
   const handleSwitchSession = useCallback(
     (sessionId) => {
       setActiveSessionId(sessionId);
-      setMessages([]);
+      setMessages(messageCache.current.get(sessionId) || []);
       setThreads([]);
       setComments([]);
     },
