@@ -200,4 +200,45 @@ describe("JsonlWatcher startWatching integration", () => {
 
     assert.equal(messages.length, countAfterDetect);
   });
+
+  it("emits both queue-operation and user record for same input (client dedup scenario)", async () => {
+    // リグレッションテスト: tmux セッションで InputBar から送信すると
+    // queue-operation(enqueue) と user の両方が JSONL に記録される。
+    // watcher は両方配信し、クライアント側で重複チェックする。
+    const messages = [];
+
+    const filePath = join(tmpDir, "session.jsonl");
+    writeFileSync(filePath, makeRecord("assistant", "initial") + "\n");
+
+    const state = {
+      bridgeSessionId: "test",
+      cwd: "/fake",
+      projectPath: tmpDir,
+      targetFile: filePath,
+      linesRead: 1,
+      attachExisting: true,
+      onMessage: (msg) => messages.push(msg),
+      fsWatcher: null,
+      pollTimer: null,
+    };
+
+    watcher.watchers.set("test", state);
+    watcher._startFileWatch(state);
+
+    // InputBar送信をシミュレート: queue-operation + user が追記される
+    appendFileSync(filePath, [
+      JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "my input", timestamp: new Date().toISOString() }),
+      JSON.stringify({ type: "queue-operation", operation: "remove", timestamp: new Date().toISOString() }),
+      JSON.stringify({ type: "user", message: { content: "my input" }, timestamp: new Date().toISOString() }),
+    ].join("\n") + "\n");
+
+    await wait(500);
+
+    const humanMsgs = messages.filter((m) => m.role === "human");
+    assert.equal(humanMsgs.length, 2, "Both queue-operation and user should be emitted");
+    assert.equal(humanMsgs[0].content, "my input");
+    assert.equal(humanMsgs[1].content, "my input");
+
+    if (state.fsWatcher) state.fsWatcher.close();
+  });
 });

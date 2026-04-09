@@ -235,6 +235,57 @@ describe("JsonlWatcher", () => {
       assert.equal(messages[0].toolUses[0].name, "Edit");
     });
 
+    it("does not deduplicate at watcher level (dedup is client responsibility)", () => {
+      // 同一内容のメッセージが2回 JSONL に書かれた場合、watcher は両方配信する
+      // 重複排除はクライアント側 (App.jsx setMessages) の責務
+      const filePath = join(tmpDir, "test.jsonl");
+      writeFileSync(filePath, [
+        JSON.stringify({ type: "user", message: { content: "hello" } }),
+        JSON.stringify({ type: "user", message: { content: "hello" } }),
+      ].join("\n") + "\n");
+
+      const messages = [];
+      const state = {
+        bridgeSessionId: "test",
+        targetFile: filePath,
+        linesRead: 0,
+        onMessage: (msg) => messages.push(msg),
+      };
+
+      watcher._readNewLines(state);
+
+      assert.equal(messages.length, 2, "Watcher should emit both messages without dedup");
+      assert.equal(messages[0].content, "hello");
+      assert.equal(messages[1].content, "hello");
+    });
+
+    it("emits queue-operation and regular user message independently", () => {
+      // InputBar送信 → addUserMessage(即座) + JSONL(queue-operation + user)
+      // watcher は両方配信し、クライアント側で重複チェック
+      const filePath = join(tmpDir, "test.jsonl");
+      writeFileSync(filePath, [
+        JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "test input", timestamp: "2024-01-01T00:00:00Z" }),
+        JSON.stringify({ type: "queue-operation", operation: "remove" }),
+        JSON.stringify({ type: "user", message: { content: "test input" }, timestamp: "2024-01-01T00:00:01Z" }),
+      ].join("\n") + "\n");
+
+      const messages = [];
+      const state = {
+        bridgeSessionId: "test",
+        targetFile: filePath,
+        linesRead: 0,
+        onMessage: (msg) => messages.push(msg),
+      };
+
+      watcher._readNewLines(state);
+
+      // queue-operation(enqueue) と user の両方が human として配信される
+      const humanMessages = messages.filter((m) => m.role === "human");
+      assert.equal(humanMessages.length, 2);
+      assert.equal(humanMessages[0].content, "test input");
+      assert.equal(humanMessages[1].content, "test input");
+    });
+
     it("does nothing when targetFile is null", () => {
       const messages = [];
       const state = {
