@@ -4,6 +4,14 @@ import { randomUUID } from "crypto";
 
 const execAsync = promisify(exec);
 
+// claude コマンド判定（macOS ではシンボリックリンク解決によりバージョン番号が表示される）
+function isClaudeCommand(command) {
+  if (command === "claude") return true;
+  // macOS: symlink 先の実バイナリ名がバージョン番号 (例: "2.1.100")
+  // 他ツールでも同名バイナリがあれば誤検出するが、実際にはほぼない
+  return /^\d+\.\d+\.\d+$/.test(command);
+}
+
 // tmux ペイン情報を取得し、Claude を実行中のペインだけ返す
 export async function listClaudeTmuxPanes() {
   try {
@@ -19,7 +27,7 @@ export async function listClaudeTmuxPanes() {
           line.split("\t");
         return { paneId, panePid, command, cwd, target, windowName };
       })
-      .filter((p) => p.command === "claude");
+      .filter((p) => isClaudeCommand(p.command));
   } catch {
     return [];
   }
