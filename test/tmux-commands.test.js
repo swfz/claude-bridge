@@ -52,6 +52,22 @@ describe("listClaudeTmuxPanes", () => {
     assert.equal(panes[1].cwd, "/home/user/other");
   });
 
+  it("detects claude panes by version number (macOS symlink resolution)", async () => {
+    execCalls._mockStdout = [
+      "%0\t1330\t2.1.100\t/home/user/project\t0:1.1\tmain",
+      "%1\t2000\tzsh\t/home/user\t0:1.2\tmain",
+      "%2\t3000\t2.1.97\t/home/user/other\t0:2.1\twork",
+    ].join("\n");
+
+    const panes = await listClaudeTmuxPanes();
+
+    assert.equal(panes.length, 2);
+    assert.equal(panes[0].paneId, "%0");
+    assert.equal(panes[0].command, "2.1.100");
+    assert.equal(panes[1].paneId, "%2");
+    assert.equal(panes[1].command, "2.1.97");
+  });
+
   it("returns empty array when no claude panes", async () => {
     execCalls._mockStdout = "%0\t1000\tzsh\t/home\t0:1.1\tmain\n";
 
