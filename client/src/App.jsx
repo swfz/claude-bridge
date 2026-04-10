@@ -472,6 +472,7 @@ export default function App() {
                 messages={messages}
                 threads={threads}
                 comments={comments}
+                sessionCwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
                 onStartThread={handleStartThread}
                 onAddComment={handleAddComment}
                 onSendCommentToClaude={handleSendCommentToClaude}

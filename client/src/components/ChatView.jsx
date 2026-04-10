@@ -206,6 +206,35 @@ function isFileUrl(href) {
   return href && (href.startsWith("file://") || href.startsWith("file:///"));
 }
 
+const PREVIEWABLE_EXTS = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
+  ".html", ".htm", ".pdf",
+  ".md", ".txt", ".csv", ".json", ".js", ".css", ".ts", ".jsx", ".tsx", ".py", ".rb", ".go", ".sh",
+]);
+
+// プレビュー可能な拡張子を持つか判定
+function hasPreviewableExt(text) {
+  if (!text) return false;
+  const match = text.match(/\.(\w+)$/);
+  if (!match) return false;
+  return PREVIEWABLE_EXTS.has(`.${match[1].toLowerCase()}`);
+}
+
+// ファイルパスを解決（相対パスは cwd を使って絶対パスに）
+function resolveFilePath(text, cwd) {
+  if (!text) return null;
+  if (text.startsWith("/")) {
+    return hasPreviewableExt(text) ? text : null;
+  }
+  // 相対パス: cwd があれば結合
+  if (cwd && hasPreviewableExt(text)) {
+    // ./ を除去
+    const cleaned = text.startsWith("./") ? text.slice(2) : text;
+    return `${cwd.replace(/\/$/, "")}/${cleaned}`;
+  }
+  return null;
+}
+
 // Markdown に渡す前に file:// URL をリンク形式に変換
 // バッククォート内は除外、プレーンテキストの file:// のみ対象
 function preprocessFileUrls(text) {
@@ -225,7 +254,7 @@ function preprocessFileUrls(text) {
     .join("");
 }
 
-function MarkdownContent({ content, onOpenPreview, onOpenFileReview }) {
+function MarkdownContent({ content, sessionCwd, onOpenPreview, onOpenFileReview }) {
   const processed = preprocessFileUrls(content);
 
   return (
@@ -236,12 +265,23 @@ function MarkdownContent({ content, onOpenPreview, onOpenFileReview }) {
         code({ className, children, ...props }) {
           const isInline = !className;
           if (isInline) {
+            const text = String(children).trim();
             // インラインコード内の file:// URL を FilePreview に変換
-            const text = String(children);
-            if (isFileUrl(text.trim())) {
+            if (isFileUrl(text)) {
               return (
                 <FilePreview
-                  href={text.trim()}
+                  href={text}
+                  onOpenPreview={onOpenPreview}
+                  onOpenFileReview={onOpenFileReview}
+                />
+              );
+            }
+            // ファイルパスを FilePreview に変換（絶対パス or CWD+相対パス）
+            const resolved = resolveFilePath(text, sessionCwd);
+            if (resolved) {
+              return (
+                <FilePreview
+                  href={`file://${resolved}`}
                   onOpenPreview={onOpenPreview}
                   onOpenFileReview={onOpenFileReview}
                 />
@@ -282,6 +322,7 @@ function ChatMessage({
   message,
   threads,
   comments,
+  sessionCwd,
   onStartThread,
   onAddComment,
   onSendCommentToClaude,
@@ -384,7 +425,7 @@ function ChatMessage({
           className={`chat-message-body ${shouldCollapse ? "collapsed" : ""}`}
           onMouseUp={!isHuman ? handleTextSelect : undefined}
         >
-          <MarkdownContent content={message.content} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
+          <MarkdownContent content={message.content} sessionCwd={sessionCwd} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
         </div>
       )}
 
@@ -437,6 +478,7 @@ export default function ChatView({
   messages,
   threads,
   comments,
+  sessionCwd,
   onStartThread,
   onAddComment,
   onSendCommentToClaude,
@@ -471,6 +513,7 @@ export default function ChatView({
                 message={msg}
                 threads={threads}
                 comments={comments}
+                sessionCwd={sessionCwd}
                 onStartThread={onStartThread}
                 onAddComment={onAddComment}
                 onSendCommentToClaude={onSendCommentToClaude}
