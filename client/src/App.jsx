@@ -20,6 +20,7 @@ export default function App() {
   const [threads, setThreads] = useState([]);
   const [comments, setComments] = useState([]);
   const messageCache = useRef(new Map());
+  const activeSessionIdRef = useRef(null);
   const [showThreadPanel, setShowThreadPanel] = useState(false);
   const [claudeSessions, setClaudeSessions] = useState(null);
   const [tmuxPanes, setTmuxPanes] = useState(null);
@@ -154,6 +155,11 @@ export default function App() {
     });
   }, [on]);
 
+  // activeSessionIdRef を同期
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   // メッセージをキャッシュに同期
   useEffect(() => {
     if (activeSessionId && messages.length > 0) {
@@ -277,8 +283,16 @@ export default function App() {
 
   const handleSwitchSession = useCallback(
     (sessionId) => {
+      // 切り替え前に現セッションのメッセージをキャッシュに保存
+      // useEffect のキャッシュ同期とのレースコンディションを回避
+      setMessages((currentMessages) => {
+        const currentId = activeSessionIdRef.current;
+        if (currentId && currentMessages.length > 0) {
+          messageCache.current.set(currentId, currentMessages);
+        }
+        return messageCache.current.get(sessionId) || [];
+      });
       setActiveSessionId(sessionId);
-      setMessages(messageCache.current.get(sessionId) || []);
       setThreads([]);
       setComments([]);
     },
@@ -458,6 +472,7 @@ export default function App() {
                 messages={messages}
                 threads={threads}
                 comments={comments}
+                sessionCwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
                 onStartThread={handleStartThread}
                 onAddComment={handleAddComment}
                 onSendCommentToClaude={handleSendCommentToClaude}
