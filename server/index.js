@@ -36,11 +36,9 @@ const MIME_MAP = {
   ".csv": "text/csv",
 };
 
-app.get("/preview", (req, res) => {
-  const filePath = req.query.path;
-  if (!filePath) {
-    return res.status(400).send("path parameter required");
-  }
+// ファイルパスのセキュリティ検証と lstat 取得を共通化
+function validatePreviewPath(filePath) {
+  if (!filePath) return { status: 400, error: "path parameter required" };
 
   // セキュリティ: パス正規化でトラバーサル攻撃を防止
   const canonical = resolve(filePath);
@@ -48,30 +46,46 @@ app.get("/preview", (req, res) => {
   const tmp = resolve("/tmp");
   if (!canonical.startsWith(home + "/") && canonical !== home &&
       !canonical.startsWith(tmp + "/") && canonical !== tmp) {
-    return res.status(403).send("Access denied: path must be under home or /tmp");
+    return { status: 403, error: "Access denied: path must be under home or /tmp" };
   }
 
   try {
     // シンボリックリンクを辿らず検査（リンク先への脱出を防止）
     const lstat = lstatSync(canonical);
     if (lstat.isSymbolicLink()) {
-      return res.status(403).send("Access denied: symlinks not allowed");
+      return { status: 403, error: "Access denied: symlinks not allowed" };
     }
     if (!lstat.isFile()) {
-      return res.status(400).send("Not a file");
+      return { status: 400, error: "Not a file" };
     }
     // 100MB 上限
     if (lstat.size > 100 * 1024 * 1024) {
-      return res.status(413).send("File too large");
+      return { status: 413, error: "File too large" };
     }
+    return { status: 200, canonical, lstat };
   } catch {
-    return res.status(404).send("File not found");
+    return { status: 404, error: "File not found" };
+  }
+}
+
+app.get("/preview", (req, res) => {
+  const result = validatePreviewPath(req.query.path);
+  if (result.error) {
+    return res.status(result.status).send(result.error);
   }
 
-  const ext = extname(canonical).toLowerCase();
+  const ext = extname(result.canonical).toLowerCase();
   const mime = MIME_MAP[ext] || "application/octet-stream";
   res.setHeader("Content-Type", mime);
-  res.sendFile(canonical);
+  res.sendFile(result.canonical);
+});
+
+// ファイル存在確認 (プレビューボタンを出すべきかの判定用)
+// プレビュー可能条件 (homeもしくは/tmp配下の実ファイル, 100MB以下, 非シンボリックリンク) を満たす場合のみ ok
+app.get("/file-exists", (req, res) => {
+  const result = validatePreviewPath(req.query.path);
+  res.setHeader("Cache-Control", "no-cache");
+  res.json({ exists: result.status === 200 });
 });
 
 // クライアントのビルド成果物を配信
