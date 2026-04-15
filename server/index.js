@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
-import { existsSync, statSync, lstatSync } from "fs";
+import { existsSync, statSync, lstatSync, readdirSync } from "fs";
 import { extname, join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { SessionManager } from "./session.js";
@@ -36,11 +36,9 @@ const MIME_MAP = {
   ".csv": "text/csv",
 };
 
-app.get("/preview", (req, res) => {
-  const filePath = req.query.path;
-  if (!filePath) {
-    return res.status(400).send("path parameter required");
-  }
+// パスのサンドボックスチェック（home/tmp 配下のみ許可）
+function validateSafePath(filePath) {
+  if (!filePath) return { status: 400, error: "path parameter required" };
 
   // セキュリティ: パス正規化でトラバーサル攻撃を防止
   const canonical = resolve(filePath);
@@ -48,30 +46,103 @@ app.get("/preview", (req, res) => {
   const tmp = resolve("/tmp");
   if (!canonical.startsWith(home + "/") && canonical !== home &&
       !canonical.startsWith(tmp + "/") && canonical !== tmp) {
-    return res.status(403).send("Access denied: path must be under home or /tmp");
+    return { status: 403, error: "Access denied: path must be under home or /tmp" };
   }
+  return { status: 200, canonical };
+}
+
+// ファイルパスのセキュリティ検証と lstat 取得を共通化
+function validatePreviewPath(filePath) {
+  const safe = validateSafePath(filePath);
+  if (safe.error) return safe;
 
   try {
     // シンボリックリンクを辿らず検査（リンク先への脱出を防止）
-    const lstat = lstatSync(canonical);
+    const lstat = lstatSync(safe.canonical);
     if (lstat.isSymbolicLink()) {
-      return res.status(403).send("Access denied: symlinks not allowed");
+      return { status: 403, error: "Access denied: symlinks not allowed" };
     }
     if (!lstat.isFile()) {
-      return res.status(400).send("Not a file");
+      return { status: 400, error: "Not a file" };
     }
     // 100MB 上限
     if (lstat.size > 100 * 1024 * 1024) {
-      return res.status(413).send("File too large");
+      return { status: 413, error: "File too large" };
     }
+    return { status: 200, canonical: safe.canonical, lstat };
   } catch {
-    return res.status(404).send("File not found");
+    return { status: 404, error: "File not found" };
+  }
+}
+
+// ファイラで常に除外するディレクトリ名
+const EXCLUDED_DIRS = new Set(["node_modules"]);
+
+app.get("/preview", (req, res) => {
+  const result = validatePreviewPath(req.query.path);
+  if (result.error) {
+    return res.status(result.status).send(result.error);
   }
 
-  const ext = extname(canonical).toLowerCase();
+  const ext = extname(result.canonical).toLowerCase();
   const mime = MIME_MAP[ext] || "application/octet-stream";
   res.setHeader("Content-Type", mime);
-  res.sendFile(canonical);
+  res.sendFile(result.canonical);
+});
+
+// ファイル存在確認 (プレビューボタンを出すべきかの判定用)
+// プレビュー可能条件 (homeもしくは/tmp配下の実ファイル, 100MB以下, 非シンボリックリンク) を満たす場合のみ ok
+app.get("/file-exists", (req, res) => {
+  const result = validatePreviewPath(req.query.path);
+  res.setHeader("Cache-Control", "no-cache");
+  res.json({ exists: result.status === 200 });
+});
+
+// ファイラ用ディレクトリ一覧
+// /ls?path=/home/user/project
+// 隠しファイル・node_modules 等は除外する
+app.get("/ls", (req, res) => {
+  const safe = validateSafePath(req.query.path);
+  if (safe.error) {
+    return res.status(safe.status).send(safe.error);
+  }
+
+  try {
+    const lstat = lstatSync(safe.canonical);
+    if (lstat.isSymbolicLink()) {
+      return res.status(403).send("Access denied: symlinks not allowed");
+    }
+    if (!lstat.isDirectory()) {
+      return res.status(400).send("Not a directory");
+    }
+  } catch {
+    return res.status(404).send("Directory not found");
+  }
+
+  let dirents;
+  try {
+    dirents = readdirSync(safe.canonical, { withFileTypes: true });
+  } catch (err) {
+    return res.status(500).send(`Failed to read directory: ${err.code || err.message}`);
+  }
+
+  const entries = dirents
+    // 隠しファイル・除外ディレクトリは表示しない
+    .filter((e) => !e.name.startsWith(".") && !EXCLUDED_DIRS.has(e.name))
+    // シンボリックリンク・特殊ファイルは除外（プレビュー方針と揃える）
+    .filter((e) => e.isDirectory() || e.isFile())
+    .map((e) => ({
+      name: e.name,
+      type: e.isDirectory() ? "dir" : "file",
+    }))
+    // ディレクトリを先頭にしてアルファベット順
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+  res.setHeader("Cache-Control", "no-cache");
+  res.json({ path: safe.canonical, entries });
 });
 
 // クライアントのビルド成果物を配信

@@ -7,6 +7,7 @@ import ThreadPanel from "./components/ThreadPanel.jsx";
 import InputBar from "./components/InputBar.jsx";
 import NewSessionDialog from "./components/NewSessionDialog.jsx";
 import PreviewDrawer from "./components/PreviewDrawer.jsx";
+import FileExplorer from "./components/FileExplorer.jsx";
 import "./App.css";
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
   const messageCache = useRef(new Map());
   const activeSessionIdRef = useRef(null);
   const [showThreadPanel, setShowThreadPanel] = useState(false);
+  const [showFileExplorer, setShowFileExplorer] = useState(false);
   const [claudeSessions, setClaudeSessions] = useState(null);
   const [tmuxPanes, setTmuxPanes] = useState(null);
   const [previewData, setPreviewData] = useState(null);
@@ -408,6 +410,13 @@ export default function App() {
         <div className="header-controls">
           {activeSessionId && (
             <>
+              <button
+                className={`toggle-btn thread-toggle ${showFileExplorer ? "active" : ""}`}
+                onClick={() => setShowFileExplorer(!showFileExplorer)}
+                title="ファイラを表示/非表示"
+              >
+                Files
+              </button>
               <div className="view-toggle">
                 <button
                   className={`toggle-btn ${viewMode === "raw" ? "active" : ""}`}
@@ -458,6 +467,15 @@ export default function App() {
       />
 
       <div className="app-content">
+        {showFileExplorer && (
+          <FileExplorer
+            cwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
+            onOpenPreview={(path) => {
+              setPreviewData({ filePath: path });
+              setDrawerOpenedAt(messages.length);
+            }}
+          />
+        )}
         <main className="app-main">
           {activeSessionId ? (
             viewMode === "raw" ? (

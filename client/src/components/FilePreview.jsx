@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import "./FilePreview.css";
 
 const PREVIEWABLE = [
@@ -24,11 +25,42 @@ export function extractLocalPath(url) {
   return url;
 }
 
+// 同一パスに対する存在確認をメモ化（セッション内で使い回し）
+const existsCache = new Map();
+
+function checkFileExists(path) {
+  if (existsCache.has(path)) {
+    return existsCache.get(path);
+  }
+  const promise = fetch(`/file-exists?path=${encodeURIComponent(path)}`)
+    .then((r) => (r.ok ? r.json() : { exists: false }))
+    .then((data) => !!data.exists)
+    .catch(() => false);
+  existsCache.set(path, promise);
+  return promise;
+}
+
 export default function FilePreview({ href, onOpenPreview, onOpenFileReview }) {
   const localPath = extractLocalPath(href);
   const fileName = localPath.split("/").pop();
   const ext = getExt(localPath);
   const canPreview = PREVIEWABLE.includes(ext);
+  const [exists, setExists] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    checkFileExists(localPath).then((ok) => {
+      if (!cancelled) setExists(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [localPath]);
+
+  // 存在しないパスはプレビュー不可として扱う（Claude の地の文中の略称ファイル名など）
+  if (exists === false) {
+    return <code className="inline-code">{fileName}</code>;
+  }
 
   return (
     <span className="file-preview-inline">
