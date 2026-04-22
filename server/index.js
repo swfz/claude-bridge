@@ -329,22 +329,38 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      case "thread_reply": {
-        threadStore.addReply(msg.sessionId, msg.threadId, {
-          role: "human",
-          text: msg.text,
-        });
+      case "thread_reply_batch": {
+        // replies: Array<{ threadId, text }>
+        const replies = Array.isArray(msg.replies) ? msg.replies : [];
+        const accepted = [];
+        for (const r of replies) {
+          const text = typeof r?.text === "string" ? r.text.trim() : "";
+          if (!text || !r?.threadId) continue;
+          const added = threadStore.addReply(msg.sessionId, r.threadId, {
+            role: "human",
+            text,
+          });
+          if (added) accepted.push({ threadId: r.threadId, text });
+        }
 
-        // スレッドの返信内容を Claude Code に送信
-        const session = findSession(msg.sessionId);
-        if (session) {
-          const thread = threadStore
-            .getThreadsForSession(msg.sessionId)
-            .find((t) => t.id === msg.threadId);
-          const context = thread
-            ? `[スレッド: "${thread.selectedText}" への返信]\n${msg.text}`
-            : msg.text;
-          session.write(context + "\r");
+        if (accepted.length > 0) {
+          const session = findSession(msg.sessionId);
+          if (session) {
+            const allThreads = threadStore.getThreadsForSession(msg.sessionId);
+            const sections = accepted.map(({ threadId, text }) => {
+              const t = allThreads.find((x) => x.id === threadId);
+              const head = t ? t.selectedText : "(不明)";
+              return `## "${head}" への返信\n${text}`;
+            });
+            const prompt =
+              accepted.length === 1
+                ? `[スレッド: "${
+                    allThreads.find((x) => x.id === accepted[0].threadId)
+                      ?.selectedText ?? ""
+                  }" への返信]\n${accepted[0].text}`
+                : `[スレッド返信 ${accepted.length}件]\n\n${sections.join("\n\n")}`;
+            session.write(prompt + "\r");
+          }
         }
 
         broadcast({

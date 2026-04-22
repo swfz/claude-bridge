@@ -316,16 +316,14 @@ export default function App() {
     [send, activeSessionId]
   );
 
-  const handleThreadReply = useCallback(
-    (threadId, text) => {
-      if (activeSessionId) {
-        send({
-          type: "thread_reply",
-          sessionId: activeSessionId,
-          threadId,
-          text,
-        });
-      }
+  const handleThreadReplyBatch = useCallback(
+    (replies) => {
+      if (!activeSessionId || replies.length === 0) return;
+      send({
+        type: "thread_reply_batch",
+        sessionId: activeSessionId,
+        replies,
+      });
     },
     [send, activeSessionId]
   );
@@ -516,7 +514,7 @@ export default function App() {
         {showThreadPanel && viewMode === "chat" && (
           <ThreadPanel
             threads={threads}
-            onReply={handleThreadReply}
+            onReplyBatch={handleThreadReplyBatch}
             onResolve={handleResolveThread}
             onDelete={handleDeleteThread}
           />

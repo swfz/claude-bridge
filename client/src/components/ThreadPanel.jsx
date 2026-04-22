@@ -1,15 +1,15 @@
-import { useState, useRef, useCallback } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import "./ThreadPanel.css";
 
-function ThreadItem({ thread, onReply, onResolve, onDelete }) {
-  const [replyText, setReplyText] = useState("");
-  const [expanded, setExpanded] = useState(!thread.resolved);
+function ThreadItem({ thread, draft, onDraftChange, onSubmitBatch, onResolve, onDelete }) {
+  const hasDraft = draft.trim().length > 0;
+  const [expanded, setExpanded] = useState(!thread.resolved || hasDraft);
 
-  const handleReply = () => {
-    const trimmed = replyText.trim();
-    if (!trimmed) return;
-    onReply(thread.id, trimmed);
-    setReplyText("");
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      onSubmitBatch();
+    }
   };
 
   return (
@@ -25,6 +25,11 @@ function ThreadItem({ thread, onReply, onResolve, onDelete }) {
         <span className="thread-reply-count">
           {thread.replies.length} 件の返信
         </span>
+        {hasDraft && (
+          <span className="thread-draft-indicator" title="未送信の下書きあり">
+            下書き
+          </span>
+        )}
         <button
           className="thread-resolve-btn"
           onClick={(e) => {
@@ -63,16 +68,13 @@ function ThreadItem({ thread, onReply, onResolve, onDelete }) {
 
           {!thread.resolved && (
             <div className="thread-reply-input">
-              <input
-                type="text"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleReply()}
-                placeholder="返信を入力..."
+              <textarea
+                value={draft}
+                onChange={(e) => onDraftChange(thread.id, e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="返信を入力... (Enterで改行 / Cmd+Enterでまとめて送信)"
+                rows={2}
               />
-              <button onClick={handleReply} disabled={!replyText.trim()}>
-                送信
-              </button>
             </div>
           )}
         </div>
@@ -81,14 +83,38 @@ function ThreadItem({ thread, onReply, onResolve, onDelete }) {
   );
 }
 
-export default function ThreadPanel({ threads, onReply, onResolve, onDelete }) {
+export default function ThreadPanel({ threads, onReplyBatch, onResolve, onDelete }) {
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
+  const [drafts, setDrafts] = useState({});
   const [width, setWidth] = useState(480);
   const widthRef = useRef(width);
   widthRef.current = width;
   const dragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
+
+  const pendingReplies = useMemo(() => {
+    const activeThreadIds = new Set(
+      threads.filter((t) => !t.resolved).map((t) => t.id)
+    );
+    return Object.entries(drafts)
+      .map(([threadId, text]) => ({ threadId, text: text.trim() }))
+      .filter((r) => r.text && activeThreadIds.has(r.threadId));
+  }, [drafts, threads]);
+
+  const handleDraftChange = useCallback((threadId, text) => {
+    setDrafts((prev) => ({ ...prev, [threadId]: text }));
+  }, []);
+
+  const handleSubmitBatch = useCallback(() => {
+    if (pendingReplies.length === 0) return;
+    onReplyBatch(pendingReplies);
+    setDrafts({});
+  }, [pendingReplies, onReplyBatch]);
+
+  const handleDiscard = useCallback(() => {
+    setDrafts({});
+  }, []);
 
   const onDragStart = useCallback((e) => {
     e.preventDefault();
@@ -109,6 +135,8 @@ export default function ThreadPanel({ threads, onReply, onResolve, onDelete }) {
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   }, []);
+
+  const pendingCount = pendingReplies.length;
 
   return (
     <div className="thread-panel" style={{ width, minWidth: width }}>
@@ -131,13 +159,37 @@ export default function ThreadPanel({ threads, onReply, onResolve, onDelete }) {
             <ThreadItem
               key={thread.id}
               thread={thread}
-              onReply={onReply}
+              draft={drafts[thread.id] ?? ""}
+              onDraftChange={handleDraftChange}
+              onSubmitBatch={handleSubmitBatch}
               onResolve={onResolve}
               onDelete={onDelete}
             />
           ))
         )}
       </div>
+      {pendingCount > 0 && (
+        <div className="thread-panel-footer">
+          <span className="thread-draft-count">
+            未送信 {pendingCount} 件
+          </span>
+          <button
+            className="btn btn-ghost thread-discard-btn"
+            onClick={handleDiscard}
+            title="すべての下書きを破棄"
+          >
+            破棄
+          </button>
+          <button
+            className="btn btn-primary thread-submit-batch-btn"
+            onClick={handleSubmitBatch}
+          >
+            {pendingCount > 1
+              ? `${pendingCount}件まとめて送信`
+              : "送信"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

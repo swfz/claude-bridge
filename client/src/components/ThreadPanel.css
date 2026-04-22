@@ -191,7 +191,7 @@
   margin-top: 8px;
 }
 
-.thread-reply-input input {
+.thread-reply-input textarea {
   flex: 1;
   background: var(--input-bg);
   border: 1px solid var(--border);
@@ -199,23 +199,47 @@
   color: var(--text-primary);
   padding: 6px 10px;
   font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 40px;
 }
 
-.thread-reply-input input:focus {
+.thread-reply-input textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
 
-.thread-reply-input button {
-  background: var(--accent);
-  border: none;
-  color: white;
-  padding: 6px 12px;
+.thread-draft-indicator {
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--warning);
+  color: #000;
+  padding: 1px 6px;
   border-radius: 4px;
-  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.thread-panel-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.thread-draft-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.thread-submit-batch-btn {
   font-size: 13px;
 }
 
-.thread-reply-input button:disabled {
-  opacity: 0.4;
+.thread-discard-btn {
+  font-size: 12px;
 }
