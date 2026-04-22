@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { EXT_TO_LANG, highlightCode } from "../highlight.js";
 import "./PreviewDrawer.css";
 
 const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"];
@@ -38,28 +39,28 @@ export default function PreviewDrawer({
   const isText = TEXT_EXTS.includes(ext);
   const isMarkdownFile = MARKDOWN_EXTS.includes(ext);
   const [fileContent, setFileContent] = useState(null);
+  const [loadError, setLoadError] = useState(false);
   const [reviewItems, setReviewItems] = useState([]);
   const [selectionPopup, setSelectionPopup] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const bodyRef = useRef(null);
-  const textRef = useRef(null);
 
   useEffect(() => {
     if (!isMarkdownMode && filePath && (isText || isMarkdownFile)) {
+      setFileContent(null);
+      setLoadError(false);
       fetch(previewUrl(filePath))
         .then((r) => r.text())
-        .then((text) => {
-          setFileContent(text);
-          if (textRef.current && !isMarkdownFile) {
-            textRef.current.textContent = text;
-          }
-        })
-        .catch(() => {
-          setFileContent(null);
-          if (textRef.current) textRef.current.textContent = "読み込みに失敗しました";
-        });
+        .then((text) => setFileContent(text))
+        .catch(() => setLoadError(true));
     }
   }, [filePath, isText, isMarkdownFile, isMarkdownMode]);
+
+  const lang = ext ? EXT_TO_LANG[ext.slice(1)] : null;
+  const highlightedHtml = useMemo(
+    () => (isText && !isMarkdownFile && fileContent != null ? highlightCode(fileContent, lang) : null),
+    [fileContent, lang, isText, isMarkdownFile],
+  );
 
   useEffect(() => {
     const handler = (e) => {
@@ -227,9 +228,17 @@ export default function PreviewDrawer({
                   />
                 )}
                 {isText && !isMarkdownFile && (
-                  <pre className="drawer-text" ref={textRef}>
-                    読み込み中...
-                  </pre>
+                  loadError ? (
+                    <pre className="drawer-text">読み込みに失敗しました</pre>
+                  ) : fileContent == null ? (
+                    <pre className="drawer-text">読み込み中...</pre>
+                  ) : highlightedHtml ? (
+                    <pre className="drawer-text hljs">
+                      <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+                    </pre>
+                  ) : (
+                    <pre className="drawer-text">{fileContent}</pre>
+                  )
                 )}
                 {!isImage && !isHtml && !isPdf && !isText && !isMarkdownMode && (
                   <div className="drawer-unsupported">
