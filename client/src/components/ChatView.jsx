@@ -1,39 +1,10 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import hljs from "highlight.js/lib/core";
-import javascript from "highlight.js/lib/languages/javascript";
-import typescript from "highlight.js/lib/languages/typescript";
-import python from "highlight.js/lib/languages/python";
-import ruby from "highlight.js/lib/languages/ruby";
-import go from "highlight.js/lib/languages/go";
-import rust from "highlight.js/lib/languages/rust";
-import css from "highlight.js/lib/languages/css";
-import xml from "highlight.js/lib/languages/xml";
-import json from "highlight.js/lib/languages/json";
-import yaml from "highlight.js/lib/languages/yaml";
-import bash from "highlight.js/lib/languages/bash";
-import markdown from "highlight.js/lib/languages/markdown";
-import sql from "highlight.js/lib/languages/sql";
-
-hljs.registerLanguage("javascript", javascript);
-hljs.registerLanguage("typescript", typescript);
-hljs.registerLanguage("python", python);
-hljs.registerLanguage("ruby", ruby);
-hljs.registerLanguage("go", go);
-hljs.registerLanguage("rust", rust);
-hljs.registerLanguage("css", css);
-hljs.registerLanguage("xml", xml);
-hljs.registerLanguage("json", json);
-hljs.registerLanguage("yaml", yaml);
-hljs.registerLanguage("bash", bash);
-hljs.registerLanguage("markdown", markdown);
-hljs.registerLanguage("sql", sql);
-
+import { EXT_TO_LANG, highlightLines } from "../highlight.js";
 import CommentPopover from "./CommentPopover.jsx";
 import ReviewPanel from "./ReviewPanel.jsx";
 import FilePreview from "./FilePreview.jsx";
-import "highlight.js/styles/github-dark.css";
 import "./ChatView.css";
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
@@ -86,25 +57,6 @@ function ToolUseItem({ tool, onOpenPreview, onOpenFileReview }) {
   );
 }
 
-const EXT_TO_LANG = {
-  js: "javascript", jsx: "javascript", mjs: "javascript",
-  ts: "typescript", tsx: "typescript",
-  py: "python", rb: "ruby", go: "go", rs: "rust",
-  css: "css", html: "xml", htm: "xml", xml: "xml", svg: "xml",
-  json: "json", yaml: "yaml", yml: "yaml",
-  sh: "bash", bash: "bash", zsh: "bash",
-  md: "markdown", sql: "sql",
-};
-
-function highlightBlock(text, lang) {
-  if (!lang || !hljs.getLanguage(lang)) return null;
-  try {
-    return hljs.highlight(text, { language: lang }).value.split("\n");
-  } catch {
-    return null;
-  }
-}
-
 function DiffLine({ sign, className, html, text }) {
   return (
     <div className={`diff-line ${className}`}>
@@ -125,8 +77,8 @@ function EditDiff({ input }) {
   const ext = filePath.split(".").pop()?.toLowerCase();
   const lang = EXT_TO_LANG[ext];
 
-  const oldHighlighted = useMemo(() => highlightBlock(oldStr, lang), [oldStr, lang]);
-  const newHighlighted = useMemo(() => highlightBlock(newStr, lang), [newStr, lang]);
+  const oldHighlighted = useMemo(() => highlightLines(oldStr, lang), [oldStr, lang]);
+  const newHighlighted = useMemo(() => highlightLines(newStr, lang), [newStr, lang]);
 
   const oldLines = oldStr.split("\n");
   const newLines = newStr.split("\n");
