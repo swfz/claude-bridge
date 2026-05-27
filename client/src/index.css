@@ -28,6 +28,37 @@ html, body, #root {
   --warning: #ff9800;
 }
 
+/* mermaid 図 — 本文の明暗に関わらず白地カードで表示する */
+.mermaid-block {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 10px 0;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.mermaid-block svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-loading {
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 12px;
+}
+
+.mermaid-error {
+  background: rgba(233, 69, 96, 0.08);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
 /* GitHub Alert 記法 (> [!NOTE] 等) — remark-github-blockquote-alert 用のダークテーマ対応スタイル */
 .markdown-alert {
   padding: 8px 16px;

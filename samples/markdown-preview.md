@@ -120,6 +120,19 @@ done
 }
 ```
 
+## mermaid 図
+
+```mermaid
+flowchart LR
+    A[ブラウザ] -->|WebSocket| B(Express + ws)
+    B --> C{セッション種別}
+    C -->|新規| D[node-pty]
+    C -->|接続| E[tmux ペイン]
+    D --> F[JSONL 監視]
+    E --> F
+    F -->|chat_message| A
+```
+
 ## インライン要素のまとめ
 
 設定ファイルは `package.json` を参照。コマンドは `npm run dev` で起動します。詳細は [README](../README.md) を参照してください。
