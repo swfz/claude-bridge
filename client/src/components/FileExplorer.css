@@ -25,6 +25,12 @@
 
 .explorer-header-icon {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.explorer-header-icon svg {
+  display: block;
 }
 
 .explorer-header-name {
@@ -79,6 +85,14 @@
 .explorer-icon {
   flex-shrink: 0;
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+
+.explorer-icon svg {
+  display: block;
 }
 
 .explorer-name {
