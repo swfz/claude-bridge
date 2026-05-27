@@ -1,6 +1,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { randomUUID } from "crypto";
+import { readStatusByPid } from "./claude-session-meta.js";
 
 const execAsync = promisify(exec);
 
@@ -59,13 +60,15 @@ function escapeForShell(str) {
 
 // tmux ペインをラップするセッションクラス
 export class TmuxSession {
-  constructor({ id, name, cwd, paneId, target }) {
+  constructor({ id, name, cwd, paneId, target, claudePid, status }) {
     validatePaneId(paneId);
     this.id = id;
     this.name = name;
     this.cwd = cwd;
     this.paneId = paneId;
     this.target = target;
+    this.claudePid = claudePid ?? null;
+    this.status = status ?? null;
     this.createdAt = new Date().toISOString();
     this.type = "tmux";
   }
@@ -109,6 +112,8 @@ export class TmuxSession {
       cwd: this.cwd,
       paneId: this.paneId,
       target: this.target,
+      claudePid: this.claudePid,
+      status: this.status,
       createdAt: this.createdAt,
       alive: true,
       type: "tmux",
@@ -121,9 +126,17 @@ export class TmuxSessionManager {
     this.sessions = new Map();
   }
 
-  attachPane({ paneId, name, cwd, target }) {
+  attachPane({ paneId, name, cwd, target, claudePid, status }) {
     const id = randomUUID().slice(0, 8);
-    const session = new TmuxSession({ id, name, cwd, paneId, target });
+    const session = new TmuxSession({
+      id,
+      name,
+      cwd,
+      paneId,
+      target,
+      claudePid,
+      status,
+    });
     this.sessions.set(id, session);
     return session;
   }
@@ -138,5 +151,19 @@ export class TmuxSessionManager {
 
   listSessions() {
     return Array.from(this.sessions.values()).map((s) => s.toJSON());
+  }
+
+  // 各 tmux セッションの status を最新化。変化があれば true を返す
+  async refreshStatuses() {
+    let changed = false;
+    for (const s of this.sessions.values()) {
+      if (s.claudePid == null) continue;
+      const status = await readStatusByPid(s.claudePid);
+      if (status !== s.status) {
+        s.status = status;
+        changed = true;
+      }
+    }
+    return changed;
   }
 }

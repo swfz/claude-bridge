@@ -10,6 +10,7 @@ import { ThreadStore } from "./thread-store.js";
 import { listClaudeSessions, loadSessionHistory } from "./claude-sessions.js";
 import { JsonlWatcher } from "./jsonl-watcher.js";
 import { listClaudeTmuxPanes, TmuxSessionManager } from "./tmux-session.js";
+import { enrichPanesWithSessionMeta } from "./claude-session-meta.js";
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -199,6 +200,14 @@ const pingInterval = setInterval(() => {
 }, PING_INTERVAL);
 
 wss.on("close", () => clearInterval(pingInterval));
+
+// tmux セッションの busy/idle を定期的に最新化し、変化があればタブへ反映
+const STATUS_INTERVAL = 4_000;
+const statusInterval = setInterval(async () => {
+  const changed = await tmuxSessionManager.refreshStatuses();
+  if (changed) broadcastSessionList();
+}, STATUS_INTERVAL);
+wss.on("close", () => clearInterval(statusInterval));
 
 wss.on("connection", (ws) => {
   console.log("WebSocket client connected");
@@ -521,14 +530,16 @@ wss.on("connection", (ws) => {
       }
 
       case "list_tmux_panes": {
-        listClaudeTmuxPanes().then((panes) => {
-          ws.send(
-            JSON.stringify({
-              type: "tmux_panes",
-              panes,
-            })
-          );
-        });
+        listClaudeTmuxPanes()
+          .then((panes) => enrichPanesWithSessionMeta(panes))
+          .then((panes) => {
+            ws.send(
+              JSON.stringify({
+                type: "tmux_panes",
+                panes,
+              })
+            );
+          });
         break;
       }
 
@@ -538,6 +549,8 @@ wss.on("connection", (ws) => {
           name: msg.name || `tmux: ${msg.target}`,
           cwd: msg.cwd,
           target: msg.target,
+          claudePid: msg.claudePid,
+          status: msg.status,
         });
 
         // 既存セッションの履歴を読み込んで返す

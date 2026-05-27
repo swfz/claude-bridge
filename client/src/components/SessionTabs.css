@@ -51,6 +51,16 @@
   color: var(--text-secondary);
 }
 
+/* tmux タブは rename されていないこともあるため cwd を識別子として強調 */
+.tab-cwd-strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
 .tab-close {
   background: none;
   border: none;
@@ -109,4 +119,27 @@
   color: white;
   font-weight: 600;
   text-transform: uppercase;
+}
+
+.tab-status {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-secondary);
+}
+
+.tab-status-busy {
+  background: #f0ad4e;
+  box-shadow: 0 0 4px #f0ad4e;
+  animation: tab-status-pulse 1.2s ease-in-out infinite;
+}
+
+.tab-status-idle {
+  background: var(--success);
+}
+
+@keyframes tab-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }

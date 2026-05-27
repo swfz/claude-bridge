@@ -80,28 +80,51 @@ export default function NewSessionDialog({
                   Claude を実行中の tmux ペインが見つかりません
                 </p>
               ) : (
-                tmuxPanes.map((p) => (
-                  <div
-                    key={p.paneId}
-                    className="session-list-item"
-                    onClick={() =>
-                      onAttachTmux({
-                        paneId: p.paneId,
-                        name: `tmux: ${p.target}`,
-                        cwd: p.cwd,
-                        target: p.target,
-                      })
-                    }
-                  >
-                    <div className="session-item-main">
-                      <span className="session-item-cwd">{p.cwd}</span>
-                      <span className="session-item-time">{p.target}</span>
+                tmuxPanes.map((p) => {
+                  const label = p.sessionName || p.slug || `tmux: ${p.target}`;
+                  const cwdParts = p.cwd.split("/");
+                  const cwdBase = cwdParts.pop();
+                  const cwdParent = cwdParts.join("/");
+                  return (
+                    <div
+                      key={p.paneId}
+                      className="session-list-item"
+                      onClick={() =>
+                        onAttachTmux({
+                          paneId: p.paneId,
+                          name: label,
+                          cwd: p.cwd,
+                          target: p.target,
+                          claudePid: p.claudePid,
+                          status: p.status,
+                        })
+                      }
+                    >
+                      <div className="session-item-main">
+                        <span className="session-item-name">
+                          {p.status && (
+                            <span
+                              className={`pane-status pane-status-${p.status}`}
+                              title={p.status}
+                            />
+                          )}
+                          {label}
+                          {!p.sessionName && (
+                            <span className="pane-unrenamed">未rename</span>
+                          )}
+                        </span>
+                        <span className="session-item-time">{p.target}</span>
+                      </div>
+                      <div className="session-item-meta">
+                        <span className="cwd-path" title={p.cwd}>
+                          {cwdParent && <span className="cwd-parent">{cwdParent}/</span>}
+                          <span className="cwd-base">{cwdBase}</span>
+                        </span>
+                        <span className="meta-pane">pane: {p.paneId}</span>
+                      </div>
                     </div>
-                    <div className="session-item-id">
-                      pane: {p.paneId} / pid: {p.panePid}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
             <div className="dialog-actions">
