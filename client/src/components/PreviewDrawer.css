@@ -268,6 +268,38 @@
 .drawer-markdown hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .drawer-markdown img { max-width: 100%; border-radius: 4px; }
 
+/* frontmatter テーブル */
+.frontmatter-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 20px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.frontmatter-table th,
+.frontmatter-table td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.frontmatter-table th {
+  width: 1%;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  font-family: "Cascadia Code", "Fira Code", monospace;
+}
+
+.drawer-body.preview-light .frontmatter-table th {
+  background: rgba(0, 0, 0, 0.04);
+}
+
 /* テキスト選択ポップアップ */
 .selection-popup {
   position: absolute;

@@ -3,8 +3,25 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { remarkAlert } from "remark-github-blockquote-alert";
 import { EXT_TO_LANG, highlightCode } from "../highlight.js";
+import { splitFrontmatter } from "../frontmatter.js";
 import CodeBlock from "./CodeBlock.jsx";
 import "./PreviewDrawer.css";
+
+// YAML frontmatter を GitHub 風の key/value テーブルとして表示する
+function FrontmatterTable({ data }) {
+  return (
+    <table className="frontmatter-table">
+      <tbody>
+        {Object.entries(data).map(([key, value]) => (
+          <tr key={key}>
+            <th>{key}</th>
+            <td>{value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 // Markdown 内のコードブロックを CodeBlock でハイライト表示する（インラインはそのまま）
 const markdownComponents = {
@@ -211,6 +228,12 @@ export default function PreviewDrawer({
       ? fileContent
       : null;
 
+  // frontmatter をテーブル表示、本文だけを Markdown としてレンダリングする
+  const { frontmatter, body: markdownBody } = useMemo(
+    () => splitFrontmatter(markdownToRender || ""),
+    [markdownToRender],
+  );
+
   const unresolvedCount = reviewItems.filter(
     (i) => !i.resolved && i.comment.trim()
   ).length;
@@ -269,8 +292,9 @@ export default function PreviewDrawer({
           >
             {markdownToRender ? (
               <div className="drawer-markdown">
+                {frontmatter && <FrontmatterTable data={frontmatter} />}
                 <Markdown remarkPlugins={[remarkGfm, remarkAlert]} components={markdownComponents}>
-                  {markdownToRender}
+                  {markdownBody}
                 </Markdown>
               </div>
             ) : (

@@ -1,3 +1,10 @@
+---
+title: Markdown プレビュー確認用サンプル
+author: swfz
+tags: preview, markdown, demo
+date: 2026-05-27
+---
+
 # Markdown プレビュー確認用サンプル
 
 このファイルは Claude Bridge のファイルプレビュー / Chat ビューの Markdown レンダリングを目視確認するためのサンプルです。各記法が意図通り表示されるかをまとめて確認できます。
