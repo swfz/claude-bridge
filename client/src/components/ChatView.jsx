@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { remarkAlert } from "remark-github-blockquote-alert";
 import { EXT_TO_LANG, highlightLines } from "../highlight.js";
 import CommentPopover from "./CommentPopover.jsx";
 import ReviewPanel from "./ReviewPanel.jsx";
@@ -211,7 +212,7 @@ function MarkdownContent({ content, sessionCwd, onOpenPreview, onOpenFileReview 
 
   return (
     <Markdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkAlert]}
       urlTransform={(url) => url}
       components={{
         code({ className, children, ...props }) {

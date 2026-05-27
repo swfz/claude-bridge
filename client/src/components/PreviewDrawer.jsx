@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { remarkAlert } from "remark-github-blockquote-alert";
 import { EXT_TO_LANG, highlightCode } from "../highlight.js";
 import "./PreviewDrawer.css";
 
@@ -233,7 +234,7 @@ export default function PreviewDrawer({
           <div className="drawer-body" ref={bodyRef} onMouseUp={handleMouseUp}>
             {markdownToRender ? (
               <div className="drawer-markdown">
-                <Markdown remarkPlugins={[remarkGfm]}>
+                <Markdown remarkPlugins={[remarkGfm, remarkAlert]}>
                   {markdownToRender}
                 </Markdown>
               </div>
@@ -397,7 +398,7 @@ export default function PreviewDrawer({
                       </span>
                     </div>
                     <div className="review-pane-response-body">
-                      <Markdown remarkPlugins={[remarkGfm]}>
+                      <Markdown remarkPlugins={[remarkGfm, remarkAlert]}>
                         {r.content}
                       </Markdown>
                     </div>

@@ -26,3 +26,70 @@ html, body, #root {
   --success: #4caf50;
   --warning: #ff9800;
 }
+
+/* GitHub Alert 記法 (> [!NOTE] 等) — remark-github-blockquote-alert 用のダークテーマ対応スタイル */
+.markdown-alert {
+  padding: 8px 16px;
+  margin: 10px 0;
+  border-left: 3px solid var(--border);
+  border-radius: 0 6px 6px 0;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.markdown-alert > :first-child {
+  margin-top: 0;
+}
+
+.markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.markdown-alert-title svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.markdown-alert-note {
+  border-left-color: #4c9aff;
+}
+.markdown-alert-note .markdown-alert-title {
+  color: #4c9aff;
+}
+
+.markdown-alert-tip {
+  border-left-color: var(--success);
+}
+.markdown-alert-tip .markdown-alert-title {
+  color: var(--success);
+}
+
+.markdown-alert-important {
+  border-left-color: #a371f7;
+}
+.markdown-alert-important .markdown-alert-title {
+  color: #a371f7;
+}
+
+.markdown-alert-warning {
+  border-left-color: var(--warning);
+}
+.markdown-alert-warning .markdown-alert-title {
+  color: var(--warning);
+}
+
+.markdown-alert-caution {
+  border-left-color: var(--accent);
+}
+.markdown-alert-caution .markdown-alert-title {
+  color: var(--accent);
+}
