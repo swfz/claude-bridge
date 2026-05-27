@@ -3,7 +3,20 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { remarkAlert } from "remark-github-blockquote-alert";
 import { EXT_TO_LANG, highlightCode } from "../highlight.js";
+import CodeBlock from "./CodeBlock.jsx";
 import "./PreviewDrawer.css";
+
+// Markdown 内のコードブロックを CodeBlock でハイライト表示する（インラインはそのまま）
+const markdownComponents = {
+  code({ className, children, ...props }) {
+    if (!className) {
+      return (
+        <code {...props}>{children}</code>
+      );
+    }
+    return <CodeBlock className={className}>{children}</CodeBlock>;
+  },
+};
 
 const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"];
 const HTML_EXTS = [".html", ".htm"];
@@ -256,7 +269,7 @@ export default function PreviewDrawer({
           >
             {markdownToRender ? (
               <div className="drawer-markdown">
-                <Markdown remarkPlugins={[remarkGfm, remarkAlert]}>
+                <Markdown remarkPlugins={[remarkGfm, remarkAlert]} components={markdownComponents}>
                   {markdownToRender}
                 </Markdown>
               </div>
@@ -420,7 +433,7 @@ export default function PreviewDrawer({
                       </span>
                     </div>
                     <div className="review-pane-response-body">
-                      <Markdown remarkPlugins={[remarkGfm, remarkAlert]}>
+                      <Markdown remarkPlugins={[remarkGfm, remarkAlert]} components={markdownComponents}>
                         {r.content}
                       </Markdown>
                     </div>
