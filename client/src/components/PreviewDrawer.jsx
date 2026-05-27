@@ -45,6 +45,38 @@ export default function PreviewDrawer({
   const [editingId, setEditingId] = useState(null);
   const bodyRef = useRef(null);
 
+  // ユーザーがドラッグで指定した幅(px)。null の間はクラスベースの既定幅を使う
+  const [width, setWidth] = useState(null);
+  const widthRef = useRef(width);
+  widthRef.current = width;
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const onDragStart = useCallback((e) => {
+    e.preventDefault();
+    dragging.current = true;
+    startX.current = e.clientX;
+    // 未操作時は実際の描画幅を起点にする
+    const drawerEl = e.currentTarget.parentElement;
+    startWidth.current = widthRef.current ?? drawerEl?.getBoundingClientRect().width ?? 800;
+
+    const onMove = (ev) => {
+      if (!dragging.current) return;
+      // 左端のハンドルを左へ動かすと幅が増える
+      const delta = startX.current - ev.clientX;
+      const max = window.innerWidth - 100;
+      setWidth(Math.max(400, Math.min(startWidth.current + delta, max)));
+    };
+    const onUp = () => {
+      dragging.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
+
   useEffect(() => {
     if (!isMarkdownMode && filePath && (isText || isMarkdownFile)) {
       setFileContent(null);
@@ -162,8 +194,10 @@ export default function PreviewDrawer({
     <div className="drawer-overlay" onClick={onClose}>
       <div
         className={`drawer ${reviewItems.length > 0 ? "drawer-with-review" : ""}`}
+        style={width != null ? { width, maxWidth: "none", minWidth: "auto" } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="drawer-resize-handle" onMouseDown={onDragStart} />
         <div className="drawer-header">
           <div className="drawer-title-area">
             <span className="drawer-filename">{fileName}</span>
