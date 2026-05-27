@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FileIcon, FolderIcon } from "./fileIcons.jsx";
 import "./FileExplorer.css";
 
 const PREVIEWABLE_EXTS = new Set([
@@ -53,7 +54,9 @@ function DirNode({ path, name, depth, initiallyOpen, onOpenPreview }) {
         title={path}
       >
         <span className="explorer-caret">{expanded ? "▾" : "▸"}</span>
-        <span className="explorer-icon">📁</span>
+        <span className="explorer-icon">
+          <FolderIcon open={expanded} />
+        </span>
         <span className="explorer-name">{name}</span>
       </button>
       {expanded && entries && (
@@ -106,7 +109,9 @@ function FileNode({ path, name, depth, onOpenPreview }) {
       title={canPreview ? path : `${path} (プレビュー非対応)`}
     >
       <span className="explorer-caret" />
-      <span className="explorer-icon">{canPreview ? "📄" : "▫"}</span>
+      <span className="explorer-icon">
+        <FileIcon ext={ext} />
+      </span>
       <span className="explorer-name">{name}</span>
     </button>
   );
@@ -156,7 +161,9 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
   return (
     <div className="file-explorer" style={{ width, minWidth: width }}>
       <div className="file-explorer-header" title={cwd}>
-        <span className="explorer-header-icon">📂</span>
+        <span className="explorer-header-icon">
+          <FolderIcon root size={16} />
+        </span>
         <span className="explorer-header-name">{rootName}</span>
       </div>
       <div className="file-explorer-body">

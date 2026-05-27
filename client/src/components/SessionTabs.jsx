@@ -22,8 +22,17 @@ export default function SessionTabs({
             {session.type === "tmux" && (
               <span className="tab-badge">tmux</span>
             )}
+            {session.status && (
+              <span
+                className={`tab-status tab-status-${session.status}`}
+                title={session.status}
+              />
+            )}
             <span className="tab-name">{session.name}</span>
-            <span className="tab-cwd" title={session.cwd}>
+            <span
+              className={`tab-cwd ${session.type === "tmux" ? "tab-cwd-strong" : ""}`}
+              title={session.cwd}
+            >
               {session.cwd.split("/").pop()}
             </span>
             {session.alive ? (

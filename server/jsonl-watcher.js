@@ -14,18 +14,21 @@ export class JsonlWatcher {
   }
 
   // セッション開始時に呼ぶ
-  // resumeSessionId がある場合はそのファイルを直接監視
+  // resumeSessionId / sessionId がある場合はそのファイルを直接監視
   // ない場合は cwd のプロジェクトディレクトリ内の最新ファイルを検出
-  startWatching({ bridgeSessionId, cwd, resumeSessionId, attachExisting, onMessage }) {
+  startWatching({ bridgeSessionId, cwd, resumeSessionId, sessionId, attachExisting, onMessage }) {
     const projectDir = cwdToProjectDir(cwd);
     const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
 
     let targetFile = null;
     let linesRead = 0;
 
-    if (resumeSessionId) {
-      targetFile = join(projectPath, `${resumeSessionId}.jsonl`);
-      // resume の場合、既存の行数をカウントしてスキップ
+    // 明示されたセッションID（resume または解決済みの tmux ペイン）を最優先で対象にする。
+    // 同一 cwd に複数ペインがある場合に最新ファイルへ吸い寄せられるのを防ぐ。
+    const explicitId = resumeSessionId || sessionId;
+    if (explicitId) {
+      targetFile = join(projectPath, `${explicitId}.jsonl`);
+      // 既存の行数をカウントしてスキップ（新規メッセージのみ配信）
       try {
         const existing = readFileSync(targetFile, "utf-8");
         linesRead = existing.split("\n").filter((l) => l.trim()).length;
@@ -33,7 +36,7 @@ export class JsonlWatcher {
         // ファイルがまだない場合
       }
     } else if (attachExisting) {
-      // tmux 等の既存セッションに接続: 最新ファイルを即座に特定（recency チェックなし）
+      // sessionId が解決できなかった場合のフォールバック: 最新ファイルを特定
       targetFile = this._findLatestJsonl(projectPath);
       // 既存行はスキップし、新規メッセージのみ配信
       if (targetFile) {

@@ -1,8 +1,39 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { remarkAlert } from "remark-github-blockquote-alert";
 import { EXT_TO_LANG, highlightCode } from "../highlight.js";
+import { splitFrontmatter } from "../frontmatter.js";
+import CodeBlock from "./CodeBlock.jsx";
 import "./PreviewDrawer.css";
+
+// YAML frontmatter を GitHub 風の key/value テーブルとして表示する
+function FrontmatterTable({ data }) {
+  return (
+    <table className="frontmatter-table">
+      <tbody>
+        {Object.entries(data).map(([key, value]) => (
+          <tr key={key}>
+            <th>{key}</th>
+            <td>{value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// Markdown 内のコードブロックを CodeBlock でハイライト表示する（インラインはそのまま）
+const markdownComponents = {
+  code({ className, children, ...props }) {
+    if (!className) {
+      return (
+        <code {...props}>{children}</code>
+      );
+    }
+    return <CodeBlock className={className}>{children}</CodeBlock>;
+  },
+};
 
 const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"];
 const HTML_EXTS = [".html", ".htm"];
@@ -44,6 +75,49 @@ export default function PreviewDrawer({
   const [selectionPopup, setSelectionPopup] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const bodyRef = useRef(null);
+
+  // プレビュー本文だけをライトテーマで表示するか。選択は localStorage で記憶する
+  const [lightMode, setLightMode] = useState(
+    () => localStorage.getItem("previewLight") === "1",
+  );
+  const toggleLightMode = useCallback(() => {
+    setLightMode((v) => {
+      localStorage.setItem("previewLight", v ? "0" : "1");
+      return !v;
+    });
+  }, []);
+
+  // ユーザーがドラッグで指定した幅(px)。null の間はクラスベースの既定幅を使う
+  const [width, setWidth] = useState(null);
+  const widthRef = useRef(width);
+  widthRef.current = width;
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const onDragStart = useCallback((e) => {
+    e.preventDefault();
+    dragging.current = true;
+    startX.current = e.clientX;
+    // 未操作時は実際の描画幅を起点にする
+    const drawerEl = e.currentTarget.parentElement;
+    startWidth.current = widthRef.current ?? drawerEl?.getBoundingClientRect().width ?? 800;
+
+    const onMove = (ev) => {
+      if (!dragging.current) return;
+      // 左端のハンドルを左へ動かすと幅が増える
+      const delta = startX.current - ev.clientX;
+      const max = window.innerWidth - 100;
+      setWidth(Math.max(400, Math.min(startWidth.current + delta, max)));
+    };
+    const onUp = () => {
+      dragging.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
 
   useEffect(() => {
     if (!isMarkdownMode && filePath && (isText || isMarkdownFile)) {
@@ -154,6 +228,12 @@ export default function PreviewDrawer({
       ? fileContent
       : null;
 
+  // frontmatter をテーブル表示、本文だけを Markdown としてレンダリングする
+  const { frontmatter, body: markdownBody } = useMemo(
+    () => splitFrontmatter(markdownToRender || ""),
+    [markdownToRender],
+  );
+
   const unresolvedCount = reviewItems.filter(
     (i) => !i.resolved && i.comment.trim()
   ).length;
@@ -162,14 +242,23 @@ export default function PreviewDrawer({
     <div className="drawer-overlay" onClick={onClose}>
       <div
         className={`drawer ${reviewItems.length > 0 ? "drawer-with-review" : ""}`}
+        style={width != null ? { width, maxWidth: "none", minWidth: "auto" } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="drawer-resize-handle" onMouseDown={onDragStart} />
         <div className="drawer-header">
           <div className="drawer-title-area">
             <span className="drawer-filename">{fileName}</span>
             {filePath && <span className="drawer-path">{filePath}</span>}
           </div>
           <div className="drawer-actions">
+            <button
+              className="drawer-btn"
+              onClick={toggleLightMode}
+              title={lightMode ? "ダーク表示に戻す" : "ライト表示にする"}
+            >
+              {lightMode ? "🌙 ダーク" : "☀ ライト"}
+            </button>
             {unresolvedCount > 0 && (
               <button className="drawer-btn drawer-btn-submit" onClick={handleSubmitAll}>
                 {unresolvedCount}件送信
@@ -196,11 +285,16 @@ export default function PreviewDrawer({
         </div>
 
         <div className="drawer-content">
-          <div className="drawer-body" ref={bodyRef} onMouseUp={handleMouseUp}>
+          <div
+            className={`drawer-body ${lightMode ? "preview-light" : ""}`}
+            ref={bodyRef}
+            onMouseUp={handleMouseUp}
+          >
             {markdownToRender ? (
               <div className="drawer-markdown">
-                <Markdown remarkPlugins={[remarkGfm]}>
-                  {markdownToRender}
+                {frontmatter && <FrontmatterTable data={frontmatter} />}
+                <Markdown remarkPlugins={[remarkGfm, remarkAlert]} components={markdownComponents}>
+                  {markdownBody}
                 </Markdown>
               </div>
             ) : (
@@ -363,7 +457,7 @@ export default function PreviewDrawer({
                       </span>
                     </div>
                     <div className="review-pane-response-body">
-                      <Markdown remarkPlugins={[remarkGfm]}>
+                      <Markdown remarkPlugins={[remarkGfm, remarkAlert]} components={markdownComponents}>
                         {r.content}
                       </Markdown>
                     </div>

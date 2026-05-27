@@ -14,6 +14,7 @@
 }
 
 .drawer {
+  position: relative;
   width: 60%;
   max-width: 1000px;
   min-width: 400px;
@@ -24,6 +25,21 @@
   flex-direction: column;
   animation: drawer-slide-in 0.2s ease-out;
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.drawer-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.drawer-resize-handle:hover,
+.drawer-resize-handle:active {
+  background: var(--accent);
 }
 
 .drawer-with-review {
@@ -141,6 +157,34 @@
   position: relative;
 }
 
+/* プレビュー本文だけをライトテーマに。配下の var() 参照をまとめて差し替える。
+   コードブロック (hljs/github-dark) はダーク島として残し可読性を保つ。 */
+.drawer-body.preview-light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --text-primary: #1f2328;
+  --text-secondary: #59636e;
+  --border: #d1d9e0;
+  background: #ffffff;
+  color: var(--text-primary);
+}
+
+.drawer-body.preview-light .drawer-markdown thead {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.drawer-body.preview-light .drawer-markdown tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.drawer-body.preview-light .drawer-markdown :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.drawer-body.preview-light .markdown-alert {
+  background: rgba(0, 0, 0, 0.035);
+}
+
 .drawer-image {
   display: block;
   max-width: 100%;
@@ -217,12 +261,43 @@
   font-size: 13px;
 }
 
-.drawer-markdown pre { background: #0d0d1a; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
-.drawer-markdown pre code { background: none; padding: 0; }
-.drawer-markdown blockquote { border-left: 3px solid var(--accent); margin: 8px 0; padding: 4px 12px; color: var(--text-secondary); }
+/* コードブロックは共通の .code-block-wrapper (CodeBlock) に一任する */
+.drawer-markdown blockquote { border-left: 3px solid var(--text-secondary); margin: 8px 0; padding: 4px 12px; color: var(--text-secondary); }
 .drawer-markdown a { color: var(--accent); }
 .drawer-markdown hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .drawer-markdown img { max-width: 100%; border-radius: 4px; }
+
+/* frontmatter テーブル */
+.frontmatter-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 20px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.frontmatter-table th,
+.frontmatter-table td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.frontmatter-table th {
+  width: 1%;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  font-family: "Cascadia Code", "Fira Code", monospace;
+}
+
+.drawer-body.preview-light .frontmatter-table th {
+  background: rgba(0, 0, 0, 0.04);
+}
 
 /* テキスト選択ポップアップ */
 .selection-popup {

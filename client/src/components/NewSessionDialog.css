@@ -133,6 +133,74 @@
   color: var(--text-primary);
 }
 
+.session-item-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pane-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-secondary);
+}
+
+.pane-status-busy {
+  background: #f0ad4e;
+  box-shadow: 0 0 4px #f0ad4e;
+}
+
+.pane-status-idle {
+  background: var(--success);
+}
+
+.pane-unrenamed {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* tmux ペイン行のメタ（cwd / pane）。rename していない場合は cwd が識別の主役 */
+.session-item-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 3px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.cwd-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cwd-parent {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.cwd-base {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.meta-pane {
+  color: var(--text-secondary);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
 .session-item-time {
   font-size: 11px;
   color: var(--text-secondary);

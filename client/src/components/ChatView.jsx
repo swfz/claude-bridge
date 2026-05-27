@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { remarkAlert } from "remark-github-blockquote-alert";
 import { EXT_TO_LANG, highlightLines } from "../highlight.js";
 import CommentPopover from "./CommentPopover.jsx";
 import ReviewPanel from "./ReviewPanel.jsx";
 import FilePreview from "./FilePreview.jsx";
+import CodeBlock from "./CodeBlock.jsx";
 import "./ChatView.css";
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
@@ -128,31 +130,6 @@ function formatToolInput(name, input) {
   }
 }
 
-function CodeBlock({ children, className }) {
-  const codeRef = useRef(null);
-  const lang = className?.replace("language-", "") || "";
-
-  const handleCopy = () => {
-    const text = codeRef.current?.textContent || "";
-    navigator.clipboard.writeText(text);
-  };
-
-  return (
-    <div className="code-block-wrapper">
-      <div className="code-block-header">
-        <span className="code-lang">{lang}</span>
-        <button className="code-copy-btn" onClick={handleCopy}>
-          Copy
-        </button>
-      </div>
-      <pre>
-        <code ref={codeRef} className={className}>
-          {children}
-        </code>
-      </pre>
-    </div>
-  );
-}
 
 function isFileUrl(href) {
   return href && (href.startsWith("file://") || href.startsWith("file:///"));
@@ -211,7 +188,7 @@ function MarkdownContent({ content, sessionCwd, onOpenPreview, onOpenFileReview 
 
   return (
     <Markdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkAlert]}
       urlTransform={(url) => url}
       components={{
         code({ className, children, ...props }) {
