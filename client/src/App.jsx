@@ -238,7 +238,7 @@ export default function App() {
   }, [send]);
 
   const handleAttachTmux = useCallback(
-    ({ paneId, name, cwd, target, claudePid, status }) => {
+    ({ paneId, name, cwd, target, claudePid, claudeSessionId, status }) => {
       // pendingTmuxAttach を使って、session_list 更新後に履歴をリクエスト
       pendingTmuxAttach.current = true;
       send({
@@ -248,6 +248,7 @@ export default function App() {
         cwd,
         target,
         claudePid,
+        claudeSessionId,
         status,
       });
       setShowNewSession(false);

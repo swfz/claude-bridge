@@ -9,6 +9,7 @@ import { Storage } from "./storage.js";
 import { ThreadStore } from "./thread-store.js";
 import { listClaudeSessions, loadSessionHistory } from "./claude-sessions.js";
 import { JsonlWatcher } from "./jsonl-watcher.js";
+import { cwdToProjectDir } from "./jsonl-utils.js";
 import { listClaudeTmuxPanes, TmuxSessionManager } from "./tmux-session.js";
 import { enrichPanesWithSessionMeta } from "./claude-session-meta.js";
 
@@ -553,10 +554,13 @@ wss.on("connection", (ws) => {
           status: msg.status,
         });
 
-        // 既存セッションの履歴を読み込んで返す
-        const found = jsonlWatcher.findSessionForCwd(msg.cwd);
-        if (found) {
-          loadSessionHistory(found.sessionId, found.projectDir).then(
+        // ペインごとに解決済みの sessionId があればそれを使い、同一 cwd の
+        // 複数ペインを取り違えないようにする。無ければ cwd から最新を推定（後方互換）。
+        const resolved = msg.claudeSessionId
+          ? { sessionId: msg.claudeSessionId, projectDir: cwdToProjectDir(msg.cwd) }
+          : jsonlWatcher.findSessionForCwd(msg.cwd);
+        if (resolved) {
+          loadSessionHistory(resolved.sessionId, resolved.projectDir).then(
             (history) => {
               ws.send(
                 JSON.stringify({
@@ -573,6 +577,7 @@ wss.on("connection", (ws) => {
         jsonlWatcher.startWatching({
           bridgeSessionId: session.id,
           cwd: msg.cwd,
+          sessionId: msg.claudeSessionId,
           attachExisting: true,
           onMessage: (chatMsg) => broadcast(chatMsg),
         });

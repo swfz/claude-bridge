@@ -96,6 +96,7 @@ export default function NewSessionDialog({
                           cwd: p.cwd,
                           target: p.target,
                           claudePid: p.claudePid,
+                          claudeSessionId: p.claudeSessionId,
                           status: p.status,
                         })
                       }
