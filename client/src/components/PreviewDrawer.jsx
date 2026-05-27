@@ -46,6 +46,17 @@ export default function PreviewDrawer({
   const [editingId, setEditingId] = useState(null);
   const bodyRef = useRef(null);
 
+  // プレビュー本文だけをライトテーマで表示するか。選択は localStorage で記憶する
+  const [lightMode, setLightMode] = useState(
+    () => localStorage.getItem("previewLight") === "1",
+  );
+  const toggleLightMode = useCallback(() => {
+    setLightMode((v) => {
+      localStorage.setItem("previewLight", v ? "0" : "1");
+      return !v;
+    });
+  }, []);
+
   // ユーザーがドラッグで指定した幅(px)。null の間はクラスベースの既定幅を使う
   const [width, setWidth] = useState(null);
   const widthRef = useRef(width);
@@ -205,6 +216,13 @@ export default function PreviewDrawer({
             {filePath && <span className="drawer-path">{filePath}</span>}
           </div>
           <div className="drawer-actions">
+            <button
+              className="drawer-btn"
+              onClick={toggleLightMode}
+              title={lightMode ? "ダーク表示に戻す" : "ライト表示にする"}
+            >
+              {lightMode ? "🌙 ダーク" : "☀ ライト"}
+            </button>
             {unresolvedCount > 0 && (
               <button className="drawer-btn drawer-btn-submit" onClick={handleSubmitAll}>
                 {unresolvedCount}件送信
@@ -231,7 +249,11 @@ export default function PreviewDrawer({
         </div>
 
         <div className="drawer-content">
-          <div className="drawer-body" ref={bodyRef} onMouseUp={handleMouseUp}>
+          <div
+            className={`drawer-body ${lightMode ? "preview-light" : ""}`}
+            ref={bodyRef}
+            onMouseUp={handleMouseUp}
+          >
             {markdownToRender ? (
               <div className="drawer-markdown">
                 <Markdown remarkPlugins={[remarkGfm, remarkAlert]}>

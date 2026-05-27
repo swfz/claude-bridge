@@ -157,6 +157,34 @@
   position: relative;
 }
 
+/* プレビュー本文だけをライトテーマに。配下の var() 参照をまとめて差し替える。
+   コードブロック (hljs/github-dark) はダーク島として残し可読性を保つ。 */
+.drawer-body.preview-light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --text-primary: #1f2328;
+  --text-secondary: #59636e;
+  --border: #d1d9e0;
+  background: #ffffff;
+  color: var(--text-primary);
+}
+
+.drawer-body.preview-light .drawer-markdown thead {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.drawer-body.preview-light .drawer-markdown tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.drawer-body.preview-light .drawer-markdown :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.drawer-body.preview-light .markdown-alert {
+  background: rgba(0, 0, 0, 0.035);
+}
+
 .drawer-image {
   display: block;
   max-width: 100%;
