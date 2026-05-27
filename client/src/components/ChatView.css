@@ -419,7 +419,7 @@
   width: 18px;
   height: 18px;
   border-radius: 3px;
-  background: var(--accent);
+  background: var(--accent-secondary);
   color: white;
   font-size: 10px;
   font-weight: 700;
