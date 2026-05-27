@@ -182,7 +182,7 @@
 
 /* blockquote */
 .chat-message-body blockquote {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--text-secondary);
   margin: 8px 0;
   padding: 4px 12px;
   color: var(--text-secondary);
@@ -231,8 +231,8 @@
 }
 
 .code-block-wrapper {
-  margin: 8px 0;
-  border-radius: 8px;
+  margin: 4px 0;
+  border-radius: 6px;
   overflow: hidden;
   background: #0d0d1a;
 }
@@ -241,7 +241,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 12px;
+  padding: 1px 8px;
   background: rgba(255, 255, 255, 0.05);
   font-size: 12px;
 }
@@ -267,7 +267,7 @@
 
 .code-block-wrapper pre {
   margin: 0;
-  padding: 12px;
+  padding: 8px 10px;
   overflow-x: auto;
 }
 

@@ -261,9 +261,8 @@
   font-size: 13px;
 }
 
-.drawer-markdown pre { background: #0d0d1a; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
-.drawer-markdown pre code { background: none; padding: 0; }
-.drawer-markdown blockquote { border-left: 3px solid var(--accent); margin: 8px 0; padding: 4px 12px; color: var(--text-secondary); }
+/* コードブロックは共通の .code-block-wrapper (CodeBlock) に一任する */
+.drawer-markdown blockquote { border-left: 3px solid var(--text-secondary); margin: 8px 0; padding: 4px 12px; color: var(--text-secondary); }
 .drawer-markdown a { color: var(--accent); }
 .drawer-markdown hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .drawer-markdown img { max-width: 100%; border-radius: 4px; }
