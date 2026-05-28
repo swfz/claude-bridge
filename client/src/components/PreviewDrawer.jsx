@@ -5,6 +5,13 @@ import { remarkAlert } from "remark-github-blockquote-alert";
 import { EXT_TO_LANG, highlightCode } from "../highlight.js";
 import { splitFrontmatter } from "../frontmatter.js";
 import CodeBlock from "./CodeBlock.jsx";
+import {
+  buildLocationInfo,
+  findNearestHeading,
+  findOccurrenceOffset,
+  getOccurrenceIndex,
+  getRootTextOffset,
+} from "../utils/previewLocation.js";
 import "./PreviewDrawer.css";
 
 // YAML frontmatter を GitHub 風の key/value テーブルとして表示する
@@ -150,6 +157,63 @@ export default function PreviewDrawer({
     return () => document.removeEventListener("keydown", handler);
   }, [onClose, selectionPopup]);
 
+  // 選択範囲から source（fileContent or markdown）上の位置情報を構築する。
+  // コードファイルは DOM textContent と source が一致するので直接オフセット計算。
+  // Markdown プレビューは rendered DOM 上の出現順から source 内の同じ出現を探す。
+  const computeLocation = useCallback(
+    (range, selectedText) => {
+      const body = bodyRef.current;
+      if (!body) return null;
+
+      const codeEl = body.querySelector("pre.hljs > code");
+      const plainPre = body.querySelector("pre.drawer-text");
+      const mdEl = body.querySelector(".drawer-markdown");
+
+      let domRoot = null;
+      let sourceText = null;
+      let kind = null;
+
+      if (codeEl && codeEl.contains(range.startContainer)) {
+        domRoot = codeEl;
+        sourceText = fileContent;
+        kind = "code";
+      } else if (plainPre && plainPre.contains(range.startContainer)) {
+        domRoot = plainPre;
+        sourceText = fileContent;
+        kind = "text";
+      } else if (mdEl && mdEl.contains(range.startContainer)) {
+        domRoot = mdEl;
+        sourceText = isMarkdownMode ? markdown : fileContent;
+        kind = "markdown";
+      } else {
+        return null;
+      }
+
+      const domStart = getRootTextOffset(domRoot, range.startContainer, range.startOffset);
+      if (domStart < 0) return null;
+
+      let sourceStart = -1;
+      let sourceEnd = -1;
+      if (kind === "code" || kind === "text") {
+        // hljs ハイライトの span/テキストノードは textContent としては source と一致する
+        sourceStart = domStart;
+        sourceEnd = domStart + selectedText.length;
+      } else if (kind === "markdown" && sourceText) {
+        // rendered DOM 上の出現順を取得し、source 内で同じ出現順の位置を探す
+        const renderedText = domRoot.textContent;
+        const occ = getOccurrenceIndex(renderedText, selectedText, domStart);
+        if (occ.index > 0) {
+          sourceStart = findOccurrenceOffset(sourceText, selectedText, occ.index);
+          if (sourceStart >= 0) sourceEnd = sourceStart + selectedText.length;
+        }
+      }
+
+      const heading = kind === "markdown" ? findNearestHeading(range.startContainer, domRoot) : null;
+      return buildLocationInfo({ kind, sourceText, selectedText, sourceStart, sourceEnd, heading });
+    },
+    [fileContent, isMarkdownMode, markdown]
+  );
+
   // テキスト選択を検出
   const handleMouseUp = useCallback(() => {
     const selection = window.getSelection();
@@ -163,18 +227,21 @@ export default function PreviewDrawer({
     const bodyRect = bodyRef.current?.getBoundingClientRect();
     if (!bodyRect) return;
 
+    const location = computeLocation(range, text);
+
     setSelectionPopup({
       text,
+      location,
       top: rect.bottom - bodyRect.top + bodyRef.current.scrollTop,
       left: rect.left - bodyRect.left,
     });
-  }, []);
+  }, [computeLocation]);
 
-  const addComment = useCallback((selectedText) => {
+  const addComment = useCallback((selectedText, location) => {
     const id = ++commentIdSeq;
     setReviewItems((prev) => [
       ...prev,
-      { id, selectedText, comment: "", resolved: false },
+      { id, selectedText, location, comment: "", resolved: false },
     ]);
     setEditingId(id);
     setSelectionPopup(null);
@@ -207,10 +274,16 @@ export default function PreviewDrawer({
     if (items.length === 0 || !onReviewSubmit) return;
 
     const target = filePath || "preview";
-    const formatted = items.map(
-      (item, i) =>
-        `${i + 1}. 「${item.selectedText.slice(0, 80)}」について:\n   ${item.comment}`
-    );
+    const formatted = items.map((item, i) => {
+      const head = `「${item.selectedText.slice(0, 80)}」`;
+      const label = item.location?.label ? ` (${item.location.label})` : "";
+      // 前後コンテキストで「同名トークンのどれを指すか」を Claude が一意に特定できるようにする
+      const ctx =
+        item.location && (item.location.contextBefore || item.location.contextAfter)
+          ? ` 前後[${item.location.contextBefore}❮${item.selectedText.slice(0, 40)}❯${item.location.contextAfter}]`
+          : "";
+      return `${i + 1}. ${head}${label}${ctx} について:\n   ${item.comment}`;
+    });
     onReviewSubmit(target, formatted);
     setSubmitStatus(`${items.length}件送信しました`);
     setTimeout(() => setSubmitStatus(null), 3000);
@@ -353,7 +426,7 @@ export default function PreviewDrawer({
               >
                 <button
                   className="selection-popup-btn"
-                  onClick={() => addComment(selectionPopup.text)}
+                  onClick={() => addComment(selectionPopup.text, selectionPopup.location)}
                 >
                   + コメント追加
                 </button>
