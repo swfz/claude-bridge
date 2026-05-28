@@ -180,7 +180,16 @@ function findSession(id) {
 }
 
 function allSessions() {
-  return [...sessionManager.listSessions(), ...tmuxSessionManager.listSessions()];
+  const sessions = [
+    ...sessionManager.listSessions(),
+    ...tmuxSessionManager.listSessions(),
+  ];
+  // watcher が把握している JSONL から claudeSessionId / projectDir を付与する。
+  // ブラウザ再読込後にクライアントが履歴を再取得できるようにするため。
+  return sessions.map((s) => {
+    const meta = jsonlWatcher.getSessionMeta(s.id);
+    return meta ? { ...s, ...meta } : s;
+  });
 }
 
 function broadcastSessionList() {
@@ -468,6 +477,8 @@ wss.on("connection", (ws) => {
             ws.send(
               JSON.stringify({
                 type: "session_history",
+                // どのタブ宛の履歴かをクライアントが判別できるよう bridge 側 ID も返す
+                bridgeSessionId: msg.sessionId,
                 claudeSessionId: msg.claudeSessionId,
                 messages: history,
               })

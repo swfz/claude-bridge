@@ -14,7 +14,9 @@ export default function App() {
   const { send, on, connected } = useWebSocket();
   const [sessions, setSessions] = useState([]);
   const sessionsRef = useRef(sessions);
-  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [activeSessionId, setActiveSessionId] = useState(
+    () => localStorage.getItem("activeSessionId") || null
+  );
   const [showNewSession, setShowNewSession] = useState(false);
   const [viewMode, setViewMode] = useState("chat");
   const [messages, setMessages] = useState([]);
@@ -43,7 +45,8 @@ export default function App() {
           setActiveSessionId(newest.id);
           setMessages([]);
         } else {
-          // 今のactiveがaliveでなければ、最新のaliveセッションに切り替え
+          // 今のactive（リロード時は localStorage 復元値）がaliveなら維持。
+          // aliveでなければ最新のaliveセッションに切り替え
           const currentAlive = aliveSessions.find((s) => s.id === activeSessionId);
           if (!currentAlive) {
             setActiveSessionId(aliveSessions[aliveSessions.length - 1].id);
@@ -143,23 +146,50 @@ export default function App() {
 
   useEffect(() => {
     return on("session_history", (msg) => {
-      if (msg.messages && msg.messages.length > 0) {
-        const loaded = msg.messages.map((m, i) => ({
-          id: `history-${i}-${Date.now()}`,
-          role: m.role,
-          content: m.content,
-          toolUses: m.toolUses,
-          timestamp: m.timestamp || new Date().toISOString(),
-          isHistory: true,
-        }));
-        setMessages(loaded);
+      if (!msg.messages || msg.messages.length === 0) return;
+
+      // 境界 timestamp: attach/resume 時点での履歴末尾の時刻を localStorage に保存し、
+      // 再読込後に「境界以前 = 履歴（薄く表示）／境界より後 = 新規（通常表示）」を再現する。
+      const bridgeId = msg.bridgeSessionId;
+      const boundaryKey = bridgeId ? `historyBoundary:${bridgeId}` : null;
+      let boundary = boundaryKey ? localStorage.getItem(boundaryKey) : null;
+      if (boundaryKey && !boundary) {
+        // 初回受信: 履歴末尾の timestamp を境界として記録
+        const lastTs = msg.messages[msg.messages.length - 1].timestamp;
+        if (lastTs) {
+          localStorage.setItem(boundaryKey, lastTs);
+          boundary = lastTs;
+        }
       }
+
+      const loaded = msg.messages.map((m, i) => ({
+        id: `history-${i}-${Date.now()}`,
+        role: m.role,
+        content: m.content,
+        toolUses: m.toolUses,
+        timestamp: m.timestamp || new Date().toISOString(),
+        // 境界がある: timestamp が境界以下 / 不在を履歴扱い、境界より新しければ通常表示
+        // 境界がない: 従来通り全件履歴扱い（bridgeId 不明な resume 即時ロード等）
+        isHistory: boundary ? !m.timestamp || m.timestamp <= boundary : true,
+      }));
+
+      // bridgeSessionId があり現在のアクティブと一致しなければ、混線防止にキャッシュへ格納
+      if (bridgeId && bridgeId !== activeSessionIdRef.current) {
+        messageCache.current.set(bridgeId, loaded);
+        return;
+      }
+      setMessages(loaded);
     });
   }, [on]);
 
-  // activeSessionIdRef を同期
+  // activeSessionIdRef を同期し、リロード後に同じタブへ戻せるよう永続化
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
+    if (activeSessionId) {
+      localStorage.setItem("activeSessionId", activeSessionId);
+    } else {
+      localStorage.removeItem("activeSessionId");
+    }
   }, [activeSessionId]);
 
   // メッセージをキャッシュに同期
@@ -177,6 +207,27 @@ export default function App() {
     }
   }, [activeSessionId, send]);
 
+  // アクティブセッションの表示が空なら履歴を復元する。
+  // キャッシュにあれば即復元、無ければ JSONL から取得（再読込で messageCache が失われた場合の復旧経路）。
+  useEffect(() => {
+    if (!activeSessionId || messages.length > 0) return;
+    const cached = messageCache.current.get(activeSessionId);
+    if (cached && cached.length > 0) {
+      setMessages(cached);
+      return;
+    }
+    const session = sessions.find((s) => s.id === activeSessionId);
+    if (session?.claudeSessionId) {
+      send({
+        type: "load_session_history",
+        sessionId: activeSessionId,
+        claudeSessionId: session.claudeSessionId,
+        projectDir: session.projectDir,
+      });
+    }
+    // messages を依存に含めるが、length>0 で早期 return するため履歴受信後は再実行されない
+  }, [activeSessionId, sessions, send, messages.length]);
+
   const handleCreateSession = useCallback(
     ({ name, cwd }) => {
       send({ type: "new_session", name, cwd });
@@ -188,6 +239,9 @@ export default function App() {
   const handleKillSession = useCallback(
     (sessionId) => {
       send({ type: "kill_session", sessionId });
+      // 境界情報は kill されたセッションには無意味なのでクリーンアップ
+      localStorage.removeItem(`historyBoundary:${sessionId}`);
+      messageCache.current.delete(sessionId);
       if (activeSessionId === sessionId) {
         const remaining = sessions.filter((s) => s.id !== sessionId);
         setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
@@ -213,6 +267,8 @@ export default function App() {
   const handleDetachTmux = useCallback(
     (sessionId) => {
       send({ type: "detach_tmux_pane", sessionId });
+      localStorage.removeItem(`historyBoundary:${sessionId}`);
+      messageCache.current.delete(sessionId);
     },
     [send]
   );
