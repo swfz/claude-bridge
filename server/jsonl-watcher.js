@@ -74,6 +74,18 @@ export class JsonlWatcher {
     this._startFileWatch(state);
   }
 
+  // bridgeSessionId が現在監視している JSONL から claudeSessionId / projectDir を返す。
+  // ブラウザ再読込後にクライアントが履歴を再取得するために使う。
+  // targetFile がまだ特定できていない場合は null。
+  getSessionMeta(bridgeSessionId) {
+    const state = this.watchers.get(bridgeSessionId);
+    if (!state || !state.targetFile) return null;
+    return {
+      claudeSessionId: basename(state.targetFile, ".jsonl"),
+      projectDir: cwdToProjectDir(state.cwd),
+    };
+  }
+
   // cwd からプロジェクトディレクトリと最新セッション ID を返す
   findSessionForCwd(cwd) {
     const projectDir = cwdToProjectDir(cwd);

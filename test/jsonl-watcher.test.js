@@ -412,4 +412,37 @@ describe("JsonlWatcher", () => {
       assert.equal(watcher.watchers.size, 0);
     });
   });
+
+  describe("getSessionMeta", () => {
+    it("returns null for unknown bridgeSessionId", () => {
+      assert.equal(watcher.getSessionMeta("nope"), null);
+    });
+
+    it("returns null when targetFile is not yet resolved", () => {
+      // ファイル未特定の状態（startWatching で resumeSessionId/sessionId/attachExisting なしの新規）
+      watcher.watchers.set("bridge-1", {
+        bridgeSessionId: "bridge-1",
+        cwd: "/tmp/proj",
+        targetFile: null,
+      });
+      assert.equal(watcher.getSessionMeta("bridge-1"), null);
+    });
+
+    it("returns claudeSessionId and projectDir derived from targetFile", () => {
+      const sessionId = "abc-123-uuid";
+      const cwd = "/home/user/work/myproj";
+      watcher.watchers.set("bridge-2", {
+        bridgeSessionId: "bridge-2",
+        cwd,
+        targetFile: `/some/path/${sessionId}.jsonl`,
+      });
+
+      const meta = watcher.getSessionMeta("bridge-2");
+      assert.ok(meta);
+      assert.equal(meta.claudeSessionId, sessionId);
+      // projectDir は cwdToProjectDir(cwd) なので非空文字列であることを確認
+      assert.equal(typeof meta.projectDir, "string");
+      assert.ok(meta.projectDir.length > 0);
+    });
+  });
 });
