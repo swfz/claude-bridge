@@ -23,15 +23,15 @@ function FrontmatterTable({ data }) {
   );
 }
 
-// Markdown 内のコードブロックを CodeBlock でハイライト表示する（インラインはそのまま）
+// Markdown 内のコードブロックを CodeBlock でハイライト表示する（インラインはそのまま）。
+// pre をハンドルすることで、言語指定なしのコードブロック（className なし）も
+// CodeBlock を通り、枠線・背景が統一される。
 const markdownComponents = {
-  code({ className, children, ...props }) {
-    if (!className) {
-      return (
-        <code {...props}>{children}</code>
-      );
-    }
-    return <CodeBlock className={className}>{children}</CodeBlock>;
+  pre({ children }) {
+    const codeEl = Array.isArray(children) ? children[0] : children;
+    const className = codeEl?.props?.className;
+    const codeChildren = codeEl?.props?.children;
+    return <CodeBlock className={className}>{codeChildren}</CodeBlock>;
   },
 };
 
