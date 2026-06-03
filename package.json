@@ -13,7 +13,7 @@
     "setup:hooks": "node scripts/setup-hooks.js"
   },
   "dependencies": {
-    "express": "^4.21.0",
+    "express": "^4.22.2",
     "node-pty": "^1.0.0",
     "ws": "^8.18.0"
   }
