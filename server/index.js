@@ -4,13 +4,14 @@ import { WebSocketServer } from "ws";
 import { existsSync, statSync, lstatSync, readdirSync } from "fs";
 import { extname, join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { SessionManager } from "./session.js";
+import { SessionManager, ReadonlySessionManager } from "./session.js";
 import { Storage } from "./storage.js";
 import { ThreadStore } from "./thread-store.js";
 import { listClaudeSessions, loadSessionHistory } from "./claude-sessions.js";
 import { JsonlWatcher } from "./jsonl-watcher.js";
 import { cwdToProjectDir } from "./jsonl-utils.js";
 import { listClaudeTmuxPanes, TmuxSessionManager } from "./tmux-session.js";
+import { listClaudeAgents } from "./claude-agents.js";
 import { enrichPanesWithSessionMeta } from "./claude-session-meta.js";
 
 const PORT = process.env.PORT || 3000;
@@ -172,17 +173,23 @@ app.get("*", (req, res) => {
 const storage = new Storage();
 const sessionManager = new SessionManager(storage);
 const tmuxSessionManager = new TmuxSessionManager();
+const readonlySessionManager = new ReadonlySessionManager();
 const threadStore = new ThreadStore(storage);
 const jsonlWatcher = new JsonlWatcher();
 
 function findSession(id) {
-  return sessionManager.getSession(id) || tmuxSessionManager.getSession(id);
+  return (
+    sessionManager.getSession(id) ||
+    tmuxSessionManager.getSession(id) ||
+    readonlySessionManager.getSession(id)
+  );
 }
 
 function allSessions() {
   const sessions = [
     ...sessionManager.listSessions(),
     ...tmuxSessionManager.listSessions(),
+    ...readonlySessionManager.listSessions(),
   ];
   // watcher が把握している JSONL から claudeSessionId / projectDir を付与する。
   // ブラウザ再読込後にクライアントが履歴を再取得できるようにするため。
@@ -555,6 +562,13 @@ wss.on("connection", (ws) => {
         break;
       }
 
+      case "list_agents": {
+        listClaudeAgents().then((agents) => {
+          ws.send(JSON.stringify({ type: "agents", agents }));
+        });
+        break;
+      }
+
       case "attach_tmux_pane": {
         const session = tmuxSessionManager.attachPane({
           paneId: msg.paneId,
@@ -601,6 +615,81 @@ wss.on("connection", (ws) => {
         jsonlWatcher.stopWatching(msg.sessionId);
         tmuxSessionManager.detachSession(msg.sessionId);
         broadcastSessionList();
+        break;
+      }
+
+      case "open_readonly_session": {
+        // claude プロセスを起動せず、既存セッションの JSONL を読むだけのビュー
+        // projectDir 未指定（agent 一覧由来など）なら cwd から導出する
+        const roProjectDir = msg.projectDir || cwdToProjectDir(msg.cwd || "");
+        const session = readonlySessionManager.create({
+          name: msg.name || `閲覧: ${(msg.claudeSessionId || "").slice(0, 8)}`,
+          cwd: msg.cwd,
+          claudeSessionId: msg.claudeSessionId,
+          projectDir: roProjectDir,
+        });
+
+        // 履歴を読み込んで送る（プロセスは起動しない）
+        loadSessionHistory(msg.claudeSessionId, roProjectDir)
+          .then((history) => {
+            ws.send(
+              JSON.stringify({
+                type: "session_history",
+                bridgeSessionId: session.id,
+                messages: history,
+              })
+            );
+          })
+          .catch((e) => {
+            console.error("readonly history load failed:", e.message);
+          });
+
+        // 既存 JSONL の新着のみ監視（attachExisting）。プロセス起動はしない
+        jsonlWatcher.startWatching({
+          bridgeSessionId: session.id,
+          cwd: msg.cwd,
+          resumeSessionId: msg.claudeSessionId,
+          attachExisting: true,
+          onMessage: (chatMsg) => broadcast(chatMsg),
+        });
+
+        broadcastSessionList();
+        break;
+      }
+
+      case "close_readonly_session": {
+        jsonlWatcher.stopWatching(msg.sessionId);
+        readonlySessionManager.remove(msg.sessionId);
+        broadcastSessionList();
+        break;
+      }
+
+      case "send_to_agent": {
+        // フックベース送信: 対象セッションの inbox に書くだけ（agent 側フックが取り込む）
+        const items = (Array.isArray(msg.comments) ? msg.comments : [])
+          .map((c) => (typeof c === "string" ? c.trim() : ""))
+          .filter(Boolean);
+        if (!msg.claudeSessionId || items.length === 0) {
+          ws.send(JSON.stringify({ type: "send_to_agent_result", ok: false }));
+          break;
+        }
+        const text =
+          items.length === 1
+            ? items[0]
+            : items.map((t, i) => `[コメント${i + 1}] ${t}`).join("\n");
+        try {
+          storage.appendInbox(msg.claudeSessionId, { text });
+          ws.send(JSON.stringify({ type: "send_to_agent_result", ok: true }));
+        } catch (e) {
+          console.error("send_to_agent failed:", e.message);
+          ws.send(
+            JSON.stringify({
+              type: "send_to_agent_result",
+              ok: false,
+              error: e.message,
+            })
+          );
+        }
         break;
       }
 

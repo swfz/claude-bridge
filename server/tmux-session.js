@@ -17,16 +17,16 @@ function isClaudeCommand(command) {
 export async function listClaudeTmuxPanes() {
   try {
     const { stdout } = await execAsync(
-      'tmux list-panes -a -F "#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}"'
+      'tmux list-panes -a -F "#{pane_id}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{session_name}"'
     );
     return stdout
       .trim()
       .split("\n")
       .filter((line) => line)
       .map((line) => {
-        const [paneId, panePid, command, cwd, target, windowName] =
+        const [paneId, panePid, command, cwd, target, windowName, sessionName] =
           line.split("\t");
-        return { paneId, panePid, command, cwd, target, windowName };
+        return { paneId, panePid, command, cwd, target, windowName, sessionName };
       })
       .filter((p) => isClaudeCommand(p.command));
   } catch {
@@ -39,6 +39,14 @@ function validatePaneId(paneId) {
   // tmux pane ID は %<数字> の形式
   if (!/^%\d+$/.test(paneId)) {
     throw new Error(`Invalid paneId format: ${paneId}`);
+  }
+}
+
+// tmux セッション名のバリデーション（シェルに渡すためインジェクション対策）
+// tmux のセッション名は英数・ハイフン・アンダースコア・ドット・コロンのみ許可
+export function validateSessionName(name) {
+  if (typeof name !== "string" || !/^[\w.:-]+$/.test(name)) {
+    throw new Error(`Invalid tmux session name: ${name}`);
   }
 }
 

@@ -9,7 +9,8 @@
     "build": "npm --prefix client run build",
     "start": "node server/index.js",
     "test": "node --experimental-test-module-mocks --test 'test/**/*.test.js'",
-    "install:all": "npm install && npm --prefix client install"
+    "install:all": "npm install && npm --prefix client install",
+    "setup:hooks": "node scripts/setup-hooks.js"
   },
   "dependencies": {
     "express": "^4.21.0",
