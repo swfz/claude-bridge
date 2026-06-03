@@ -159,3 +159,72 @@ export class SessionManager {
     this.storage.saveSessions(active);
   }
 }
+
+// claude プロセスを起動せず、既存セッションの JSONL を読むだけの閲覧専用セッション。
+// agent view 等で動いているセッションの会話にコメント/レビューを付けるための入れ物。
+// Claude へは送信できない（write は no-op）。
+export class ReadonlySession {
+  constructor({ id, name, cwd, claudeSessionId, projectDir }) {
+    this.id = id;
+    this.name = name;
+    this.cwd = cwd;
+    this.claudeSessionId = claudeSessionId;
+    this.projectDir = projectDir;
+    this.createdAt = new Date().toISOString();
+    this.type = "readonly";
+  }
+
+  // 閲覧専用: Claude へは送信しない
+  write() {}
+  resize() {}
+  kill() {}
+  getOutputBuffer() {
+    return "";
+  }
+  onOutput() {}
+  onExit() {}
+
+  toJSON() {
+    return {
+      id: this.id,
+      name: this.name,
+      cwd: this.cwd,
+      claudeSessionId: this.claudeSessionId,
+      projectDir: this.projectDir,
+      createdAt: this.createdAt,
+      alive: true,
+      type: "readonly",
+    };
+  }
+}
+
+export class ReadonlySessionManager {
+  constructor() {
+    this.sessions = new Map();
+  }
+
+  create({ name, cwd, claudeSessionId, projectDir }) {
+    const id = randomUUID().slice(0, 8);
+    const session = new ReadonlySession({
+      id,
+      name,
+      cwd,
+      claudeSessionId,
+      projectDir,
+    });
+    this.sessions.set(id, session);
+    return session;
+  }
+
+  getSession(id) {
+    return this.sessions.get(id) || null;
+  }
+
+  remove(id) {
+    this.sessions.delete(id);
+  }
+
+  listSessions() {
+    return Array.from(this.sessions.values()).map((s) => s.toJSON());
+  }
+}

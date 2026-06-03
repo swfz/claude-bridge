@@ -6,6 +6,7 @@ export default function CommentPopover({
   onAdd,
   onSendToClaude,
   onClose,
+  readonly,
 }) {
   const [text, setText] = useState("");
   const [expanded, setExpanded] = useState(true);
@@ -39,13 +40,15 @@ export default function CommentPopover({
                   <span>
                     {new Date(c.timestamp).toLocaleTimeString("ja-JP")}
                   </span>
-                  <button
-                    className="comment-send-btn"
-                    onClick={() => onSendToClaude(c.text)}
-                    title="このコメントを Claude に送る"
-                  >
-                    Claude に送信
-                  </button>
+                  {!readonly && (
+                    <button
+                      className="comment-send-btn"
+                      onClick={() => onSendToClaude(c.text)}
+                      title="このコメントを Claude に送る"
+                    >
+                      Claude に送信
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

@@ -6,6 +6,7 @@ export default function NewSessionDialog({
   onCreate,
   onResume,
   onAttachTmux,
+  onOpenReadonly,
   onRequestClaudeSessions,
   onRequestTmuxPanes,
   claudeSessions,
@@ -212,6 +213,23 @@ export default function NewSessionDialog({
                       {s.firstUserMessage || "(メッセージなし)"}
                     </div>
                     <div className="session-item-id">{s.sessionId}</div>
+                    <button
+                      className="session-readonly-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenReadonly({
+                          claudeSessionId: s.sessionId,
+                          name: s.firstUserMessage
+                            ? s.firstUserMessage.slice(0, 40)
+                            : s.sessionId.slice(0, 8),
+                          cwd: s.cwd,
+                          projectDir: s.projectDir,
+                        });
+                      }}
+                      title="claude を起動せず、JSONL を読んで閲覧・コメントする（行クリックは再開＝プロセス起動）"
+                    >
+                      閲覧（コメント）
+                    </button>
                   </div>
                 ))
               )}

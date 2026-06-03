@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
-const DATA_DIR = join(homedir(), ".claude-bridge");
+const DATA_DIR = process.env.CLAUDE_BRIDGE_DIR || join(homedir(), ".claude-bridge");
 const SESSIONS_FILE = join(DATA_DIR, "sessions.json");
+const INBOX_DIR = join(DATA_DIR, "inbox");
 
 export class Storage {
   constructor() {
@@ -48,5 +49,22 @@ export class Storage {
     } catch {
       return [];
     }
+  }
+
+  // フックベース送信: 対象セッションの inbox に1行追記する（agent 側のフックが取り込む）。
+  // sessionId はファイルパスに使うためトラバーサル対策で形式を検証する。
+  appendInbox(sessionId, message) {
+    if (!/^[\w-]+$/.test(sessionId || "")) {
+      throw new Error(`invalid sessionId for inbox: ${sessionId}`);
+    }
+    mkdirSync(INBOX_DIR, { recursive: true });
+    const file = join(INBOX_DIR, `${sessionId}.jsonl`);
+    const line =
+      JSON.stringify({
+        id: message.id || `msg-${Date.now()}`,
+        text: message.text || "",
+        ts: message.ts || new Date().toISOString(),
+      }) + "\n";
+    appendFileSync(file, line, { mode: 0o600 });
   }
 }

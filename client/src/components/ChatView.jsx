@@ -259,6 +259,7 @@ function ChatMessage({
   onOpenPreview,
   onPreviewMarkdown,
   onOpenFileReview,
+  readonly,
 }) {
   const [showComments, setShowComments] = useState(false);
   const [showReview, setShowReview] = useState(false);
@@ -316,20 +317,24 @@ function ChatMessage({
             >
               Preview
             </button>
-            <button
-              className="btn-header-action"
-              onClick={() => setShowReview(!showReview)}
-              title="レビューコメントを書く"
-            >
-              Review
-            </button>
-            <button
-              className="btn-header-action"
-              onClick={() => onStartThread(message.id, "")}
-              title="スレッドを開始"
-            >
-              Thread
-            </button>
+            {!readonly && (
+              <>
+                <button
+                  className="btn-header-action"
+                  onClick={() => setShowReview(!showReview)}
+                  title="レビューコメントを書く"
+                >
+                  Review
+                </button>
+                <button
+                  className="btn-header-action"
+                  onClick={() => onStartThread(message.id, "")}
+                  title="スレッドを開始"
+                >
+                  Thread
+                </button>
+              </>
+            )}
             <button
               className="btn-header-action"
               onClick={() => setShowComments(!showComments)}
@@ -352,7 +357,7 @@ function ChatMessage({
       {message.content && (
         <div
           className={`chat-message-body ${shouldCollapse ? "collapsed" : ""}`}
-          onMouseUp={!isHuman ? handleTextSelect : undefined}
+          onMouseUp={!isHuman && !readonly ? handleTextSelect : undefined}
         >
           <MarkdownContent content={message.content} sessionCwd={sessionCwd} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
         </div>
@@ -397,6 +402,7 @@ function ChatMessage({
           onAdd={(text) => onAddComment(message.id, text)}
           onSendToClaude={onSendCommentToClaude}
           onClose={() => setShowComments(false)}
+          readonly={readonly}
         />
       )}
     </div>
@@ -415,6 +421,7 @@ export default function ChatView({
   onOpenPreview,
   onPreviewMarkdown,
   onOpenFileReview,
+  readonly,
 }) {
   const scrollRef = useRef(null);
 
@@ -450,6 +457,7 @@ export default function ChatView({
                 onOpenPreview={onOpenPreview}
                 onPreviewMarkdown={onPreviewMarkdown}
                 onOpenFileReview={onOpenFileReview}
+                readonly={readonly}
               />
               {showDivider && (
                 <div className="history-divider">--- 過去の会話 / ここから新規 ---</div>

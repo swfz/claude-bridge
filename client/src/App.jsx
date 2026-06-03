@@ -8,6 +8,7 @@ import InputBar from "./components/InputBar.jsx";
 import NewSessionDialog from "./components/NewSessionDialog.jsx";
 import PreviewDrawer from "./components/PreviewDrawer.jsx";
 import FileExplorer from "./components/FileExplorer.jsx";
+import AgentSidePanel from "./components/AgentSidePanel.jsx";
 import "./App.css";
 
 export default function App() {
@@ -31,6 +32,10 @@ export default function App() {
   const [previewData, setPreviewData] = useState(null);
   const [drawerOpenedAt, setDrawerOpenedAt] = useState(null);
   const pendingTmuxAttach = useRef(false);
+  // agent view 連携パネル（一覧）。選択するとメインタブに readonly で開く
+  const [agents, setAgents] = useState([]);
+  const [showAgentPanel, setShowAgentPanel] = useState(false);
+  const [syncNotice, setSyncNotice] = useState(null);
 
   useEffect(() => {
     return on("session_list", (msg) => {
@@ -141,6 +146,12 @@ export default function App() {
   useEffect(() => {
     return on("tmux_panes", (msg) => {
       setTmuxPanes(msg.panes);
+    });
+  }, [on]);
+
+  useEffect(() => {
+    return on("agents", (msg) => {
+      setAgents(msg.agents || []);
     });
   }, [on]);
 
@@ -313,6 +324,71 @@ export default function App() {
     [send]
   );
 
+  // claude を起動せず、既存セッションの JSONL を読むだけの閲覧（コメント可）ビューを開く
+  const handleOpenReadonly = useCallback(
+    ({ claudeSessionId, name, cwd, projectDir }) => {
+      pendingTmuxAttach.current = true;
+      send({ type: "open_readonly_session", claudeSessionId, name, cwd, projectDir });
+      setShowNewSession(false);
+      setClaudeSessions(null);
+    },
+    [send]
+  );
+
+  const handleCloseReadonly = useCallback(
+    (sessionId) => {
+      send({ type: "close_readonly_session", sessionId });
+      messageCache.current.delete(sessionId);
+      if (activeSessionId === sessionId) {
+        const remaining = sessions.filter((s) => s.id !== sessionId);
+        setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
+      }
+    },
+    [send, sessions, activeSessionId]
+  );
+
+  // --- agent view 連携パネル ---
+  const handleRefreshAgents = useCallback(() => {
+    send({ type: "list_agents" });
+  }, [send]);
+
+  // 一覧で選んだ agent を、メインタブに readonly セッションとして開く
+  // （閲覧で開くのと同じ経路。会話はメインの大画面で表示し、送信欄から inbox へ送る）
+  const handleOpenAgent = useCallback(
+    (agent) => {
+      if (!agent?.sessionId) return;
+      handleOpenReadonly({
+        claudeSessionId: agent.sessionId,
+        name: agent.name || agent.sessionId.slice(0, 8),
+        cwd: agent.cwd,
+      });
+    },
+    [handleOpenReadonly]
+  );
+
+  // readonly セッション（メインタブ）から、その claudeSessionId へフックベース送信
+  const handleSendToReadonly = useCallback(
+    (text) => {
+      const t = (text || "").trim();
+      const s = sessionsRef.current.find((x) => x.id === activeSessionId);
+      const sid = s?.claudeSessionId;
+      if (!t || !sid) return;
+      send({ type: "send_to_agent", claudeSessionId: sid, comments: [t] });
+    },
+    [send, activeSessionId]
+  );
+
+  // コメント送信（inbox 書き込み）の結果
+  useEffect(() => {
+    return on("send_to_agent_result", (msg) => {
+      setSyncNotice(
+        msg.ok
+          ? "コメントを送信しました（対象セッションのフックが取り込みます）。"
+          : "送信に失敗しました。"
+      );
+    });
+  }, [on]);
+
   const handleRequestTmuxPanes = useCallback(() => {
     send({ type: "list_tmux_panes" });
   }, [send]);
@@ -466,12 +542,17 @@ export default function App() {
 
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
 
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  // 閲覧専用セッションは JSONL を読むだけ。chat 固定でコメントは付けられるが送信はしない
+  const isReadonly = activeSession?.type === "readonly";
+  const effectiveViewMode = isReadonly ? "chat" : viewMode;
+
   return (
     <div className="app">
       <header className="app-header">
         <h1 className="app-title">Claude Bridge</h1>
         <div className="header-controls">
-          {activeSessionId && (
+          {activeSessionId && !isReadonly && (
             <>
               <button
                 className={`toggle-btn thread-toggle ${showFileExplorer ? "active" : ""}`}
@@ -509,6 +590,17 @@ export default function App() {
               )}
             </>
           )}
+          <button
+            className={`toggle-btn thread-toggle ${showAgentPanel ? "active" : ""}`}
+            onClick={() => {
+              const next = !showAgentPanel;
+              setShowAgentPanel(next);
+              if (next) handleRefreshAgents();
+            }}
+            title="agent view のセッション一覧とコメント"
+          >
+            Agents
+          </button>
           <div className="connection-status">
             <span
               className={`status-dot ${connected ? "connected" : "disconnected"}`}
@@ -526,6 +618,7 @@ export default function App() {
         onRestart={handleRestartSession}
         onRemovePast={handleRemovePastSession}
         onDetachTmux={handleDetachTmux}
+        onCloseReadonly={handleCloseReadonly}
         onNew={() => setShowNewSession(true)}
       />
 
@@ -541,7 +634,7 @@ export default function App() {
         )}
         <main className="app-main">
           {activeSessionId ? (
-            viewMode === "raw" ? (
+            effectiveViewMode === "raw" ? (
               <TerminalView
                 sessionId={activeSessionId}
                 on={on}
@@ -561,6 +654,7 @@ export default function App() {
                 onOpenPreview={(path) => { setPreviewData({ filePath: path }); setDrawerOpenedAt(messages.length); }}
                 onPreviewMarkdown={(markdown, title) => { setPreviewData({ markdown, title }); setDrawerOpenedAt(messages.length); }}
                 onOpenFileReview={(path) => { setPreviewData({ filePath: path, reviewMode: true }); setDrawerOpenedAt(messages.length); }}
+                readonly={isReadonly}
               />
             )
           ) : (
@@ -576,7 +670,7 @@ export default function App() {
           )}
         </main>
 
-        {showThreadPanel && viewMode === "chat" && (
+        {showThreadPanel && effectiveViewMode === "chat" && (
           <ThreadPanel
             threads={threads}
             onReplyBatch={handleThreadReplyBatch}
@@ -584,9 +678,26 @@ export default function App() {
             onDelete={handleDeleteThread}
           />
         )}
+        {showAgentPanel && (
+          <AgentSidePanel
+            agents={agents}
+            activeClaudeSessionId={activeSession?.claudeSessionId}
+            syncNotice={syncNotice}
+            onSelectAgent={handleOpenAgent}
+            onRefreshAgents={handleRefreshAgents}
+          />
+        )}
       </div>
 
-      <InputBar onSubmit={handleInput} disabled={!activeSessionId} />
+      {activeSessionId && isReadonly ? (
+        <InputBar
+          onSubmit={handleSendToReadonly}
+          disabled={!activeSession?.claudeSessionId}
+          placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
+        />
+      ) : (
+        <InputBar onSubmit={handleInput} disabled={!activeSessionId} />
+      )}
 
       {showNewSession && (
         <NewSessionDialog
@@ -598,6 +709,7 @@ export default function App() {
           onCreate={handleCreateSession}
           onResume={handleResumeSession}
           onAttachTmux={handleAttachTmux}
+          onOpenReadonly={handleOpenReadonly}
           onRequestClaudeSessions={handleRequestClaudeSessions}
           onRequestTmuxPanes={handleRequestTmuxPanes}
           claudeSessions={claudeSessions}

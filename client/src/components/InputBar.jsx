@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import "./InputBar.css";
 
-export default function InputBar({ onSubmit, disabled }) {
+export default function InputBar({ onSubmit, disabled, placeholder }) {
   const [text, setText] = useState("");
   const textareaRef = useRef(null);
 
@@ -36,7 +36,12 @@ export default function InputBar({ onSubmit, disabled }) {
         value={text}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
-        placeholder={disabled ? "セッションを作成してください" : "メッセージを入力... (Enter で送信、Shift+Enter で改行)"}
+        placeholder={
+          placeholder ||
+          (disabled
+            ? "セッションを作成してください"
+            : "メッセージを入力... (Enter で送信、Shift+Enter で改行)")
+        }
         disabled={disabled}
         rows={1}
       />
