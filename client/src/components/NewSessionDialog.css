@@ -221,3 +221,22 @@
   font-family: monospace;
   margin-top: 2px;
 }
+
+/* セッション行の閲覧（コメント）起動ボタン（右寄せ） */
+.session-readonly-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.session-readonly-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}

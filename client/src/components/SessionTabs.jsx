@@ -8,6 +8,7 @@ export default function SessionTabs({
   onRestart,
   onRemovePast,
   onDetachTmux,
+  onCloseReadonly,
   onNew,
 }) {
   return (
@@ -21,6 +22,9 @@ export default function SessionTabs({
           >
             {session.type === "tmux" && (
               <span className="tab-badge">tmux</span>
+            )}
+            {session.type === "readonly" && (
+              <span className="tab-badge">閲覧</span>
             )}
             {session.status && (
               <span
@@ -42,11 +46,17 @@ export default function SessionTabs({
                   e.stopPropagation();
                   if (session.type === "tmux") {
                     onDetachTmux(session.id);
+                  } else if (session.type === "readonly") {
+                    onCloseReadonly(session.id);
                   } else {
                     onKill(session.id);
                   }
                 }}
-                title={session.type === "tmux" ? "切断" : "セッションを終了"}
+                title={
+                  session.type === "tmux" || session.type === "readonly"
+                    ? "閉じる"
+                    : "セッションを終了"
+                }
               >
                 x
               </button>
