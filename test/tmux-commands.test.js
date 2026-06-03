@@ -19,9 +19,8 @@ mock.module("child_process", {
 });
 
 // モック後に import
-const { listClaudeTmuxPanes, sendKeysToPane } = await import(
-  "../server/tmux-session.js"
-);
+const { listClaudeTmuxPanes, sendKeysToPane, validateSessionName } =
+  await import("../server/tmux-session.js");
 
 describe("listClaudeTmuxPanes", () => {
   beforeEach(() => {
@@ -32,9 +31,9 @@ describe("listClaudeTmuxPanes", () => {
 
   it("parses tmux output and filters claude panes", async () => {
     execCalls._mockStdout = [
-      "%0\t1330\tclaude\t/home/user/project\t0:1.1\tmain",
-      "%1\t2000\tzsh\t/home/user\t0:1.2\tmain",
-      "%2\t3000\tclaude\t/home/user/other\t0:2.1\twork",
+      "%0\t1330\tclaude\t/home/user/project\t0:1.1\tmain\tsess0",
+      "%1\t2000\tzsh\t/home/user\t0:1.2\tmain\tsess0",
+      "%2\t3000\tclaude\t/home/user/other\t0:2.1\twork\tsess1",
     ].join("\n");
 
     const panes = await listClaudeTmuxPanes();
@@ -47,6 +46,7 @@ describe("listClaudeTmuxPanes", () => {
       cwd: "/home/user/project",
       target: "0:1.1",
       windowName: "main",
+      sessionName: "sess0",
     });
     assert.equal(panes[1].paneId, "%2");
     assert.equal(panes[1].cwd, "/home/user/other");
@@ -118,5 +118,20 @@ describe("sendKeysToPane", () => {
 
     // should not throw
     await sendKeysToPane("%99", "test");
+  });
+});
+
+describe("validateSessionName", () => {
+  it("accepts safe tmux session names", () => {
+    validateSessionName("my-sess_1.2:3");
+    validateSessionName("bridge-ab12cd34");
+  });
+
+  it("rejects injection / whitespace characters", () => {
+    assert.throws(() => validateSessionName("a b"));
+    assert.throws(() => validateSessionName("$(whoami)"));
+    assert.throws(() => validateSessionName("a;ls"));
+    assert.throws(() => validateSessionName(""));
+    assert.throws(() => validateSessionName(undefined));
   });
 });
