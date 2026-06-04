@@ -20,18 +20,29 @@ export default function App() {
   );
   const [showNewSession, setShowNewSession] = useState(false);
   const [viewMode, setViewMode] = useState("chat");
-  const [messages, setMessages] = useState([]);
+  // セッションごとのメッセージを一元管理する唯一の真実（id -> message[]）。
+  // 表示用の messages はここから activeSessionId で派生させる（単一 messages state や
+  // messageCache の二重管理をやめ、active と表示内容のズレ＝混線を構造的に防ぐ）。
+  const [messagesBySession, setMessagesBySession] = useState({});
   const [threads, setThreads] = useState([]);
   const [comments, setComments] = useState([]);
-  const messageCache = useRef(new Map());
   const activeSessionIdRef = useRef(null);
+  // 指定セッションのメッセージだけを更新する（active かどうかは見ない）。
+  // updater は配列、または (prev[]) => next[] の関数。
+  const updateSessionMessages = useCallback((sessionId, updater) => {
+    if (!sessionId) return;
+    setMessagesBySession((prev) => {
+      const cur = prev[sessionId] || [];
+      const next = typeof updater === "function" ? updater(cur) : updater;
+      return { ...prev, [sessionId]: next };
+    });
+  }, []);
   const [showThreadPanel, setShowThreadPanel] = useState(false);
   const [showFileExplorer, setShowFileExplorer] = useState(false);
   const [claudeSessions, setClaudeSessions] = useState(null);
   const [tmuxPanes, setTmuxPanes] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [drawerOpenedAt, setDrawerOpenedAt] = useState(null);
-  const pendingTmuxAttach = useRef(false);
   // agent view 連携パネル（一覧）。選択するとメインタブに readonly で開く
   const [agents, setAgents] = useState([]);
   const [showAgentPanel, setShowAgentPanel] = useState(false);
@@ -42,24 +53,25 @@ export default function App() {
       setSessions(msg.sessions);
       sessionsRef.current = msg.sessions;
       const aliveSessions = msg.sessions.filter((s) => s.alive);
-      if (aliveSessions.length > 0) {
-        if (pendingTmuxAttach.current) {
-          // tmux 接続直後: 最新セッションに切り替え
-          pendingTmuxAttach.current = false;
-          const newest = aliveSessions[aliveSessions.length - 1];
-          setActiveSessionId(newest.id);
-          setMessages([]);
-        } else {
-          // 今のactive（リロード時は localStorage 復元値）がaliveなら維持。
-          // aliveでなければ最新のaliveセッションに切り替え
-          const currentAlive = aliveSessions.find((s) => s.id === activeSessionId);
-          if (!currentAlive) {
-            setActiveSessionId(aliveSessions[aliveSessions.length - 1].id);
-          }
-        }
+      if (aliveSessions.length === 0) return;
+      // 「開いたセッションを active にする」のは session_opened が担う（末尾推定はしない）。
+      // ここは active が未設定 or 死んでいるときだけ fallback で最新へ寄せる。
+      const currentAlive = aliveSessions.find(
+        (s) => s.id === activeSessionIdRef.current
+      );
+      if (!currentAlive) {
+        setActiveSessionId(aliveSessions[aliveSessions.length - 1].id);
       }
     });
-  }, [on, activeSessionId]);
+  }, [on]);
+
+  // サーバーが「今開いた/接続したセッション」を通知する。末尾推定をやめ、
+  // これを唯一の active 切り替えトリガーにすることで取り違えを防ぐ。
+  useEffect(() => {
+    return on("session_opened", (msg) => {
+      if (msg.bridgeSessionId) setActiveSessionId(msg.bridgeSessionId);
+    });
+  }, [on]);
 
   useEffect(() => {
     return on("session_exited", (msg) => {
@@ -71,10 +83,10 @@ export default function App() {
     });
   }, [on]);
 
-  // エラー通知
+  // エラー通知（現在アクティブなセッションのメッセージ列に system として追加）
   useEffect(() => {
     return on("error", (msg) => {
-      setMessages((prev) => [
+      updateSessionMessages(activeSessionIdRef.current, (prev) => [
         ...prev,
         {
           id: `error-${Date.now()}`,
@@ -84,10 +96,11 @@ export default function App() {
         },
       ]);
     });
-  }, [on]);
+  }, [on, updateSessionMessages]);
 
-  // JSONL ベースの chat_message を受信
-  // human メッセージは addUserMessage で即座に追加済みの場合があるため重複チェック
+  // JSONL ベースの chat_message を受信。
+  // active かどうかは見ず、必ず bridgeSessionId のメッセージ列に積む（混線防止）。
+  // human は addUserMessage で先行追加されている場合があるため重複チェック。
   useEffect(() => {
     return on("chat_message", (msg) => {
       const session = sessionsRef.current.find((s) => s.id === msg.bridgeSessionId);
@@ -102,24 +115,17 @@ export default function App() {
         timestamp: msg.timestamp || new Date().toISOString(),
       };
 
-      if (msg.bridgeSessionId === activeSessionId) {
-        setMessages((prev) => {
-          if (msg.role === "human") {
-            const dup = prev.some((m) => m.role === "human" && m.content === msg.content);
-            if (dup) return prev;
-          }
-          return [...prev, newMsg];
-        });
-      } else {
-        // バックグラウンドセッションのメッセージはキャッシュに追加
-        const cached = messageCache.current.get(msg.bridgeSessionId) || [];
-        if (msg.role === "human" && cached.some((m) => m.role === "human" && m.content === msg.content)) {
-          return;
+      updateSessionMessages(msg.bridgeSessionId, (prev) => {
+        if (
+          msg.role === "human" &&
+          prev.some((m) => m.role === "human" && m.content === msg.content)
+        ) {
+          return prev;
         }
-        messageCache.current.set(msg.bridgeSessionId, [...cached, newMsg]);
-      }
+        return [...prev, newMsg];
+      });
     });
-  }, [on, activeSessionId]);
+  }, [on, updateSessionMessages]);
 
   useEffect(() => {
     return on("thread_update", (msg) => {
@@ -184,14 +190,11 @@ export default function App() {
         isHistory: boundary ? !m.timestamp || m.timestamp <= boundary : true,
       }));
 
-      // bridgeSessionId があり現在のアクティブと一致しなければ、混線防止にキャッシュへ格納
-      if (bridgeId && bridgeId !== activeSessionIdRef.current) {
-        messageCache.current.set(bridgeId, loaded);
-        return;
-      }
-      setMessages(loaded);
+      // active かどうかに関係なく bridgeSessionId のメッセージ列へ格納する。
+      // 表示は messagesBySession[activeSessionId] の派生なので、active なら自動反映。
+      if (bridgeId) updateSessionMessages(bridgeId, loaded);
     });
-  }, [on]);
+  }, [on, updateSessionMessages]);
 
   // activeSessionIdRef を同期し、リロード後に同じタブへ戻せるよう永続化
   useEffect(() => {
@@ -203,13 +206,6 @@ export default function App() {
     }
   }, [activeSessionId]);
 
-  // メッセージをキャッシュに同期
-  useEffect(() => {
-    if (activeSessionId && messages.length > 0) {
-      messageCache.current.set(activeSessionId, messages);
-    }
-  }, [messages, activeSessionId]);
-
   // セッション切り替え時にスレッドとコメントを取得
   useEffect(() => {
     if (activeSessionId) {
@@ -218,15 +214,12 @@ export default function App() {
     }
   }, [activeSessionId, send]);
 
-  // アクティブセッションの表示が空なら履歴を復元する。
-  // キャッシュにあれば即復元、無ければ JSONL から取得（再読込で messageCache が失われた場合の復旧経路）。
+  // アクティブセッションのメッセージが未取得なら JSONL から復元する
+  // （リロード後など messagesBySession に無い場合の復旧経路）。
   useEffect(() => {
-    if (!activeSessionId || messages.length > 0) return;
-    const cached = messageCache.current.get(activeSessionId);
-    if (cached && cached.length > 0) {
-      setMessages(cached);
-      return;
-    }
+    if (!activeSessionId) return;
+    const cur = messagesBySession[activeSessionId];
+    if (cur && cur.length > 0) return;
     const session = sessions.find((s) => s.id === activeSessionId);
     if (session?.claudeSessionId) {
       send({
@@ -236,8 +229,7 @@ export default function App() {
         projectDir: session.projectDir,
       });
     }
-    // messages を依存に含めるが、length>0 で早期 return するため履歴受信後は再実行されない
-  }, [activeSessionId, sessions, send, messages.length]);
+  }, [activeSessionId, sessions, send, messagesBySession]);
 
   const handleCreateSession = useCallback(
     ({ name, cwd }) => {
@@ -252,7 +244,11 @@ export default function App() {
       send({ type: "kill_session", sessionId });
       // 境界情報は kill されたセッションには無意味なのでクリーンアップ
       localStorage.removeItem(`historyBoundary:${sessionId}`);
-      messageCache.current.delete(sessionId);
+      setMessagesBySession((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
       if (activeSessionId === sessionId) {
         const remaining = sessions.filter((s) => s.id !== sessionId);
         setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
@@ -279,7 +275,11 @@ export default function App() {
     (sessionId) => {
       send({ type: "detach_tmux_pane", sessionId });
       localStorage.removeItem(`historyBoundary:${sessionId}`);
-      messageCache.current.delete(sessionId);
+      setMessagesBySession((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
     },
     [send]
   );
@@ -306,8 +306,6 @@ export default function App() {
 
   const handleAttachTmux = useCallback(
     ({ paneId, name, cwd, target, claudePid, claudeSessionId, status }) => {
-      // pendingTmuxAttach を使って、session_list 更新後に履歴をリクエスト
-      pendingTmuxAttach.current = true;
       send({
         type: "attach_tmux_pane",
         paneId,
@@ -327,7 +325,6 @@ export default function App() {
   // claude を起動せず、既存セッションの JSONL を読むだけの閲覧（コメント可）ビューを開く
   const handleOpenReadonly = useCallback(
     ({ claudeSessionId, name, cwd, projectDir }) => {
-      pendingTmuxAttach.current = true;
       send({ type: "open_readonly_session", claudeSessionId, name, cwd, projectDir });
       setShowNewSession(false);
       setClaudeSessions(null);
@@ -338,7 +335,11 @@ export default function App() {
   const handleCloseReadonly = useCallback(
     (sessionId) => {
       send({ type: "close_readonly_session", sessionId });
-      messageCache.current.delete(sessionId);
+      setMessagesBySession((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
       if (activeSessionId === sessionId) {
         const remaining = sessions.filter((s) => s.id !== sessionId);
         setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
@@ -393,17 +394,20 @@ export default function App() {
     send({ type: "list_tmux_panes" });
   }, [send]);
 
-  const addUserMessage = useCallback((text) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        role: "human",
-        content: text,
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-  }, []);
+  const addUserMessage = useCallback(
+    (text) => {
+      updateSessionMessages(activeSessionIdRef.current, (prev) => [
+        ...prev,
+        {
+          id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          role: "human",
+          content: text,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    },
+    [updateSessionMessages]
+  );
 
   const handleInput = useCallback(
     (text) => {
@@ -424,23 +428,13 @@ export default function App() {
     [send, activeSessionId]
   );
 
-  const handleSwitchSession = useCallback(
-    (sessionId) => {
-      // 切り替え前に現セッションのメッセージをキャッシュに保存
-      // useEffect のキャッシュ同期とのレースコンディションを回避
-      setMessages((currentMessages) => {
-        const currentId = activeSessionIdRef.current;
-        if (currentId && currentMessages.length > 0) {
-          messageCache.current.set(currentId, currentMessages);
-        }
-        return messageCache.current.get(sessionId) || [];
-      });
-      setActiveSessionId(sessionId);
-      setThreads([]);
-      setComments([]);
-    },
-    []
-  );
+  const handleSwitchSession = useCallback((sessionId) => {
+    // 表示は messagesBySession[activeSessionId] の派生なので active を変えるだけでよい
+    // （cache 保存・復元やレース対策は不要になった）
+    setActiveSessionId(sessionId);
+    setThreads([]);
+    setComments([]);
+  }, []);
 
   const handleStartThread = useCallback(
     (messageId, selectedText) => {
@@ -543,6 +537,8 @@ export default function App() {
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
+  // 表示メッセージは唯一の真実 messagesBySession から activeSessionId で派生させる
+  const messages = (activeSessionId && messagesBySession[activeSessionId]) || [];
   // 閲覧専用セッションは JSONL を読むだけ。chat 固定でコメントは付けられるが送信はしない
   const isReadonly = activeSession?.type === "readonly";
   const effectiveViewMode = isReadonly ? "chat" : viewMode;
