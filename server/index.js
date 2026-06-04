@@ -278,6 +278,9 @@ wss.on("connection", (ws) => {
           onMessage: (chatMsg) => broadcast(chatMsg),
         });
 
+        ws.send(
+          JSON.stringify({ type: "session_opened", bridgeSessionId: session.id })
+        );
         broadcastSessionList();
         break;
       }
@@ -528,6 +531,9 @@ wss.on("connection", (ws) => {
           onMessage: (chatMsg) => broadcast(chatMsg),
         });
 
+        ws.send(
+          JSON.stringify({ type: "session_opened", bridgeSessionId: session.id })
+        );
         broadcastSessionList();
         break;
       }
@@ -607,6 +613,9 @@ wss.on("connection", (ws) => {
           onMessage: (chatMsg) => broadcast(chatMsg),
         });
 
+        ws.send(
+          JSON.stringify({ type: "session_opened", bridgeSessionId: session.id })
+        );
         broadcastSessionList();
         break;
       }
@@ -653,6 +662,9 @@ wss.on("connection", (ws) => {
           onMessage: (chatMsg) => broadcast(chatMsg),
         });
 
+        ws.send(
+          JSON.stringify({ type: "session_opened", bridgeSessionId: session.id })
+        );
         broadcastSessionList();
         break;
       }

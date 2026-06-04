@@ -188,50 +188,50 @@ export default function NewSessionDialog({
                     : "セッションが見つかりません"}
                 </p>
               ) : (
-                filteredSessions.map((s) => (
-                  <div
-                    key={s.sessionId}
-                    className="session-list-item"
-                    onClick={() =>
-                      onResume({
-                        claudeSessionId: s.sessionId,
-                        name: s.firstUserMessage
-                          ? s.firstUserMessage.slice(0, 40)
-                          : s.sessionId.slice(0, 8),
-                        cwd: s.cwd,
-                        projectDir: s.projectDir,
-                      })
-                    }
-                  >
-                    <div className="session-item-main">
-                      <span className="session-item-cwd">{s.cwd}</span>
-                      <span className="session-item-time">
-                        {new Date(s.updatedAt).toLocaleString("ja-JP")}
-                      </span>
-                    </div>
-                    <div className="session-item-message">
-                      {s.firstUserMessage || "(メッセージなし)"}
-                    </div>
-                    <div className="session-item-id">{s.sessionId}</div>
-                    <button
-                      className="session-readonly-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenReadonly({
-                          claudeSessionId: s.sessionId,
-                          name: s.firstUserMessage
-                            ? s.firstUserMessage.slice(0, 40)
-                            : s.sessionId.slice(0, 8),
-                          cwd: s.cwd,
-                          projectDir: s.projectDir,
-                        });
-                      }}
-                      title="claude を起動せず、JSONL を読んで閲覧・コメントする（行クリックは再開＝プロセス起動）"
+                filteredSessions.map((s) => {
+                  const name = s.firstUserMessage
+                    ? s.firstUserMessage.slice(0, 40)
+                    : s.sessionId.slice(0, 8);
+                  const payload = {
+                    claudeSessionId: s.sessionId,
+                    name,
+                    cwd: s.cwd,
+                    projectDir: s.projectDir,
+                  };
+                  return (
+                    <div
+                      key={s.sessionId}
+                      className="session-list-item session-list-item-static"
                     >
-                      閲覧（コメント）
-                    </button>
-                  </div>
-                ))
+                      <div className="session-item-main">
+                        <span className="session-item-cwd">{s.cwd}</span>
+                        <span className="session-item-time">
+                          {new Date(s.updatedAt).toLocaleString("ja-JP")}
+                        </span>
+                      </div>
+                      <div className="session-item-message">
+                        {s.firstUserMessage || "(メッセージなし)"}
+                      </div>
+                      <div className="session-item-id">{s.sessionId}</div>
+                      <div className="session-item-actions">
+                        <button
+                          className="session-resume-btn"
+                          onClick={() => onResume(payload)}
+                          data-tooltip="claude を起動して再開。直接やりとりできる（プロセス起動）"
+                        >
+                          再開
+                        </button>
+                        <button
+                          className="session-readonly-btn"
+                          onClick={() => onOpenReadonly(payload)}
+                          data-tooltip="起動せず閲覧。コメント＆送信は inbox 経由（相手が生きていれば届く）"
+                        >
+                          閲覧（コメント）
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
             <div className="dialog-actions">

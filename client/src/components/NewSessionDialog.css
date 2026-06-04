@@ -120,6 +120,11 @@
   background: rgba(233, 69, 96, 0.05);
 }
 
+/* resume 一覧の行はクリック不可（操作は行内のボタンで明示）。カーソルを通常に戻す */
+.session-list-item-static {
+  cursor: default;
+}
+
 .session-item-main {
   display: flex;
   justify-content: space-between;
@@ -222,9 +227,33 @@
   margin-top: 2px;
 }
 
-/* セッション行の閲覧（コメント）起動ボタン（右寄せ） */
+/* セッション行のアクション（再開 / 閲覧）を右寄せで横並び */
+.session-item-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  justify-content: flex-end;
+}
+
+/* 再開（claude プロセス起動）— 主アクションとして塗り */
+.session-resume-btn {
+  flex-shrink: 0;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: #fff;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.session-resume-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* 閲覧（コメント）起動ボタン — 副アクションとして枠線のみ */
 .session-readonly-btn {
-  margin-left: auto;
   flex-shrink: 0;
   background: var(--bg-secondary);
   border: 1px solid var(--accent);
@@ -239,4 +268,28 @@
 .session-readonly-btn:hover {
   background: var(--accent);
   color: #fff;
+}
+
+/* ボタン hover で動作説明を表示（data-tooltip をボタン上部に） */
+.session-resume-btn,
+.session-readonly-btn {
+  position: relative;
+}
+
+.session-resume-btn[data-tooltip]:hover::after,
+.session-readonly-btn[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  white-space: nowrap;
+  background: var(--bg-primary);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 11px;
+  color: var(--text-primary);
+  z-index: 20;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
