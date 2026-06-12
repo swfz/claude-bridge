@@ -201,6 +201,8 @@ export class JsonlWatcher {
               bridgeSessionId: state.bridgeSessionId,
               role: "human",
               content: text,
+              // JSONL の uuid を安定アンカー（コメント/レビューの位置）として伝播する
+              uuid: record.uuid,
               timestamp: record.timestamp || "",
             });
           }
@@ -210,6 +212,7 @@ export class JsonlWatcher {
             bridgeSessionId: state.bridgeSessionId,
             role: "human",
             content: record.content,
+            uuid: record.uuid,
             timestamp: record.timestamp || "",
           });
         } else if (record.type === "assistant") {
@@ -222,6 +225,7 @@ export class JsonlWatcher {
               role: "assistant",
               content: text,
               toolUses: toolUses.length > 0 ? toolUses : undefined,
+              uuid: record.uuid,
               timestamp: record.timestamp || "",
             });
           }

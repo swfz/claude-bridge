@@ -37,6 +37,8 @@ const MIME_MAP = {
   ".md": "text/markdown",
   ".txt": "text/plain",
   ".csv": "text/csv",
+  ".sql": "text/plain; charset=utf-8",
+  ".sqlx": "text/plain; charset=utf-8",
 };
 
 // パスのサンドボックスチェック（home/tmp 配下のみ許可）
@@ -148,6 +150,62 @@ app.get("/ls", (req, res) => {
   res.json({ path: safe.canonical, entries });
 });
 
+// ファイラ用の再帰ファイル名検索
+// /search?path=<dir>&q=<term>
+// cwd 配下を walk し、ファイル名に q を含むものを返す。隠し/node_modules は除外、
+// シンボリックリンクは辿らない。暴走防止に件数・訪問数の上限を設ける。
+app.get("/search", (req, res) => {
+  const safe = validateSafePath(req.query.path);
+  if (safe.error) {
+    return res.status(safe.status).send(safe.error);
+  }
+  const q = String(req.query.q || "").trim().toLowerCase();
+  if (!q) {
+    return res.json({ matches: [], truncated: false });
+  }
+
+  try {
+    const st = lstatSync(safe.canonical);
+    if (st.isSymbolicLink() || !st.isDirectory()) {
+      return res.status(400).send("Not a directory");
+    }
+  } catch {
+    return res.status(404).send("Directory not found");
+  }
+
+  const MAX_MATCHES = 300;
+  const MAX_VISIT = 20000;
+  const matches = [];
+  let visited = 0;
+  const stack = [safe.canonical];
+
+  while (stack.length > 0 && matches.length < MAX_MATCHES && visited < MAX_VISIT) {
+    const dir = stack.pop();
+    let dirents;
+    try {
+      dirents = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of dirents) {
+      if (matches.length >= MAX_MATCHES || visited >= MAX_VISIT) break;
+      if (e.name.startsWith(".") || EXCLUDED_DIRS.has(e.name)) continue;
+      if (e.isSymbolicLink()) continue; // リンクは辿らない
+      visited++;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) {
+        stack.push(full);
+      } else if (e.isFile() && e.name.toLowerCase().includes(q)) {
+        matches.push({ name: e.name, path: full });
+      }
+    }
+  }
+
+  matches.sort((a, b) => a.name.localeCompare(b.name));
+  res.setHeader("Cache-Control", "no-cache");
+  res.json({ matches, truncated: matches.length >= MAX_MATCHES });
+});
+
 // クライアントのビルド成果物を配信
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const clientDist = join(__dirname, "..", "client", "dist");
@@ -201,6 +259,14 @@ function allSessions() {
 
 function broadcastSessionList() {
   broadcast({ type: "session_list", sessions: allSessions() });
+}
+
+// コメント/レビューの保存キーを解決する。claudeSessionId を優先し、無ければ
+// ブリッジ sessionId にフォールバック。ファイル名に使うため形式を検証して不正なら null。
+// クライアントは sessionKey（旧 commentKey）で渡す。
+function sessionKeyOf(msg) {
+  const key = msg.sessionKey || msg.commentKey || msg.sessionId || "";
+  return /^[\w-]+$/.test(key) ? key : null;
 }
 
 // ping/pong で接続切れを検知
@@ -432,14 +498,53 @@ wss.on("connection", (ws) => {
       }
 
       case "save_comment": {
-        const comments = storage.loadComments(msg.sessionId);
+        // コメントは「送信しない・後で参照するだけ」で、セッションに対して残す。
+        // 保存キーは claudeSessionId を優先し（new/resume/tmux/readonly いずれの
+        // 見え方でも安定する ID）、再オープンをまたいで参照できるようにする。
+        // ファイル名に使うためトラバーサル対策で形式を検証する。
+        const key = sessionKeyOf(msg);
+        if (!key) break;
+        const text = typeof msg.text === "string" ? msg.text.trim() : "";
+        if (!text) break;
+        const comments = storage.loadComments(key);
         comments.push({
           id: `comment-${Date.now()}`,
-          messageId: msg.messageId,
-          text: msg.text,
+          text,
+          // どの箇所に対するコメントか（メッセージ/ファイル＋引用）。無ければセッション全体メモ。
+          anchor: msg.anchor && typeof msg.anchor === "object" ? msg.anchor : null,
           timestamp: new Date().toISOString(),
         });
-        storage.saveComments(msg.sessionId, comments);
+        storage.saveComments(key, comments);
+        ws.send(
+          JSON.stringify({
+            type: "comments_update",
+            // active 照合はブリッジ ID で行うため echo は従来どおり sessionId
+            sessionId: msg.sessionId,
+            comments,
+          })
+        );
+        break;
+      }
+
+      case "get_comments": {
+        const key = sessionKeyOf(msg);
+        ws.send(
+          JSON.stringify({
+            type: "comments_update",
+            sessionId: msg.sessionId,
+            comments: key ? storage.loadComments(key) : [],
+          })
+        );
+        break;
+      }
+
+      case "delete_comment": {
+        const key = sessionKeyOf(msg);
+        if (!key) break;
+        const comments = storage
+          .loadComments(key)
+          .filter((c) => c.id !== msg.commentId);
+        storage.saveComments(key, comments);
         ws.send(
           JSON.stringify({
             type: "comments_update",
@@ -450,22 +555,95 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      case "get_comments": {
+      // --- レビュー（セッション横断の pending review → Submit で一括送信）---
+      case "get_review": {
+        const key = sessionKeyOf(msg);
         ws.send(
           JSON.stringify({
-            type: "comments_update",
+            type: "review_update",
             sessionId: msg.sessionId,
-            comments: storage.loadComments(msg.sessionId),
+            items: key ? storage.loadReviewDraft(key).items : [],
           })
         );
         break;
       }
 
-      case "send_comment_to_claude": {
-        const s = findSession(msg.sessionId);
-        if (s) {
-          s.write(msg.text + "\r");
+      case "save_review": {
+        // 送信前の下書きを保存（追加/編集/削除のたびに items 全体で上書き）。
+        const key = sessionKeyOf(msg);
+        if (!key) break;
+        const items = (Array.isArray(msg.items) ? msg.items : [])
+          .map((it) => ({
+            id: it?.id || `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            text: typeof it?.text === "string" ? it.text : "",
+            // レビュー項目が指す対象（引用＋位置）。無ければ位置なしの指摘。
+            anchor: it?.anchor && typeof it.anchor === "object" ? it.anchor : null,
+          }));
+        storage.saveReviewDraft(key, { items, updatedAt: new Date().toISOString() });
+        ws.send(
+          JSON.stringify({ type: "review_update", sessionId: msg.sessionId, items })
+        );
+        break;
+      }
+
+      case "submit_review": {
+        // pending review を一括送信。送信先はサーバーが対象セッション種別で出し分ける:
+        // readonly → inbox（agent 側フックが取り込む） / それ以外（PTY あり）→ session.write。
+        const key = sessionKeyOf(msg);
+        if (!key) {
+          ws.send(JSON.stringify({ type: "submit_review_result", ok: false }));
+          break;
         }
+        // 各項目を「対象（引用）について: 指摘本文」に整形する。anchor があれば引用を前置。
+        const items = (Array.isArray(msg.items) ? msg.items : [])
+          .map((it) => {
+            const note = typeof it?.text === "string" ? it.text.trim() : "";
+            if (!note) return null;
+            const quote = it?.anchor?.quote ? String(it.anchor.quote).trim() : "";
+            return quote ? `「${quote}」について:\n${note}` : note;
+          })
+          .filter(Boolean);
+        if (items.length === 0) {
+          ws.send(JSON.stringify({ type: "submit_review_result", ok: false }));
+          break;
+        }
+        const body =
+          items.length === 1
+            ? `[レビュー] ${items[0]}`
+            : `[レビュー ${items.length}件]\n${items
+                .map((t, i) => `${i + 1}. ${t}`)
+                .join("\n")}`;
+
+        const session = findSession(msg.sessionId);
+        let ok = false;
+        try {
+          if (session?.type === "readonly") {
+            // readonly は PTY を持たないため inbox 経由（宛先は claudeSessionId）
+            storage.appendInbox(session.claudeSessionId || key, { text: body });
+            ok = true;
+          } else if (session) {
+            session.write(body + "\r");
+            ok = true;
+          }
+        } catch (e) {
+          console.error("submit_review failed:", e.message);
+        }
+
+        if (ok) {
+          // 送信できたら下書きをクリアして同期
+          storage.saveReviewDraft(key, { items: [], updatedAt: new Date().toISOString() });
+          ws.send(
+            JSON.stringify({ type: "review_update", sessionId: msg.sessionId, items: [] })
+          );
+        }
+        ws.send(
+          JSON.stringify({
+            type: "submit_review_result",
+            ok,
+            via: session?.type === "readonly" ? "inbox" : "pty",
+            count: items.length,
+          })
+        );
         break;
       }
 

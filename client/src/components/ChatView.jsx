@@ -3,8 +3,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { remarkAlert } from "remark-github-blockquote-alert";
 import { EXT_TO_LANG, highlightLines } from "../highlight.js";
-import CommentPopover from "./CommentPopover.jsx";
-import ReviewPanel from "./ReviewPanel.jsx";
+import { PREVIEWABLE_EXTS, getExt } from "../utils/previewExts.js";
 import FilePreview from "./FilePreview.jsx";
 import CodeBlock from "./CodeBlock.jsx";
 import "./ChatView.css";
@@ -135,18 +134,9 @@ function isFileUrl(href) {
   return href && (href.startsWith("file://") || href.startsWith("file:///"));
 }
 
-const PREVIEWABLE_EXTS = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
-  ".html", ".htm", ".pdf",
-  ".md", ".txt", ".csv", ".json", ".js", ".css", ".ts", ".jsx", ".tsx", ".py", ".rb", ".go", ".sh",
-]);
-
-// プレビュー可能な拡張子を持つか判定
+// プレビュー可能な拡張子を持つか判定（拡張子定義は previewExts.js に集約）
 function hasPreviewableExt(text) {
-  if (!text) return false;
-  const match = text.match(/\.(\w+)$/);
-  if (!match) return false;
-  return PREVIEWABLE_EXTS.has(`.${match[1].toLowerCase()}`);
+  return PREVIEWABLE_EXTS.includes(getExt(text));
 }
 
 // ファイルパスを解決（相対パスは cwd を使って絶対パスに）
@@ -253,17 +243,41 @@ function ChatMessage({
   comments,
   sessionCwd,
   onStartThread,
-  onAddComment,
-  onSendCommentToClaude,
-  onReviewSubmit,
+  onAddAnchoredReview,
+  onAddAnchoredComment,
+  onDeleteComment,
   onOpenPreview,
   onPreviewMarkdown,
   onOpenFileReview,
   readonly,
 }) {
-  const [showComments, setShowComments] = useState(false);
-  const [showReview, setShowReview] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  // 範囲選択時に出すアクションメニュー（レビューに追加 / コメントに残す / スレッド）
+  const [selMenu, setSelMenu] = useState(null);
+  // 選択後に本文（指摘/コメント）を書くノート入力ポップオーバー { mode, quote, top, left, text }
+  const [noteDraft, setNoteDraft] = useState(null);
+  // 💬 マーカーのインラインコメント一覧の開閉
+  const [showInlineComments, setShowInlineComments] = useState(false);
+
+  // メニュー表示中は外側クリック・スクロールで閉じる
+  useEffect(() => {
+    if (!selMenu) return;
+    const onDocMouseDown = (e) => {
+      if (e.target.closest?.(".selection-menu")) return;
+      setSelMenu(null);
+    };
+    const onScroll = () => setSelMenu(null);
+    // 開いた直後の mouseup で即閉じないよう次サイクルで登録
+    const id = setTimeout(() => {
+      document.addEventListener("mousedown", onDocMouseDown);
+      window.addEventListener("scroll", onScroll, true);
+    }, 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [selMenu]);
 
   const isHuman = message.role === "human";
   const isSystem = message.role === "system";
@@ -279,27 +293,77 @@ function ChatMessage({
     );
   }
   const messageThreads = threads.filter((t) => t.messageId === message.id);
-  const messageComments = comments.filter((c) => c.messageId === message.id);
+  // このメッセージ（uuid）に紐付いたコメント
+  const messageComments = (comments || []).filter(
+    (c) => c.anchor && c.anchor.messageUuid && c.anchor.messageUuid === message.uuid
+  );
 
   const isLong = message.content.length > COLLAPSE_THRESHOLD;
   const shouldCollapse = isLong && !expanded;
 
+  // 範囲選択したら、選択範囲の上にアクションメニューを出す（即 Thread 化はしない）
   const handleTextSelect = () => {
     const selection = window.getSelection();
     const text = selection?.toString().trim();
     if (text && text.length > 0) {
-      onStartThread(message.id, text);
-      selection.removeAllRanges();
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      setSelMenu({
+        text,
+        top: rect.top,
+        left: rect.left + rect.width / 2,
+      });
+    } else {
+      setSelMenu(null);
     }
   };
 
+  // 選択 → スレッド（従来どおり選択範囲で即開始）
+  const runSelAction = (fn) => {
+    if (selMenu) fn(selMenu.text);
+    window.getSelection()?.removeAllRanges();
+    setSelMenu(null);
+  };
+
+  // 選択 → レビュー/コメント: 選択を「対象（引用）」にしてノート入力へ。本文は別に書く。
+  const openNote = (mode) => {
+    if (!selMenu) return;
+    setNoteDraft({ mode, quote: selMenu.text, top: selMenu.top, left: selMenu.left, text: "" });
+    setSelMenu(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const saveNote = () => {
+    if (!noteDraft) return;
+    const text = (noteDraft.text || "").trim();
+    if (!text) return;
+    const anchor = { type: "message", messageUuid: message.uuid || null, quote: noteDraft.quote };
+    if (noteDraft.mode === "review") {
+      onAddAnchoredReview({ anchor, text });
+    } else {
+      onAddAnchoredComment({ anchor, text });
+    }
+    setNoteDraft(null);
+  };
+
   return (
-    <div className={`chat-message ${isHuman ? "human" : "assistant"} ${isHistory ? "history" : ""}`}>
+    <div
+      className={`chat-message ${isHuman ? "human" : "assistant"} ${isHistory ? "history" : ""}`}
+      data-message-uuid={message.uuid || undefined}
+    >
       <div className="chat-message-header">
         <span className="chat-role">{isHuman ? "You" : "Claude"}</span>
         <span className="chat-time">
           {new Date(message.timestamp).toLocaleTimeString("ja-JP")}
         </span>
+        {messageComments.length > 0 && (
+          <button
+            className="comment-marker"
+            onClick={() => setShowInlineComments((v) => !v)}
+            title="このメッセージへのコメント"
+          >
+            💬 {messageComments.length}
+          </button>
+        )}
         {isLong && (
           <button
             className="expand-toggle"
@@ -318,35 +382,41 @@ function ChatMessage({
               Preview
             </button>
             {!readonly && (
-              <>
-                <button
-                  className="btn-header-action"
-                  onClick={() => setShowReview(!showReview)}
-                  title="レビューコメントを書く"
-                >
-                  Review
-                </button>
-                <button
-                  className="btn-header-action"
-                  onClick={() => onStartThread(message.id, "")}
-                  title="スレッドを開始"
-                >
-                  Thread
-                </button>
-              </>
+              <button
+                className="btn-header-action"
+                onClick={() => onStartThread(message.id, "")}
+                title="スレッドを開始"
+              >
+                Thread
+              </button>
             )}
-            <button
-              className="btn-header-action"
-              onClick={() => setShowComments(!showComments)}
-              title="コメント"
-            >
-              {messageComments.length > 0
-                ? `Memo(${messageComments.length})`
-                : "Memo"}
-            </button>
           </div>
         )}
       </div>
+
+      {showInlineComments && messageComments.length > 0 && (
+        <div className="inline-comments">
+          {messageComments.map((c) => (
+            <div key={c.id} className="inline-comment-item">
+              {c.anchor?.quote && (
+                <div className="inline-comment-quote">
+                  “{c.anchor.quote.slice(0, 80)}
+                  {c.anchor.quote.length > 80 ? "…" : ""}”
+                </div>
+              )}
+              <div className="inline-comment-text">{c.text}</div>
+              <div className="inline-comment-meta">
+                <span>{new Date(c.timestamp).toLocaleString("ja-JP")}</span>
+                {onDeleteComment && (
+                  <button onClick={() => onDeleteComment(c.id)} title="削除">
+                    削除
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {message.toolUses && message.toolUses.length > 0 && (
         <div className="tool-uses">
           {message.toolUses.map((tool) => (
@@ -357,9 +427,71 @@ function ChatMessage({
       {message.content && (
         <div
           className={`chat-message-body ${shouldCollapse ? "collapsed" : ""}`}
-          onMouseUp={!isHuman && !readonly ? handleTextSelect : undefined}
+          onMouseUp={!isHuman ? handleTextSelect : undefined}
         >
           <MarkdownContent content={message.content} sessionCwd={sessionCwd} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
+        </div>
+      )}
+
+      {selMenu && !noteDraft && (
+        <div
+          className="selection-menu"
+          style={{ top: selMenu.top, left: selMenu.left }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button onClick={() => openNote("review")}>レビューに追加</button>
+          <button onClick={() => openNote("comment")}>コメントに残す</button>
+          {!readonly && (
+            <button onClick={() => runSelAction((t) => onStartThread(message.id, t))}>
+              スレッド
+            </button>
+          )}
+        </div>
+      )}
+
+      {noteDraft && (
+        <div
+          className="selection-note"
+          style={{ top: noteDraft.top, left: noteDraft.left }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="selection-note-head">
+            {noteDraft.mode === "review" ? "レビュー（送る）" : "コメント（残す）"}
+          </div>
+          <div className="selection-note-quote">
+            “{noteDraft.quote.slice(0, 80)}
+            {noteDraft.quote.length > 80 ? "…" : ""}”
+          </div>
+          <textarea
+            className="selection-note-input"
+            autoFocus
+            value={noteDraft.text}
+            onChange={(e) => setNoteDraft((d) => ({ ...d, text: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                saveNote();
+              } else if (e.key === "Escape") {
+                setNoteDraft(null);
+              }
+            }}
+            placeholder={
+              noteDraft.mode === "review"
+                ? "この箇所への指摘を書く（Cmd+Enterで追加）..."
+                : "この箇所へのコメントを書く（送信されません / Cmd+Enter）..."
+            }
+            rows={3}
+          />
+          <div className="selection-note-actions">
+            <button onClick={() => setNoteDraft(null)}>キャンセル</button>
+            <button
+              className="primary"
+              onClick={saveNote}
+              disabled={!noteDraft.text.trim()}
+            >
+              {noteDraft.mode === "review" ? "レビューに追加" : "コメントを残す"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -371,7 +503,6 @@ function ChatMessage({
           ... 続きを表示 ({message.content.length} 文字)
         </button>
       )}
-
 
       {messageThreads.length > 0 && (
         <div className="inline-threads">
@@ -387,24 +518,6 @@ function ChatMessage({
           ))}
         </div>
       )}
-
-      {showReview && (
-        <ReviewPanel
-          messageId={message.id}
-          onSubmit={(items) => onReviewSubmit(message.id, items)}
-          onClose={() => setShowReview(false)}
-        />
-      )}
-
-      {showComments && (
-        <CommentPopover
-          comments={messageComments}
-          onAdd={(text) => onAddComment(message.id, text)}
-          onSendToClaude={onSendCommentToClaude}
-          onClose={() => setShowComments(false)}
-          readonly={readonly}
-        />
-      )}
     </div>
   );
 }
@@ -415,9 +528,11 @@ export default function ChatView({
   comments,
   sessionCwd,
   onStartThread,
-  onAddComment,
-  onSendCommentToClaude,
-  onReviewSubmit,
+  onAddAnchoredReview,
+  onAddAnchoredComment,
+  onDeleteComment,
+  jumpToUuid,
+  onJumpDone,
   onOpenPreview,
   onPreviewMarkdown,
   onOpenFileReview,
@@ -430,6 +545,18 @@ export default function ChatView({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // コメント一覧から指定の messageUuid へスクロール（ベストエフォート）
+  useEffect(() => {
+    if (!jumpToUuid || !scrollRef.current) return;
+    const el = scrollRef.current.querySelector(`[data-message-uuid="${jumpToUuid}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("comment-jump-highlight");
+      setTimeout(() => el.classList.remove("comment-jump-highlight"), 1500);
+    }
+    onJumpDone?.();
+  }, [jumpToUuid, onJumpDone]);
 
   return (
     <div className="chat-view" ref={scrollRef}>
@@ -451,9 +578,9 @@ export default function ChatView({
                 comments={comments}
                 sessionCwd={sessionCwd}
                 onStartThread={onStartThread}
-                onAddComment={onAddComment}
-                onSendCommentToClaude={onSendCommentToClaude}
-                onReviewSubmit={onReviewSubmit}
+                onAddAnchoredReview={onAddAnchoredReview}
+                onAddAnchoredComment={onAddAnchoredComment}
+                onDeleteComment={onDeleteComment}
                 onOpenPreview={onOpenPreview}
                 onPreviewMarkdown={onPreviewMarkdown}
                 onOpenFileReview={onOpenFileReview}

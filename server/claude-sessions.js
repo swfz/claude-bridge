@@ -129,6 +129,8 @@ export async function loadSessionHistory(sessionId, projectDir) {
           messages.push({
             role: "human",
             content: text,
+            // 安定アンカー用に JSONL の uuid を持たせる
+            uuid: record.uuid,
             timestamp: record.timestamp || record.updatedAt || "",
           });
         }
@@ -136,6 +138,7 @@ export async function loadSessionHistory(sessionId, projectDir) {
         messages.push({
           role: "human",
           content: record.content,
+          uuid: record.uuid,
           timestamp: record.timestamp || "",
         });
       } else if (record.type === "assistant") {
@@ -146,6 +149,7 @@ export async function loadSessionHistory(sessionId, projectDir) {
             role: "assistant",
             content: text,
             toolUses: toolUses.length > 0 ? toolUses : undefined,
+            uuid: record.uuid,
             timestamp: record.timestamp || record.updatedAt || "",
           });
         }
