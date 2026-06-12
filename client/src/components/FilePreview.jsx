@@ -1,16 +1,6 @@
 import { useEffect, useState } from "react";
+import { PREVIEWABLE_EXTS, getExt } from "../utils/previewExts.js";
 import "./FilePreview.css";
-
-const PREVIEWABLE = [
-  ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
-  ".html", ".htm", ".pdf",
-  ".md", ".txt", ".csv", ".json", ".js", ".css", ".ts", ".jsx", ".tsx", ".py", ".rb", ".go", ".sh",
-];
-
-function getExt(path) {
-  const match = path.match(/\.(\w+)$/);
-  return match ? `.${match[1].toLowerCase()}` : "";
-}
 
 export function extractLocalPath(url) {
   if (url.startsWith("file://wsl.localhost/")) {
@@ -44,7 +34,7 @@ export default function FilePreview({ href, onOpenPreview, onOpenFileReview }) {
   const localPath = extractLocalPath(href);
   const fileName = localPath.split("/").pop();
   const ext = getExt(localPath);
-  const canPreview = PREVIEWABLE.includes(ext);
+  const canPreview = PREVIEWABLE_EXTS.includes(ext);
   const [exists, setExists] = useState(null);
 
   useEffect(() => {

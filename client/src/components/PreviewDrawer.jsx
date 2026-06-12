@@ -4,6 +4,14 @@ import remarkGfm from "remark-gfm";
 import { remarkAlert } from "remark-github-blockquote-alert";
 import { EXT_TO_LANG, highlightCode } from "../highlight.js";
 import { splitFrontmatter } from "../frontmatter.js";
+import {
+  IMAGE_EXTS,
+  HTML_EXTS,
+  PDF_EXTS,
+  TEXT_EXTS,
+  MARKDOWN_EXTS,
+  getExt,
+} from "../utils/previewExts.js";
 import CodeBlock from "./CodeBlock.jsx";
 import {
   buildLocationInfo,
@@ -42,15 +50,31 @@ const markdownComponents = {
   },
 };
 
-const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"];
-const HTML_EXTS = [".html", ".htm"];
-const PDF_EXTS = [".pdf"];
-const TEXT_EXTS = [".md", ".txt", ".csv", ".json", ".js", ".css", ".ts", ".jsx", ".tsx", ".py", ".rb", ".go", ".sh"];
-const MARKDOWN_EXTS = [".md"];
+// root 内テキストの、targetNode/targetOffset までの文字数を TreeWalker で求める（非再帰＝安全）。
+function textOffsetIn(root, targetNode, targetOffset) {
+  let total = 0;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = walker.nextNode())) {
+    if (n === targetNode) return total + targetOffset;
+    total += n.textContent.length;
+  }
+  return -1;
+}
 
-function getExt(path) {
-  const match = path.match(/\.(\w+)$/);
-  return match ? `.${match[1].toLowerCase()}` : "";
+// レンダリング後の各ブロック要素に、元 Markdown ソースの開始行を data-source-line として付ける。
+// これで「レンダリング表示のままどの行由来か」を特定でき、コメントの行マーカーを置ける。
+function rehypeSourceLine() {
+  return (tree) => {
+    const visit = (node) => {
+      if (node.type === "element" && node.position?.start?.line) {
+        node.properties = node.properties || {};
+        node.properties["data-source-line"] = node.position.start.line;
+      }
+      (node.children || []).forEach(visit);
+    };
+    visit(tree);
+  };
 }
 
 function previewUrl(localPath) {
@@ -66,6 +90,9 @@ export default function PreviewDrawer({
   reviewMode,
   onClose,
   onReviewSubmit,
+  onSaveComment,
+  onDeleteComment,
+  fileComments,
   responses,
 }) {
   const isMarkdownMode = !!markdown;
@@ -79,8 +106,14 @@ export default function PreviewDrawer({
   const [fileContent, setFileContent] = useState(null);
   const [loadError, setLoadError] = useState(false);
   const [reviewItems, setReviewItems] = useState([]);
+  // このプレビューを開いている間に「残した」コメント（送信せず保存済み・参照用）
+  const [savedComments, setSavedComments] = useState([]);
   const [selectionPopup, setSelectionPopup] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  // 本文左ガターに出すコメント行マーカー [{ line, top, comments:[{id,comment,quote}] }]
+  const [lineMarkers, setLineMarkers] = useState([]);
+  // クリックで開いている行マーカーのポップオーバー
+  const [activeMarker, setActiveMarker] = useState(null);
   const bodyRef = useRef(null);
 
   // プレビュー本文だけをライトテーマで表示するか。選択は localStorage で記憶する
@@ -227,26 +260,73 @@ export default function PreviewDrawer({
     const bodyRect = bodyRef.current?.getBoundingClientRect();
     if (!bodyRect) return;
 
-    const location = computeLocation(range, text);
+    // computeLocation は selection 種別によっては例外を投げ得るので保護する
+    let location = null;
+    try {
+      location = computeLocation(range, text);
+    } catch {
+      location = null;
+    }
+
+    // 表示時に付けている data-source-line（＝ソース行番号）を保存時に結びつける。
+    // 選択箇所の最も近い [data-source-line] 祖先＝テーブルなら tr、見出しなら各 h、段落なら p。
+    // これで「最初の出現」ではなく実際にコメントした行/行（テーブル行含む）に一意紐付けできる。
+    let line = null;
+    let startEl = range.startContainer;
+    if (startEl && startEl.nodeType === Node.TEXT_NODE) startEl = startEl.parentElement;
+    const block = startEl?.closest?.("[data-source-line]");
+    if (block) {
+      const v = parseInt(block.getAttribute("data-source-line"), 10);
+      if (v > 0) line = v;
+    } else {
+      // コード/テキストプレビュー: pre 内のテキストオフセットから行を算出
+      const pre = bodyRef.current.querySelector("pre.drawer-text");
+      if (pre && pre.contains(range.startContainer) && fileContent) {
+        const off = textOffsetIn(pre, range.startContainer, range.startOffset);
+        if (off >= 0) line = fileContent.slice(0, off).split("\n").length;
+      }
+    }
 
     setSelectionPopup({
       text,
-      location,
+      location: { ...(location || {}), line },
       top: rect.bottom - bodyRect.top + bodyRef.current.scrollTop,
       left: rect.left - bodyRect.left,
     });
-  }, [computeLocation]);
+  }, [computeLocation, fileContent]);
 
-  const addComment = useCallback((selectedText, location) => {
+  const addComment = useCallback((selectedText, location, kind = "review") => {
     const id = ++commentIdSeq;
     setReviewItems((prev) => [
       ...prev,
-      { id, selectedText, location, comment: "", resolved: false },
+      { id, selectedText, location, comment: "", resolved: false, kind },
     ]);
     setEditingId(id);
     setSelectionPopup(null);
     window.getSelection()?.removeAllRanges();
   }, []);
+
+  // 「コメントに残す」: 送信せずセッションのコメントに保存（ファイルアンカー付き）。
+  // 保存後も、このプレビューを開いている間は右ペインに表示し続ける。
+  const saveComment = useCallback((id) => {
+    const item = reviewItems.find((i) => i.id === id);
+    if (item && item.comment.trim()) {
+      const text = item.comment.trim();
+      if (onSaveComment) {
+        onSaveComment(text, {
+          selectedText: item.selectedText,
+          label: item.location?.label || null,
+          line: item.location?.line ?? null,
+        });
+      }
+      setSavedComments((s) => [
+        ...s,
+        { id, selectedText: item.selectedText, comment: text },
+      ]);
+    }
+    setReviewItems((prev) => prev.filter((i) => i.id !== id));
+    if (editingId === id) setEditingId(null);
+  }, [reviewItems, editingId, onSaveComment]);
 
   const updateComment = useCallback((id, comment) => {
     setReviewItems((prev) =>
@@ -270,7 +350,9 @@ export default function PreviewDrawer({
   const [submitStatus, setSubmitStatus] = useState(null);
 
   const handleSubmitAll = useCallback(() => {
-    const items = reviewItems.filter((i) => i.comment.trim() && !i.resolved);
+    const items = reviewItems.filter(
+      (i) => i.kind !== "save" && i.comment.trim() && !i.resolved
+    );
     if (items.length === 0 || !onReviewSubmit) return;
 
     const target = filePath || "preview";
@@ -308,20 +390,159 @@ export default function PreviewDrawer({
   );
 
   const unresolvedCount = reviewItems.filter(
-    (i) => !i.resolved && i.comment.trim()
+    (i) => i.kind !== "save" && !i.resolved && i.comment.trim()
   ).length;
+
+  // 「残したコメント」の表示元: ファイルプレビューは保存済み（filePath 一致）を正にし、
+  // 件数もここに出す。markdown プレビュー等 filePath が無い場合は開いている間の savedComments。
+  // 毎レンダーで新配列を作ると行マーカー effect が無限ループするため安定化する
+  const displaySaved = useMemo(
+    () =>
+      filePath
+        ? (fileComments || []).map((c) => ({
+            id: c.id,
+            selectedText: c.anchor?.quote || "",
+            comment: c.text,
+            line: c.anchor?.line ?? null,
+            persisted: true,
+          }))
+        : savedComments,
+    [filePath, fileComments, savedComments]
+  );
+
+  // コメントの「行」を本文側に印（💬 ガター）として出す。
+  // 行特定: コメントの引用文字列をソース上で探し、その開始行を求める。
+  // 位置: markdown は data-source-line を持つブロックの位置、コード/テキストは行高から算出。
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) {
+      setLineMarkers([]);
+      return;
+    }
+    const isCode = !markdownToRender && isText && !isMarkdownFile;
+    const source = markdownToRender ? markdownBody : isCode ? fileContent : null;
+    if (!source || displaySaved.length === 0) {
+      setLineMarkers([]);
+      return;
+    }
+
+    const id = setTimeout(() => {
+      const bodyRect = body.getBoundingClientRect();
+      const topOf = (el) =>
+        el.getBoundingClientRect().top - bodyRect.top + body.scrollTop;
+
+      // 行番号 → { top(px), el } を返す関数を用意（el は markdown のとき該当ブロック）
+      // テーブル行・リスト項目・見出し(h1〜h6)も一意に当てたい。line と完全一致する要素のうち、
+      // 「末端ブロック」(tr/li/p/見出し等) を優先し、コンテナ(ul/ol/table/div) は避ける。
+      // 同一行に末端ブロックが複数（ネスト）あれば DOM 順で最も深い（後の）ものを選ぶ。
+      const LEAF_BLOCKS = new Set([
+        "TR", "LI", "P", "H1", "H2", "H3", "H4", "H5", "H6", "PRE", "BLOCKQUOTE",
+      ]);
+      const ANY_BLOCK = new Set([
+        ...LEAF_BLOCKS, "TABLE", "UL", "OL", "DL", "DIV",
+      ]);
+      let resolve;
+      if (isCode) {
+        const pre = body.querySelector("pre.drawer-text");
+        if (!pre) return;
+        const cs = getComputedStyle(pre);
+        const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
+        const padTop = parseFloat(cs.paddingTop) || 0;
+        const preTop = topOf(pre);
+        resolve = (line) => ({ top: preTop + padTop + (line - 1) * lh, el: null });
+      } else {
+        const els = [...body.querySelectorAll("[data-source-line]")]
+          .map((el) => ({ el, line: parseInt(el.getAttribute("data-source-line"), 10) }))
+          .filter((x) => x.line > 0)
+          .sort((a, b) => a.line - b.line);
+        resolve = (line) => {
+          const exact = els.filter((x) => x.line === line);
+          if (exact.length) {
+            const leaves = exact.filter((x) => LEAF_BLOCKS.has(x.el.tagName));
+            // 末端ブロックがあれば最も深い（DOM 順で後ろ）ものを、無ければ任意のブロックを
+            const el =
+              (leaves.length
+                ? leaves[leaves.length - 1]
+                : exact.find((x) => ANY_BLOCK.has(x.el.tagName)) || exact[0]
+              ).el;
+            return { top: topOf(el), el };
+          }
+          // 完全一致が無ければ、その行を含む直近ブロック（line 以下で最大）
+          let chosen = els[0];
+          for (const x of els) {
+            if (x.line <= line) chosen = x;
+            else break;
+          }
+          return { top: chosen ? topOf(chosen.el) : 0, el: chosen?.el || null };
+        };
+      }
+
+      // コメントを行ごとにまとめる。保存済みの anchor.line を最優先で使い、
+      // 無い旧データのみ引用文字列の出現位置から行を推定する。
+      const byLine = new Map();
+      for (const c of displaySaved) {
+        let line = c.line;
+        if (!(line > 0)) {
+          const q = (c.selectedText || "").trim();
+          const idx = q ? source.indexOf(q) : -1;
+          line = idx >= 0 ? source.slice(0, idx).split("\n").length : 1;
+        }
+        if (!byLine.has(line)) byLine.set(line, []);
+        byLine.get(line).push(c);
+      }
+
+      // 以前のブロックハイライトを消してから付け直す
+      body
+        .querySelectorAll(".comment-anchored")
+        .forEach((e) => e.classList.remove("comment-anchored"));
+
+      const markers = [...byLine.entries()].map(([line, comments]) => {
+        const { top, el } = resolve(line);
+        // markdown はレンダリング表示で「行」が見えないので、該当ブロックを強調して位置を示す
+        if (el) el.classList.add("comment-anchored");
+        return { line, top: Math.max(0, top), comments };
+      });
+      setLineMarkers(markers);
+    }, 60);
+    return () => {
+      clearTimeout(id);
+      bodyRef.current
+        ?.querySelectorAll(".comment-anchored")
+        .forEach((e) => e.classList.remove("comment-anchored"));
+    };
+  }, [
+    displaySaved,
+    markdownToRender,
+    markdownBody,
+    fileContent,
+    isText,
+    isMarkdownFile,
+    width,
+    lightMode,
+  ]);
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div
-        className={`drawer ${reviewItems.length > 0 ? "drawer-with-review" : ""}`}
+        className={`drawer ${
+          reviewItems.length > 0 || displaySaved.length > 0 || (responses && responses.length > 0)
+            ? "drawer-with-review"
+            : ""
+        }`}
         style={width != null ? { width, maxWidth: "none", minWidth: "auto" } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="drawer-resize-handle" onMouseDown={onDragStart} />
         <div className="drawer-header">
           <div className="drawer-title-area">
-            <span className="drawer-filename">{fileName}</span>
+            <span className="drawer-filename">
+              {fileName}
+              {displaySaved.length > 0 && (
+                <span className="drawer-comment-count" title="このファイルに残したコメント数">
+                  💬 {displaySaved.length}
+                </span>
+              )}
+            </span>
             {filePath && <span className="drawer-path">{filePath}</span>}
           </div>
           <div className="drawer-actions">
@@ -366,7 +587,11 @@ export default function PreviewDrawer({
             {markdownToRender ? (
               <div className="drawer-markdown">
                 {frontmatter && <FrontmatterTable data={frontmatter} />}
-                <Markdown remarkPlugins={[remarkGfm, remarkAlert]} components={markdownComponents}>
+                <Markdown
+                  remarkPlugins={[remarkGfm, remarkAlert]}
+                  rehypePlugins={[rehypeSourceLine]}
+                  components={markdownComponents}
+                >
                   {markdownBody}
                 </Markdown>
               </div>
@@ -426,16 +651,64 @@ export default function PreviewDrawer({
               >
                 <button
                   className="selection-popup-btn"
-                  onClick={() => addComment(selectionPopup.text, selectionPopup.location)}
+                  onClick={() => addComment(selectionPopup.text, selectionPopup.location, "review")}
                 >
-                  + コメント追加
+                  レビューに追加（送る）
                 </button>
+                {onSaveComment && (
+                  <button
+                    className="selection-popup-btn"
+                    onClick={() => addComment(selectionPopup.text, selectionPopup.location, "save")}
+                  >
+                    コメントに残す（送らない）
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* コメントがある行の 💬 マーカー（本文左ガター） */}
+            {lineMarkers.length > 0 && (
+              <div className="comment-gutter">
+                {lineMarkers.map((m) => (
+                  <button
+                    key={m.line}
+                    className="comment-gutter-marker"
+                    style={{ top: m.top }}
+                    onClick={() =>
+                      setActiveMarker((cur) => (cur?.line === m.line ? null : m))
+                    }
+                    title={`この箇所に ${m.comments.length} 件のコメント`}
+                  >
+                    💬{m.comments.length > 1 ? m.comments.length : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 行マーカークリックで内容表示 */}
+            {activeMarker && (
+              <div className="comment-gutter-popup" style={{ top: activeMarker.top }}>
+                <div className="comment-gutter-popup-head">
+                  <span>💬 残したコメント</span>
+                  <button onClick={() => setActiveMarker(null)}>x</button>
+                </div>
+                {activeMarker.comments.map((c) => (
+                  <div key={c.id} className="comment-gutter-item">
+                    {c.selectedText && (
+                      <div className="comment-gutter-quote">
+                        “{c.selectedText.slice(0, 60)}
+                        {c.selectedText.length > 60 ? "…" : ""}”
+                      </div>
+                    )}
+                    <div className="comment-gutter-text">{c.comment}</div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
 
           {/* レビュースレッド */}
-          {(reviewItems.length > 0 || (responses && responses.length > 0)) && (
+          {(reviewItems.length > 0 || displaySaved.length > 0 || (responses && responses.length > 0)) && (
             <div className="drawer-review-pane">
               <div className="review-pane-header">
                 レビュースレッド
@@ -443,9 +716,11 @@ export default function PreviewDrawer({
               <div className="review-pane-thread">
                 {/* 未送信コメント */}
                 {reviewItems.filter((i) => !i.resolved).map((item, index) => (
-                  <div key={item.id} className="review-pane-item">
+                  <div key={item.id} className={`review-pane-item ${item.kind === "save" ? "save" : ""}`}>
                     <div className="review-pane-item-header">
-                      <span className="review-pane-num">#{index + 1}</span>
+                      <span className="review-pane-num">
+                        #{index + 1} {item.kind === "save" ? "（残す）" : "（送る）"}
+                      </span>
                       <button
                         className="review-pane-remove"
                         onClick={() => removeItem(item.id)}
@@ -457,22 +732,22 @@ export default function PreviewDrawer({
                       {item.selectedText.slice(0, 120)}
                       {item.selectedText.length > 120 ? "..." : ""}
                     </div>
-                    {editingId === item.id || item.comment ? (
-                      <textarea
-                        className="review-pane-input"
-                        value={item.comment}
-                        onChange={(e) => updateComment(item.id, e.target.value)}
-                        onFocus={() => setEditingId(item.id)}
-                        placeholder="コメントを入力..."
-                        rows={2}
-                        autoFocus={editingId === item.id}
-                      />
-                    ) : (
+                    <textarea
+                      className="review-pane-input"
+                      value={item.comment}
+                      onChange={(e) => updateComment(item.id, e.target.value)}
+                      onFocus={() => setEditingId(item.id)}
+                      placeholder={item.kind === "save" ? "コメントを書く（送信されません）..." : "指摘を入力..."}
+                      rows={2}
+                      autoFocus={editingId === item.id}
+                    />
+                    {item.kind === "save" && (
                       <button
                         className="review-pane-edit-btn"
-                        onClick={() => setEditingId(item.id)}
+                        onClick={() => saveComment(item.id)}
+                        disabled={!item.comment.trim()}
                       >
-                        コメントを書く
+                        コメントを残す（保存）
                       </button>
                     )}
                   </div>
@@ -490,6 +765,36 @@ export default function PreviewDrawer({
                     >
                       {unresolvedCount}件送信
                     </button>
+                  </div>
+                )}
+
+                {/* 残したcomment（送信せず保存）。ファイルプレビューは保存済み全件を表示。 */}
+                {displaySaved.length > 0 && (
+                  <div className="review-thread-saved">
+                    <div className="review-thread-label">💬 残したコメント（送信なし）</div>
+                    {displaySaved.map((c) => (
+                      <div key={c.id} className="review-pane-item saved">
+                        {c.persisted && onDeleteComment && (
+                          <div className="review-pane-item-header">
+                            <span className="review-pane-num">💬</span>
+                            <button
+                              className="review-pane-remove"
+                              onClick={() => onDeleteComment(c.id)}
+                              title="このコメントを削除"
+                            >
+                              x
+                            </button>
+                          </div>
+                        )}
+                        {c.selectedText && (
+                          <div className="review-pane-selected">
+                            {c.selectedText.slice(0, 80)}
+                            {c.selectedText.length > 80 ? "..." : ""}
+                          </div>
+                        )}
+                        <div className="review-pane-comment-sent">{c.comment}</div>
+                      </div>
+                    ))}
                   </div>
                 )}
 

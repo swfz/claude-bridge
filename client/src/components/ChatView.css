@@ -529,3 +529,190 @@
   font-weight: 700;
   user-select: none;
 }
+
+/* 範囲選択時のアクションメニュー（レビューに追加 / コメントに残す / スレッド） */
+.selection-menu {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 8px));
+  z-index: 1000;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+
+.selection-menu button {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.selection-menu button:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 選択 → ノート入力ポップオーバー（指摘/コメントを書く） */
+.selection-note {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 8px));
+  z-index: 1001;
+  width: 320px;
+  max-width: 90vw;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.selection-note-head {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.selection-note-quote {
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+  margin-bottom: 6px;
+  max-height: 48px;
+  overflow: hidden;
+}
+
+.selection-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.selection-note-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.selection-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.selection-note-actions button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.selection-note-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.selection-note-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 💬 コメントマーカー（メッセージヘッダ） */
+.comment-marker {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 0 7px;
+  cursor: pointer;
+}
+
+.comment-marker:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* メッセージ直下に開くインラインコメント一覧 */
+.inline-comments {
+  margin: 4px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.inline-comment-item {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.inline-comment-item:last-child {
+  border-bottom: none;
+}
+
+.inline-comment-quote {
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+  margin-bottom: 3px;
+}
+
+.inline-comment-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.inline-comment-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.inline-comment-meta button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.inline-comment-meta button:hover {
+  color: #e06c75;
+}
+
+/* コメント一覧から本文へジャンプした際の一時ハイライト */
+.comment-jump-highlight {
+  animation: comment-jump-flash 1.5s ease-out;
+}
+
+@keyframes comment-jump-flash {
+  0% { background: rgba(97, 175, 239, 0.25); }
+  100% { background: transparent; }
+}

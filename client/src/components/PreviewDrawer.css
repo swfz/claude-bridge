@@ -155,6 +155,114 @@
   flex: 1;
   overflow: auto;
   position: relative;
+  /* 左にコメント 💬 マーカー用のガターを確保 */
+  padding-left: 26px;
+}
+
+/* コメント行マーカーのガター（本文と一緒にスクロールする） */
+.comment-gutter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+}
+
+.comment-gutter-marker {
+  position: absolute;
+  left: 1px;
+  transform: translateY(-2px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 3px;
+  white-space: nowrap;
+}
+
+.comment-gutter-marker:hover {
+  border-color: var(--accent);
+}
+
+/* コメントが付いたブロック（markdown は行が見えないのでブロックを強調して位置を示す） */
+.comment-anchored {
+  background: rgba(97, 175, 239, 0.12);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  padding-left: 6px !important;
+}
+
+/* テーブル行は border-left が効きにくいのでセル背景＋左端アクセントで強調 */
+tr.comment-anchored {
+  background: none;
+  border-left: none;
+  padding-left: 0 !important;
+}
+
+tr.comment-anchored > td,
+tr.comment-anchored > th {
+  background: rgba(97, 175, 239, 0.14);
+}
+
+tr.comment-anchored > td:first-child,
+tr.comment-anchored > th:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.comment-gutter-popup {
+  position: absolute;
+  left: 30px;
+  z-index: 50;
+  width: 280px;
+  max-width: calc(100% - 40px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+}
+
+.comment-gutter-popup-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.comment-gutter-popup-head button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.comment-gutter-item {
+  padding: 4px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.comment-gutter-item:first-of-type {
+  border-top: none;
+}
+
+.comment-gutter-quote {
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+  margin-bottom: 3px;
+}
+
+.comment-gutter-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* プレビュー本文だけをライトテーマに。配下の var() 参照をまとめて差し替える。
@@ -303,6 +411,62 @@
   background: rgba(0, 0, 0, 0.04);
 }
 
+/* ライトモード時はコードブロック (hljs) もライト配色に連動させる（github light 相当）。
+   コードファイルプレビュー(.drawer-text.hljs)と Markdown 内コードブロック(.code-block-wrapper pre.hljs)の両方。 */
+.drawer-body.preview-light .hljs {
+  background: #ffffff;
+  color: #24292e;
+}
+.drawer-body.preview-light .code-block-wrapper {
+  background: #ffffff;
+}
+.drawer-body.preview-light .hljs-comment,
+.drawer-body.preview-light .hljs-quote {
+  color: #6a737d;
+}
+.drawer-body.preview-light .hljs-keyword,
+.drawer-body.preview-light .hljs-selector-tag,
+.drawer-body.preview-light .hljs-subst {
+  color: #d73a49;
+}
+.drawer-body.preview-light .hljs-number,
+.drawer-body.preview-light .hljs-literal,
+.drawer-body.preview-light .hljs-variable,
+.drawer-body.preview-light .hljs-template-variable,
+.drawer-body.preview-light .hljs-tag .hljs-attr {
+  color: #005cc5;
+}
+.drawer-body.preview-light .hljs-string,
+.drawer-body.preview-light .hljs-doctag,
+.drawer-body.preview-light .hljs-regexp,
+.drawer-body.preview-light .hljs-link {
+  color: #032f62;
+}
+.drawer-body.preview-light .hljs-title,
+.drawer-body.preview-light .hljs-section,
+.drawer-body.preview-light .hljs-selector-id,
+.drawer-body.preview-light .hljs-type,
+.drawer-body.preview-light .hljs-class .hljs-title {
+  color: #6f42c1;
+}
+.drawer-body.preview-light .hljs-tag,
+.drawer-body.preview-light .hljs-name,
+.drawer-body.preview-light .hljs-attribute {
+  color: #22863a;
+}
+.drawer-body.preview-light .hljs-symbol,
+.drawer-body.preview-light .hljs-bullet,
+.drawer-body.preview-light .hljs-built_in,
+.drawer-body.preview-light .hljs-meta {
+  color: #e36209;
+}
+.drawer-body.preview-light .hljs-deletion {
+  background: #ffeef0;
+}
+.drawer-body.preview-light .hljs-addition {
+  background: #f0fff4;
+}
+
 /* テキスト選択ポップアップ */
 .selection-popup {
   position: absolute;
@@ -334,8 +498,8 @@
 
 /* レビューペイン */
 .drawer-review-pane {
-  width: 480px;
-  min-width: 480px;
+  width: 560px;
+  min-width: 560px;
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -552,3 +716,15 @@
 }
 .review-pane-response-body ul,
 .review-pane-response-body ol { padding-left: 16px; margin: 4px 0; }
+
+/* プレビューのファイル名横に出すコメント件数バッジ */
+.drawer-comment-count {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 7px;
+  vertical-align: middle;
+}

@@ -35,7 +35,7 @@ export const EXT_TO_LANG = {
   css: "css", html: "xml", htm: "xml", xml: "xml", svg: "xml",
   json: "json", yaml: "yaml", yml: "yaml",
   sh: "bash", bash: "bash", zsh: "bash",
-  md: "markdown", sql: "sql",
+  md: "markdown", sql: "sql", sqlx: "sql",
 };
 
 export function highlightCode(text, lang) {

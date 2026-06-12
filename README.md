@@ -10,7 +10,8 @@ node-pty で新規セッションを起動する方式と、既存の tmux ペ�
 - **Chat ビュー** -- JSONL ファイルからメッセージをパースし Markdown レンダリング
 - **Raw ビュー** -- xterm.js によるターミナル表示
 - **ツール呼び出し表示** -- Bash, Read, Edit 等の実行を折りたたみ表示、Edit は diff + シンタックスハイライト
-- **スレッド / コメント** -- メッセージへのインラインスレッド・メモ機能
+- **レビュー / コメント** -- レビュー（指摘を溜めて Claude へ一括送信）と、送信せず残すコメント（参照専用）。プレビューでは該当箇所に 💬 マーカーを表示。スレッドも利用可
+- **agent view 連携** -- `claude agents` のセッションを閲覧し、レビューを inbox 経由で届ける（[agent 連携](#agent-連携レビュー送信--コメント) 参照）
 - **ファイルプレビュー** -- `file://` リンクをサイドドロワーでプレビュー
 - **WebSocket 自動再接続** -- 切断時に 2 秒後に自動再接続、ping/pong による死活監視
 
@@ -48,6 +49,32 @@ npm start
 | `npm run dev:client` | Vite dev server（ホットリロード開発用） |
 | `npm test` | テスト実行 |
 | `npm run install:all` | ルート + クライアントの依存インストール |
+| `npm run setup:hooks` | agent 連携フック（レビュー送信の受信側）を `~/.claude/settings.json` に登録 |
+
+## agent 連携（レビュー送信 / コメント）
+
+「送る（レビュー）」と「残す（コメント）」は別物として扱う。
+
+- **コメント（残す）** -- 送信されず `~/.claude-bridge/` に保存されるだけの参照用メモ。ブラウザ側だけで完結するため**追加設定は不要**。
+- **レビュー（送る）** -- 溜めた指摘を Submit すると対象セッションへ届く。送信先はセッション種別で自動的に出し分ける。
+  - 通常セッション（new / resume / tmux）= PTY に直接入力。
+  - 閲覧 / agent view セッション = **inbox 経由**（`~/.claude-bridge/inbox/<claudeSessionId>.jsonl`）で、対象の Claude 側フックが取り込む。
+
+### inbox 経由のレビューを使うには `setup:hooks` が必要（受信側）
+
+inbox 経由の配信は、**届け先の Claude（agent）が動いている環境**にブリッジ同梱フックが登録されている前提。次を実行する：
+
+```bash
+npm run setup:hooks
+```
+
+- フックは**グローバル**の `~/.claude/settings.json` にマージ登録される（既存設定は壊さない）。
+- 重要なのは「**ブリッジサーバーを動かす環境**」ではなく「**レビューを届けたい Claude セッションを動かす環境**」で実行すること。別マシン / 別ユーザーで agent を動かしているなら、その環境で `setup:hooks` を実行する。
+- 登録されるフック（`scripts/hooks/`）:
+  - `bridge-check-inbox.js` -- 応答終了時（Stop hook）に未読 inbox を取り込む（主経路）
+  - `bridge-session-start.js` / `bridge-watch.js` -- インタラクティブセッション向けのリアルタイム受信（Monitor）
+- サンドボックス有効時は `setup:hooks` が `~/.claude-bridge` への書き込み許可も追加する。
+- コメント（残す）だけを使う場合は `setup:hooks` は不要。
 
 ## アーキテクチャ
 

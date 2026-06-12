@@ -48,6 +48,10 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - **閲覧（メインタブに統合）**: `AgentSidePanel`（ヘッダ「Agents」トグル）は**一覧ランチャー**に専念。agent をクリックすると、その会話を**メインタブに `readonly` セッションとして開く**（既存の「閲覧（コメント）」と同じ `handleOpenReadonly` 経路）。会話は大画面で表示。会話が空のセッション（JSONL が `ai-title`/`agent-name` のみ）は表示が空になる（正常）
 - **送信（readonly セッションの送信欄）**: readonly タブの下部 `InputBar` から `send_to_agent` → `storage.appendInbox` で `~/.claude-bridge/inbox/<sessionId>.jsonl` に追記。readonly は PTY を持たないため通常の input ではなく inbox 経由で送る。宛先は `claudeSessionId` 直接なので突合・誤送信の懸念なし
   - 送信経路の整理: 通常セッション（new/resume/tmux）＝PTY に直接 input / readonly（agent view・閲覧とも）＝inbox 経由（`send_to_agent`）
+- **レビュー（送る）と コメント（残す）の役割分担**: 「送る」と「残す」を完全に分離し、どちらも**メッセージ単位ではなくセッション単位**で扱う。保存キーは共通で `claudeSessionId`（無ければブリッジ ID）＝`sessionKey`（サーバーは `sessionKeyOf()` で解決・パストラバーサル検証）。ヘッダの「Review」「Memo」トグルでそれぞれのサイドパネルを開く（readonly 含む全種別、chat ビュー時）。
+  - **レビュー＝送る（pending review）**: `ReviewDraftPanel` で指摘を溜める。`save_review`/`get_review` で下書きを `review-<key>.json` に永続化（リロード/再オープンしても残る）。「Submit」で `submit_review` を投げると、**サーバーが対象セッション種別で送信先を出し分ける**（`readonly` → `storage.appendInbox(claudeSessionId)` ＝inbox / それ以外（PTY あり）→ `session.write` ＝Claude へ）。送信本文は `[レビュー N件] ...`。Submit 成功で下書きはクリア。ファイルプレビュー（`PreviewDrawer` の `reviewMode` + `ReviewPanel`）のファイルレビューも同じ `submit_review` 経由（各項目にファイル名を前置）で、readonly でも届く。
+  - **コメント＝残す（参照専用）**: `save_comment`/`get_comments`/`delete_comment` ↔ `CommentPanel`（入力欄つき一覧）。`comments-<key>.json` に保存し**送信は一切しない**。セッションに対して残し、再オープン/resume/閲覧をまたいで参照できる。
+  - メッセージ単位の Memo/Review ボタンや `CommentPopover`、`send_comment_to_claude` は廃止（`Thread` だけは別機能としてメッセージ単位で残存）。
 - **配信**（agent 側で受信）: claude-bridge 同梱フックを**グローバル** `~/.claude/settings.json` に登録（`npm run setup:hooks`）。
   - **turn 配信（Stop hook）が主**。応答終了ごとに発火するため確実だが、対象が idle だと次の応答まで届かない
   - **monitor（SessionStart→Monitor）は interactive 向け**。background（agent view の dispatch）セッションは additionalContext の指示を実行せず Monitor が立たないため、background へは実質 turn 配信になる（agmsg も同様で background は対象外）

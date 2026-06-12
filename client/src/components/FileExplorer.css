@@ -130,3 +130,51 @@
   background: var(--accent);
   opacity: 0.3;
 }
+
+/* ファイル名検索窓 */
+.file-explorer-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-explorer-search input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.file-explorer-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.explorer-search-clear {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 6px;
+}
+
+.explorer-search-clear:hover {
+  color: var(--text-primary);
+}
+
+/* 検索結果の相対パス（どのフォルダにあるか） */
+.explorer-subpath {
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

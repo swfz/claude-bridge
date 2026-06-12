@@ -51,6 +51,23 @@ export class Storage {
     }
   }
 
+  // pending review（送信前に溜めた指摘）の下書き。Submit するまで保持し、
+  // リロード/再オープン後も復元できるよう claudeSessionId 単位で永続化する。
+  saveReviewDraft(sessionId, draft) {
+    const file = join(DATA_DIR, `review-${sessionId}.json`);
+    writeFileSync(file, JSON.stringify(draft, null, 2));
+  }
+
+  loadReviewDraft(sessionId) {
+    try {
+      const file = join(DATA_DIR, `review-${sessionId}.json`);
+      const draft = JSON.parse(readFileSync(file, "utf-8"));
+      return Array.isArray(draft?.items) ? draft : { items: [] };
+    } catch {
+      return { items: [] };
+    }
+  }
+
   // フックベース送信: 対象セッションの inbox に1行追記する（agent 側のフックが取り込む）。
   // sessionId はファイルパスに使うためトラバーサル対策で形式を検証する。
   appendInbox(sessionId, message) {

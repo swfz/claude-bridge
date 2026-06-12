@@ -1,0 +1,156 @@
+.review-draft-panel {
+  position: relative;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.review-draft-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.review-draft-resize-handle:hover,
+.review-draft-resize-handle:active {
+  background: var(--accent);
+}
+
+.review-draft-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-draft-header h3 {
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-draft-count {
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.review-draft-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.review-draft-close:hover {
+  color: var(--text-primary);
+}
+
+.review-draft-hint {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.review-draft-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.review-draft-item {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+}
+
+.review-draft-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.review-draft-item-number {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.review-draft-item-remove {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 0 7px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.review-draft-item-remove:hover {
+  border-color: #e06c75;
+  color: #e06c75;
+}
+
+.review-draft-item-quote {
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+  margin-bottom: 4px;
+  max-height: 48px;
+  overflow: hidden;
+}
+
+.review-draft-item-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 40px;
+}
+
+.review-draft-item-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.review-draft-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.review-draft-add {
+  font-size: 12px;
+  flex: 1;
+}
+
+.review-draft-submit {
+  font-size: 13px;
+}
