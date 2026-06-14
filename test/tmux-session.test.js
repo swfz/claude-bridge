@@ -1,6 +1,33 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { TmuxSession, TmuxSessionManager } from "../server/tmux-session.js";
+import {
+  resolveTmuxJsonlTarget,
+  TmuxSession,
+  TmuxSessionManager,
+} from "../server/tmux-session.js";
+
+describe("resolveTmuxJsonlTarget", () => {
+  it("returns null when claudeSessionId is unavailable", () => {
+    const target = resolveTmuxJsonlTarget({
+      cwd: "/home/user/project",
+      claudeSessionId: null,
+    });
+
+    assert.equal(target, null);
+  });
+
+  it("resolves JSONL target from claudeSessionId without cwd fallback", () => {
+    const target = resolveTmuxJsonlTarget({
+      cwd: "/home/user/project",
+      claudeSessionId: "abc-123",
+    });
+
+    assert.deepEqual(target, {
+      sessionId: "abc-123",
+      projectDir: "-home-user-project",
+    });
+  });
+});
 
 describe("TmuxSession", () => {
   it("toJSON returns correct shape", () => {
