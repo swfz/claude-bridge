@@ -2,6 +2,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { randomUUID } from "crypto";
 import { readStatusByPid } from "./claude-session-meta.js";
+import { cwdToProjectDir } from "./jsonl-utils.js";
 
 const execAsync = promisify(exec);
 
@@ -64,6 +65,14 @@ export async function sendKeysToPane(paneId, text) {
 
 function escapeForShell(str) {
   return "'" + str.replace(/'/g, "'\\''") + "'";
+}
+
+export function resolveTmuxJsonlTarget({ claudeSessionId, cwd }) {
+  if (!claudeSessionId) return null;
+  return {
+    sessionId: claudeSessionId,
+    projectDir: cwdToProjectDir(cwd || ""),
+  };
 }
 
 // tmux ペインをラップするセッションクラス

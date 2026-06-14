@@ -10,7 +10,11 @@ import { ThreadStore } from "./thread-store.js";
 import { listClaudeSessions, loadSessionHistory } from "./claude-sessions.js";
 import { JsonlWatcher } from "./jsonl-watcher.js";
 import { cwdToProjectDir } from "./jsonl-utils.js";
-import { listClaudeTmuxPanes, TmuxSessionManager } from "./tmux-session.js";
+import {
+  listClaudeTmuxPanes,
+  resolveTmuxJsonlTarget,
+  TmuxSessionManager,
+} from "./tmux-session.js";
 import { listClaudeAgents } from "./claude-agents.js";
 import { enrichPanesWithSessionMeta } from "./claude-session-meta.js";
 
@@ -763,11 +767,12 @@ wss.on("connection", (ws) => {
           status: msg.status,
         });
 
-        // ペインごとに解決済みの sessionId があればそれを使い、同一 cwd の
-        // 複数ペインを取り違えないようにする。無ければ cwd から最新を推定（後方互換）。
-        const resolved = msg.claudeSessionId
-          ? { sessionId: msg.claudeSessionId, projectDir: cwdToProjectDir(msg.cwd) }
-          : jsonlWatcher.findSessionForCwd(msg.cwd);
+        // ペインごとに解決済みの sessionId がある場合だけ JSONL に紐づける。
+        // cwd の最新 JSONL 推定は、複数 tmux セッション/同一 cwd で取り違えるため使わない。
+        const resolved = resolveTmuxJsonlTarget({
+          claudeSessionId: msg.claudeSessionId,
+          cwd: msg.cwd,
+        });
         if (resolved) {
           loadSessionHistory(resolved.sessionId, resolved.projectDir).then(
             (history) => {
@@ -780,16 +785,16 @@ wss.on("connection", (ws) => {
               );
             }
           );
-        }
 
-        // JSONL 監視開始（新規メッセージのみ配信）
-        jsonlWatcher.startWatching({
-          bridgeSessionId: session.id,
-          cwd: msg.cwd,
-          sessionId: msg.claudeSessionId,
-          attachExisting: true,
-          onMessage: (chatMsg) => broadcast(chatMsg),
-        });
+          // JSONL 監視開始（新規メッセージのみ配信）
+          jsonlWatcher.startWatching({
+            bridgeSessionId: session.id,
+            cwd: msg.cwd,
+            sessionId: resolved.sessionId,
+            attachExisting: true,
+            onMessage: (chatMsg) => broadcast(chatMsg),
+          });
+        }
 
         ws.send(
           JSON.stringify({ type: "session_opened", bridgeSessionId: session.id })
