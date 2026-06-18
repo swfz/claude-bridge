@@ -22,6 +22,7 @@ html, body, #root {
   --text-secondary: #a0a0b0;
   --border: #2a2a4a;
   --tab-active: #0f3460;
+  --tab-active-text: #ffffff;
   --tab-inactive: #16213e;
   --input-bg: #16213e;
   --success: #4caf50;
@@ -42,6 +43,7 @@ body.light-mode {
   --text-secondary: #59636e;
   --border: #d1d9e0;
   --tab-active: #ffffff;
+  --tab-active-text: #1f2328;
   --tab-inactive: #eaeef2;
   --input-bg: #ffffff;
   --success: #1a7f37;
