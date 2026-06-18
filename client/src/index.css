@@ -6,8 +6,8 @@
 
 html, body, #root {
   height: 100%;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -22,10 +22,32 @@ html, body, #root {
   --text-secondary: #a0a0b0;
   --border: #2a2a4a;
   --tab-active: #0f3460;
+  --tab-active-text: #ffffff;
   --tab-inactive: #16213e;
   --input-bg: #16213e;
   --success: #4caf50;
   --warning: #ff9800;
+}
+
+/* アプリ全体のライトテーマ。body.light-mode が付くと配下の var() 参照を
+   まとめてライト配色に差し替える（GitHub light 相当）。プレビュー本文の
+   独自トグル (.drawer-body.preview-light) とは独立して動く。 */
+body.light-mode {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f6f8fa;
+  --bg-surface: #eaeef2;
+  --accent: #c62a7d;
+  --accent-hover: #ff0087;
+  --accent-secondary: #0087d7;
+  --text-primary: #1f2328;
+  --text-secondary: #59636e;
+  --border: #d1d9e0;
+  --tab-active: #ffffff;
+  --tab-active-text: #1f2328;
+  --tab-inactive: #eaeef2;
+  --input-bg: #ffffff;
+  --success: #1a7f37;
+  --warning: #9a6700;
 }
 
 /* mermaid 図 — 本文の明暗に関わらず白地カードで表示する */

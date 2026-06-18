@@ -22,6 +22,10 @@ export default function App() {
   );
   const [showNewSession, setShowNewSession] = useState(false);
   const [viewMode, setViewMode] = useState("chat");
+  // アプリ全体のテーマ（背景/UI）。localStorage で記憶。プレビュー本文の独自トグルとは独立。
+  const [appTheme, setAppTheme] = useState(
+    () => localStorage.getItem("appTheme") || "dark"
+  );
   // セッションごとのメッセージを一元管理する唯一の真実（id -> message[]）。
   // 表示用の messages はここから activeSessionId で派生させる（単一 messages state や
   // messageCache の二重管理をやめ、active と表示内容のズレ＝混線を構造的に防ぐ）。
@@ -62,6 +66,13 @@ export default function App() {
   const sessionKey =
     sessions.find((s) => s.id === activeSessionId)?.claudeSessionId ||
     activeSessionId;
+
+  // アプリ全体テーマを body のクラスに反映し localStorage に記憶する。
+  // light のとき body.light-mode が付き、index.css の var() がライト配色へ切り替わる。
+  useEffect(() => {
+    document.body.classList.toggle("light-mode", appTheme === "light");
+    localStorage.setItem("appTheme", appTheme);
+  }, [appTheme]);
 
   useEffect(() => {
     return on("session_list", (msg) => {
@@ -690,6 +701,15 @@ export default function App() {
             title="agent view のセッション一覧とコメント"
           >
             Agents
+          </button>
+          <button
+            className="toggle-btn thread-toggle"
+            onClick={() =>
+              setAppTheme((t) => (t === "light" ? "dark" : "light"))
+            }
+            title="アプリ全体のテーマを切り替え（ライト/ダーク）"
+          >
+            {appTheme === "light" ? "Dark" : "Light"}
           </button>
           <div className="connection-status">
             <span
