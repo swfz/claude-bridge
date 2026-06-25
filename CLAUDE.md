@@ -53,13 +53,10 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
   - **コメント＝残す（参照専用）**: `save_comment`/`get_comments`/`delete_comment` ↔ `CommentPanel`（入力欄つき一覧）。`comments-<key>.json` に保存し**送信は一切しない**。セッションに対して残し、再オープン/resume/閲覧をまたいで参照できる。
   - メッセージ単位の Memo/Review ボタンや `CommentPopover`、`send_comment_to_claude` は廃止（`Thread` だけは別機能としてメッセージ単位で残存）。
 - **配信**（agent 側で受信）: claude-bridge 同梱フックを**グローバル** `~/.claude/settings.json` に登録（`npm run setup:hooks`）。
-  - **turn 配信（Stop hook）が主**。応答終了ごとに発火するため確実だが、対象が idle だと次の応答まで届かない
-  - **monitor（SessionStart→Monitor）は interactive 向け**。background（agent view の dispatch）セッションは additionalContext の指示を実行せず Monitor が立たないため、background へは実質 turn 配信になる（agmsg も同様で background は対象外）
-- **サンドボックス**: サンドボックス有効時、Stop/SessionStart の hook 本体はホスト権限で動くが、**Monitor が起動する watcher 子プロセスは Bash と同じサンドボックス制限**を受け、`~/.claude-bridge` への書き込みが EROFS になる。`setup:hooks` が `sandbox.filesystem.allowWrite` に inbox を追加して回避する（`sandbox.enabled` は変更しない）
-  - `scripts/hooks/bridge-check-inbox.js` -- Stop hook（turn 配信）。応答終了時に未読を `{decision:"block", reason}` で注入。`stop_hook_active` で無限ループ回避、monitor watcher 生存時（pidfile）は defer
-  - `scripts/hooks/bridge-session-start.js` -- SessionStart hook（monitor 配信）。Monitor ツールで `bridge-watch.js` を `persistent` 実行する指示を `hookSpecificOutput.additionalContext`（JSON）で出す。plain text では additionalContext として注入されないため JSON 必須。additionalContext は次のユーザー入力への応答時に読まれるため、起動直後・入力前には Monitor は立たない
-  - `scripts/hooks/bridge-watch.js` -- inbox を poll し新着を `[claude-bridge] <本文>` で stdout（Monitor がリアルタイムに push）
+  - **turn 配信（Stop hook）に一本化**。応答終了ごとに発火し、inbox の未読をまとめて `{decision:"block", reason}` で注入する。対象が idle の場合は次の応答時に届く。常駐プロセス（monitor）は PID 再利用・サンドボックス・応答途中への割り込みで誤動作が多く廃止した
+  - `scripts/hooks/bridge-check-inbox.js` -- Stop hook（turn 配信）の本体。応答終了時に未読を注入。`stop_hook_active` で無限ループ回避
 - 既読位置は `inbox/<sessionId>.offset` で管理（サーバーは書くだけ、offset 更新はフック側）
+- **claude-bridge の介入範囲（誤解防止）**: bridge が会話に作用するのは Stop hook（`bridge-check-inbox.js`）による**注入のみ**。注入文には必ず `[claude-bridge]` マーカーが付き、「UI 由来のユーザーメッセージでツール実行結果ではない」と明記される。注入の事実は `~/.claude-bridge/delivery.log`（JSONL: `ts`/`sessionId`/`count`/`texts`）に全文記録される。**Bash 等のツールの標準出力には一切介入しない（構造上できない）**。ツール出力の不整合を bridge のせいと疑う前に、まず `delivery.log` を確認すること（該当セッションの注入記録が無ければ bridge は無関係）
 - テスト時は `CLAUDE_BRIDGE_DIR` 環境変数で inbox の位置を上書きできる
 
 ## コーディング規約
