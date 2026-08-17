@@ -9,7 +9,7 @@ const execAsync = promisify(exec);
 
 // Claude Code が `/rename` 等で更新するセッションメタの保存先
 // 各ファイルは <claude プロセスPID>.json で、name / status / sessionId / cwd を持つ
-const SESSIONS_DIR = join(homedir(), ".claude", "sessions");
+export const SESSIONS_DIR = join(homedir(), ".claude", "sessions");
 
 // ~/.claude/sessions/*.json を読み、claude プロセスPID -> メタ情報のマップを構築
 async function readSessionMetaByPid() {

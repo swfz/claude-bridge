@@ -17,6 +17,7 @@ import {
 } from "./tmux-session.js";
 import { listClaudeAgents } from "./claude-agents.js";
 import { enrichPanesWithSessionMeta } from "./claude-session-meta.js";
+import { listRunningSessions } from "./running-sessions.js";
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -747,6 +748,16 @@ wss.on("connection", (ws) => {
               })
             );
           });
+        break;
+      }
+
+      case "list_running_sessions": {
+        // ホーム画面用: 今マシン上で起動している Claude セッション一覧
+        // （~/.claude/sessions/*.json ＋ 生存 PID）。ブリッジのタブとは独立した情報で、
+        // どれがタブとして開かれているかの突合はクライアント側で行う。
+        listRunningSessions().then((running) => {
+          ws.send(JSON.stringify({ type: "running_sessions", sessions: running }));
+        });
         break;
       }
 

@@ -7,6 +7,30 @@
   min-height: 36px;
 }
 
+/* ホームは常に左端に固定。タブのスクロールに巻き込まれないよう tabs-list の外に置く */
+.tab-home {
+  background: var(--tab-inactive);
+  border: none;
+  color: var(--text-secondary);
+  border-radius: 6px 6px 0 0;
+  padding: 6px 12px;
+  margin-right: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tab-home:hover {
+  background: var(--bg-surface);
+}
+
+.tab-home.active {
+  background: var(--tab-active);
+  color: var(--tab-active-text);
+  font-weight: 600;
+}
+
 .tabs-list {
   display: flex;
   gap: 2px;
