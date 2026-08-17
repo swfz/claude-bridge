@@ -135,4 +135,31 @@ describe("extractToolUses", () => {
     const result = extractToolUses(msg);
     assert.ok(result[0].summary.includes("components/App.jsx"));
   });
+
+  it("summarizes AskUserQuestion with the questions themselves", () => {
+    const msg = {
+      content: [
+        {
+          type: "tool_use",
+          id: "t1",
+          name: "AskUserQuestion",
+          input: {
+            questions: [
+              { question: "好きな色は？", options: [] },
+              { question: "好きな季節は？", options: [] },
+            ],
+          },
+        },
+      ],
+    };
+    const result = extractToolUses(msg);
+    assert.equal(result[0].summary, "好きな色は？ / 好きな季節は？");
+  });
+
+  it("falls back to the tool name when AskUserQuestion has no questions", () => {
+    const msg = {
+      content: [{ type: "tool_use", id: "t1", name: "AskUserQuestion", input: {} }],
+    };
+    assert.equal(extractToolUses(msg)[0].summary, "AskUserQuestion");
+  });
 });

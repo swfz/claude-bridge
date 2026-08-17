@@ -25,9 +25,11 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 
 ### サーバーのモジュール構成
 
-- `index.js` -- エントリポイント。メッセージルーティング。ヘルパー `findSession()` / `broadcastSessionList()` でセッション操作を集約
-- `session.js` -- node-pty セッション管理 (`Session`, `SessionManager`)
-- `tmux-session.js` -- tmux ペイン接続 (`TmuxSession`, `TmuxSessionManager`) と、新しい window で `claude --resume` を起こす `resumeInTmuxWindow()`。paneId は `%<数字>` 形式のバリデーション必須
+- `index.js` -- エントリポイント。メッセージルーティング。ヘルパー `findSession()` / `broadcastSessionList()` でセッション操作を集約。`ws.on("message")` は async（選択肢プロンプトの読み取りで await する）なので、各 case は自分で try/catch する
+- `session.js` -- node-pty セッション管理 (`Session`, `SessionManager`)。生の ANSI 出力は `@xterm/headless` の端末にも流し、`getScreenText()` で「今の画面」を復元できる（選択肢プロンプトのパース用）。**`write()` は本文と末尾の確定用 Enter を分けて送る**（一括で書くと Claude Code の TUI が「複数行入力の改行」と扱って送信されず、入力欄に残ったままになる）
+- `tmux-session.js` -- tmux ペイン接続 (`TmuxSession`, `TmuxSessionManager`) と、新しい window で `claude --resume` を起こす `resumeInTmuxWindow()`。paneId は `%<数字>` 形式のバリデーション必須。画面取得は `capturePane()`、選択肢の操作は `sendChoiceKeysToPane()` / `sendChoiceTextToPane()`（`sendKeysToPane()` と違い Enter を付けない）
+- `choice-prompt.js` -- 画面テキストから選択肢プロンプトを構造化する純粋関数 `parseChoicePrompt()`
+- `choice-keys.js` -- 選択肢操作のキー表現。抽象キー名のホワイトリスト（`assertValidChoiceKeys`）と PTY 用シーケンス変換（`toPtySequence`）、自由入力の整形（`sanitizeChoiceText`）
 - `jsonl-watcher.js` -- JSONL ファイルの監視。`attachExisting` モードで既存セッションにも接続可能
 - `jsonl-utils.js` -- 共通ユーティリティ。`extractTextContent`, `extractToolUses`, `CLAUDE_PROJECTS_DIR` 等。jsonl-watcher.js と claude-sessions.js から参照
 - `claude-sessions.js` -- Claude セッション一覧・履歴読み込み。`listRecentSessions()` はホーム下段用（mtime で直近 N 日を絞る）
@@ -43,6 +45,7 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - `ChatView.jsx` -- highlight.js は静的 import で13言語を登録。`EditDiff` は全文ハイライト後に行分割
 - `ThreadPanel.jsx` -- リサイズハンドルは `widthRef` で useCallback の依存を空に
 - `HomeView.jsx` -- ホーム画面（起動中セッション＋直近セッション）。`utils/runningSessions.js` の純粋関数で突合・整形
+- `ChoicePrompt.jsx` -- 選択肢プロンプトのカード（入力欄の直上）。選択肢ボタン＝キー送信で、状態は毎回サーバーが読み直した画面から来る（クライアントは選択状態を持たない）
 
 ### ホーム画面（起動中セッション＋直近セッション）
 
@@ -63,6 +66,27 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - `cwd` は projectDir 名から復元するとディレクトリ名のハイフンが壊れる（`claude-bridge` → `claude/bridge`）ため、JSONL に書かれた `cwd` を優先する。resume の起動先になるので重要
 - どちらの一覧にも紐づかないタブ（期間外のセッションを閲覧で開いた・終了したタブ）は最下段の「その他の開いているタブ」に出す
 - ホーム表示は `showHome` state（localStorage 記憶）。`activeSessionId` は保持したまま切り替えるため Home ⇄ 作業中タブを往復できる。起動中一覧はホーム表示中のみ 5 秒間隔でポーリングし、直近一覧はホームを開いた時・日数変更時・「更新」時だけ取得する（JSONL 全走査のため）
+
+### 選択肢プロンプト（AskUserQuestion / ツール許可 / trust 確認）への回答
+
+TUI に出る「番号つきの選択肢」をブラウザから選べるようにする仕組み。入力欄の直上に `ChoicePrompt` のカードを出し、ボタンのクリックを**キー入力として PTY / tmux ペインへ送る**。
+
+- **待ちの検知は `~/.claude/sessions/<pid>.json` の `status:"waiting"` + `waitingFor`**（`"input needed"` = AskUserQuestion 等、`"permission prompt"` = ツール許可）。`claude-session-meta.js` の `readStatusByPid()` が `{status, waitingFor}` を返し、4 秒間隔の `statusInterval`（`index.js`）が両 manager の `refreshStatuses()` と `pollChoicePrompts()` を回す
+- **選択肢の中身は JSONL から取れない。** AskUserQuestion の `tool_use` が JSONL に書かれるのは**回答が終わったあと**（記録される `timestamp` は生成時刻なので、ファイルを見ると回答前から在ったように見えるが、待っている間はまだ書かれていない）。したがって情報源は画面テキストだけで、`parseChoicePrompt()`（`server/choice-prompt.js`）が構造化する
+  - 画面の取得元: tmux は `capturePane()`、内蔵 PTY は `@xterm/headless` で ANSI を再現した `Session.getScreenText()`
+  - **readonly セッションは対象外**（PTY が無く、inbox は Stop hook 経由なので選択待ち中は届かない）
+- **キー操作は実測（Claude Code v2.1.233）に依存する**
+  - 単一選択: **数字キー1つで即確定**（Enter は不要）
+  - 複数選択（multiSelect）: 数字キーは**トグル**、Enter もカーソル位置のトグル。確定は **Tab → 確認画面の「1. Submit answers」**
+  - 自由入力（"Type something"）: **番号キー → テキスト（リテラル） → Enter**。番号キーだけでは確定せず入力欄になる
+  - キャンセル: Escape。複数質問は Tab / Shift+Tab でタブ移動
+- **画面フォーマットの差**（パーサが吸収している）
+  - AskUserQuestion は選択肢の上に `☐ 見出し`（複数選択・複数質問では `←  ☒ 見出し  ✔ Submit  →`）のタブ行が出る。multiSelect は各選択肢が `[ ]` / `[✔]`
+  - permission プロンプトのフッターは `Esc to cancel · Tab to amend` で **`Enter to select` 行が無い**。上に diff（`╌` の破線）が出る
+  - Tab 後の確認画面（`Ready to submit your answers?`）には**フッター行が一切出ない**。そのため「フッター or `❯` カーソル or タブ行のどれかがある」を検出条件にしている
+- WS メッセージ: `get_choice_prompt {sessionId}` / `answer_choice_prompt {sessionId, keys, text}` → `choice_prompt {prompt, waitingFor}` / `choice_prompt_error`。`prompt: null` が「待っていない」の意味
+- **画面を読むのは待ち状態のときだけ**（`get_choice_prompt` も `refreshSessionStatus()` してから読む）。入力欄に番号付きリストを書いている最中を選択肢と誤認しないため
+- 送信後は `SCREEN_SETTLE_MS` 待って読み直して配る（次の質問・確認画面へ進んでいることがある）。同じ内容は `lastChoicePrompts` で抑止する
 
 ### agent view 連携（フックベース送信）
 
@@ -96,6 +120,8 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - `/preview` エンドポイント: `path.resolve()` で正規化、`lstatSync()` でシンボリックリンク拒否
 - tmux コマンド: paneId は `validatePaneId()` で `%<数字>` 形式を検証してからシェルに渡す
 - `escapeForShell()` でテキストをシングルクォートエスケープ
+- 選択肢プロンプトへ送るキーは `choice-keys.js` のホワイトリストのみ（数字1桁と `Enter` / `Escape` / `Tab` / `BTab` / `Space` / 矢印）。tmux では数字を `-l` でリテラル送信し、それ以外はキー名として渡す
+- 自由入力のテキストは `sanitizeChoiceText()` で改行を空白に潰して 2000 文字に切る（改行がそのまま届くと Enter＝確定として解釈されるため）。tmux へはさらに `escapeForShell()` を通す
 - WebSocket 認証はなし（ローカル前提）
 - inbox: `appendInbox()` の sessionId は `/^[\w-]+$/` で検証（パストラバーサル対策）。ファイルは `0600`。**平文保存のため機微情報を送らない**
 - フック登録（`setup:hooks`）は `~/.claude/settings.json` を**既存設定を壊さずマージ**（claude-bridge 由来は marker で除去して再追加）

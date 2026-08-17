@@ -113,21 +113,24 @@ export async function enrichPanesWithSessionMeta(panes) {
         claudeSessionId: meta?.sessionId ?? null,
         sessionName: meta?.name ?? null,
         status: meta?.status ?? null,
+        waitingFor: meta?.waitingFor ?? null,
         slug,
       };
     })
   );
 }
 
-// claudePid から最新の status だけを読む（タブの status 常時更新用）
+// claudePid から最新の status / waitingFor を読む（タブの status 常時更新用）
+// waitingFor は選択肢待ちの検知に使う（"input needed" = AskUserQuestion 等、
+// "permission prompt" = ツール許可）。status が waiting でなければ null。
 export async function readStatusByPid(claudePid) {
-  if (claudePid == null) return null;
+  if (claudePid == null) return { status: null, waitingFor: null };
   try {
     const o = JSON.parse(
       await readFile(join(SESSIONS_DIR, `${claudePid}.json`), "utf8")
     );
-    return o.status ?? null;
+    return { status: o.status ?? null, waitingFor: o.waitingFor ?? null };
   } catch {
-    return null;
+    return { status: null, waitingFor: null };
   }
 }
