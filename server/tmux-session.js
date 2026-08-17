@@ -3,6 +3,11 @@ import { promisify } from "util";
 import { randomUUID } from "crypto";
 import { readStatusByPid } from "./claude-session-meta.js";
 import { cwdToProjectDir } from "./jsonl-utils.js";
+import {
+  assertValidChoiceKeys,
+  sanitizeChoiceText,
+  CHOICE_KEY_DELAY_MS,
+} from "./choice-keys.js";
 
 const execAsync = promisify(exec);
 
@@ -61,6 +66,38 @@ export async function sendKeysToPane(paneId, text) {
   } catch (e) {
     console.error(`Failed to send keys to pane ${paneId}:`, e.message);
   }
+}
+
+// 選択肢プロンプト用の生キー送信。sendKeysToPane と違い Enter を勝手に付けないので、
+// 数字キー1つ（＝選択の確定/トグル）や Escape（キャンセル）をそのまま送れる。
+// tmux の send-keys はキー名（Enter / Escape / Tab ...）をそのまま解釈できる。
+export async function sendChoiceKeysToPane(paneId, keys) {
+  validatePaneId(paneId);
+  const list = assertValidChoiceKeys(keys);
+  for (const [i, key] of list.entries()) {
+    if (i > 0) await delay(CHOICE_KEY_DELAY_MS);
+    // 数字は -l でリテラル送信（tmux のキー名として解釈されるのを避ける）
+    const arg = /^[0-9]$/.test(key) ? `-l ${escapeForShell(key)}` : key;
+    await execAsync(`tmux send-keys -t ${paneId} ${arg}`);
+  }
+}
+
+// 自由入力（"Type something"）用。テキストをリテラルで送るだけで Enter は付けない
+export async function sendChoiceTextToPane(paneId, text) {
+  validatePaneId(paneId);
+  const body = sanitizeChoiceText(text);
+  if (!body) return;
+  await execAsync(`tmux send-keys -t ${paneId} -l ${escapeForShell(body)}`);
+}
+
+// ペインの現在の画面テキストを取得（scrollback 行数を指定すると遡れる）
+export async function capturePane(paneId, { scrollback = 0 } = {}) {
+  validatePaneId(paneId);
+  const range = scrollback > 0 ? ` -S -${Math.min(2000, scrollback)}` : "";
+  const { stdout } = await execAsync(
+    `tmux capture-pane -t ${paneId} -p${range}`
+  );
+  return stdout;
 }
 
 function escapeForShell(str) {
@@ -161,7 +198,7 @@ export function resolveTmuxJsonlTarget({ claudeSessionId, cwd }) {
 
 // tmux ペインをラップするセッションクラス
 export class TmuxSession {
-  constructor({ id, name, cwd, paneId, target, claudePid, status }) {
+  constructor({ id, name, cwd, paneId, target, claudePid, status, waitingFor }) {
     validatePaneId(paneId);
     this.id = id;
     this.name = name;
@@ -170,12 +207,26 @@ export class TmuxSession {
     this.target = target;
     this.claudePid = claudePid ?? null;
     this.status = status ?? null;
+    this.waitingFor = waitingFor ?? null;
     this.createdAt = new Date().toISOString();
     this.type = "tmux";
   }
 
   write(text) {
     sendKeysToPane(this.paneId, text);
+  }
+
+  // 選択肢プロンプトの現在の状態を読むための画面テキスト
+  getScreenText() {
+    return capturePane(this.paneId);
+  }
+
+  sendChoiceKeys(keys) {
+    return sendChoiceKeysToPane(this.paneId, keys);
+  }
+
+  sendChoiceText(text) {
+    return sendChoiceTextToPane(this.paneId, text);
   }
 
   resize() {
@@ -215,6 +266,7 @@ export class TmuxSession {
       target: this.target,
       claudePid: this.claudePid,
       status: this.status,
+      waitingFor: this.waitingFor,
       createdAt: this.createdAt,
       alive: true,
       type: "tmux",
@@ -227,7 +279,7 @@ export class TmuxSessionManager {
     this.sessions = new Map();
   }
 
-  attachPane({ paneId, name, cwd, target, claudePid, status }) {
+  attachPane({ paneId, name, cwd, target, claudePid, status, waitingFor }) {
     const id = randomUUID().slice(0, 8);
     const session = new TmuxSession({
       id,
@@ -237,6 +289,7 @@ export class TmuxSessionManager {
       target,
       claudePid,
       status,
+      waitingFor,
     });
     this.sessions.set(id, session);
     return session;
@@ -254,14 +307,20 @@ export class TmuxSessionManager {
     return Array.from(this.sessions.values()).map((s) => s.toJSON());
   }
 
-  // 各 tmux セッションの status を最新化。変化があれば true を返す
+  // アタッチ中のセッションの実体（画面読み取り等に使う）
+  activeSessions() {
+    return Array.from(this.sessions.values());
+  }
+
+  // 各 tmux セッションの status / waitingFor を最新化。変化があれば true を返す
   async refreshStatuses() {
     let changed = false;
     for (const s of this.sessions.values()) {
       if (s.claudePid == null) continue;
-      const status = await readStatusByPid(s.claudePid);
-      if (status !== s.status) {
+      const { status, waitingFor } = await readStatusByPid(s.claudePid);
+      if (status !== s.status || waitingFor !== s.waitingFor) {
         s.status = status;
+        s.waitingFor = waitingFor;
         changed = true;
       }
     }

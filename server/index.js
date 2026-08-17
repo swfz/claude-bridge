@@ -21,8 +21,12 @@ import {
   TmuxSessionManager,
 } from "./tmux-session.js";
 import { listClaudeAgents } from "./claude-agents.js";
-import { enrichPanesWithSessionMeta } from "./claude-session-meta.js";
+import {
+  enrichPanesWithSessionMeta,
+  readStatusByPid,
+} from "./claude-session-meta.js";
 import { listRunningSessions } from "./running-sessions.js";
+import { parseChoicePrompt } from "./choice-prompt.js";
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -296,7 +300,7 @@ function sendTo(ws, payload) {
 
 // tmux ペインをブリッジのタブとして開く。attach_tmux_pane（既存ペインへの接続）と
 // resume_in_tmux（新しい window で resume 起動）の共通処理。
-function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, claudeSessionId, status }) {
+function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, claudeSessionId, status, waitingFor }) {
   const session = tmuxSessionManager.attachPane({
     paneId,
     name: name || `tmux: ${target}`,
@@ -304,6 +308,7 @@ function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, cla
     target,
     claudePid,
     status,
+    waitingFor,
   });
 
   // ペインごとに解決済みの sessionId がある場合だけ JSONL に紐づける。
@@ -356,11 +361,66 @@ const pingInterval = setInterval(() => {
 
 wss.on("close", () => clearInterval(pingInterval));
 
-// tmux セッションの busy/idle を定期的に最新化し、変化があればタブへ反映
+// 選択肢プロンプト（AskUserQuestion / ツール許可 / trust 確認）の現在の状態を画面から読む。
+// JSONL には回答後にしか書かれないので、待っている間の情報源は画面テキストだけ。
+async function readChoicePrompt(session) {
+  if (!session || typeof session.getScreenText !== "function") return null;
+  try {
+    return parseChoicePrompt(await session.getScreenText());
+  } catch (e) {
+    console.error(`Failed to read screen of session ${session.id}:`, e.message);
+    return null;
+  }
+}
+
+// キーを送ってから TUI が描き直すまでの待ち
+const SCREEN_SETTLE_MS = 450;
+
+// クライアントへ配った内容（sessionId -> JSON 文字列）。同じものを送り続けないための記録
+const lastChoicePrompts = new Map();
+
+// 回答直後に「まだ待ち」と見せないよう、そのセッションの status だけ先に更新する
+async function refreshSessionStatus(session) {
+  if (!session || session.claudePid == null) return;
+  const { status, waitingFor } = await readStatusByPid(session.claudePid);
+  session.status = status;
+  session.waitingFor = waitingFor;
+}
+
+function broadcastChoicePrompt(session, prompt) {
+  const payload = {
+    type: "choice_prompt",
+    sessionId: session.id,
+    waitingFor: session.waitingFor ?? null,
+    prompt,
+  };
+  const json = JSON.stringify(payload);
+  if (lastChoicePrompts.get(session.id) === json) return;
+  lastChoicePrompts.set(session.id, json);
+  broadcast(payload);
+}
+
+// 選択肢待ちのセッションだけ画面を読む（待っていなければ prompt を消す通知だけ出す）
+async function pollChoicePrompts() {
+  const sessions = [
+    ...sessionManager.activeSessions(),
+    ...tmuxSessionManager.activeSessions(),
+  ];
+  for (const session of sessions) {
+    const prompt = session.waitingFor ? await readChoicePrompt(session) : null;
+    broadcastChoicePrompt(session, prompt);
+  }
+}
+
+// セッションの busy/idle/waiting を定期的に最新化し、変化があればタブと選択肢カードへ反映
 const STATUS_INTERVAL = 4_000;
 const statusInterval = setInterval(async () => {
-  const changed = await tmuxSessionManager.refreshStatuses();
-  if (changed) broadcastSessionList();
+  const [tmuxChanged, ptyChanged] = await Promise.all([
+    tmuxSessionManager.refreshStatuses(),
+    sessionManager.refreshStatuses(),
+  ]);
+  if (tmuxChanged || ptyChanged) broadcastSessionList();
+  await pollChoicePrompts();
 }, STATUS_INTERVAL);
 wss.on("close", () => clearInterval(statusInterval));
 
@@ -376,7 +436,9 @@ wss.on("connection", (ws) => {
     })
   );
 
-  ws.on("message", (raw) => {
+  // 選択肢プロンプトの読み取り/送信で await するため async。
+  // 各 case は自分で try/catch する（このハンドラの外に例外を投げない）
+  ws.on("message", async (raw) => {
     let msg;
     try {
       msg = JSON.parse(raw);
@@ -448,9 +510,76 @@ wss.on("connection", (ws) => {
         break;
       }
 
+      // いま画面に出ている選択肢プロンプトを読む（タブを開いた直後などの明示取得）
+      case "get_choice_prompt": {
+        const session = findSession(msg.sessionId);
+        if (!session) break;
+        // 待ち状態のときだけ画面を読む（入力欄に番号付きリストを書いている最中などを
+        // プロンプトと誤認しないため。判定は ~/.claude/sessions の waitingFor に任せる）
+        await refreshSessionStatus(session);
+        const prompt = session.waitingFor ? await readChoicePrompt(session) : null;
+        sendTo(ws, {
+          type: "choice_prompt",
+          sessionId: session.id,
+          waitingFor: session.waitingFor ?? null,
+          prompt,
+        });
+        // 明示取得の結果も記録しておき、直後のポーリングで同じものを送らないようにする
+        lastChoicePrompts.set(
+          session.id,
+          JSON.stringify({
+            type: "choice_prompt",
+            sessionId: session.id,
+            waitingFor: session.waitingFor ?? null,
+            prompt,
+          })
+        );
+        break;
+      }
+
+      // 選択肢プロンプトへの回答。keys は数字キー（選択/トグル）や Enter / Tab / Escape。
+      // text があれば「番号キー → テキスト → Enter」の順で送る（"Type something" 用）。
+      case "answer_choice_prompt": {
+        const session = findSession(msg.sessionId);
+        if (!session || typeof session.sendChoiceKeys !== "function") {
+          sendTo(ws, {
+            type: "choice_prompt_error",
+            sessionId: msg.sessionId,
+            message: "このセッションには選択肢を送れません（閲覧専用です）。",
+          });
+          break;
+        }
+        try {
+          const keys = Array.isArray(msg.keys) ? msg.keys : [];
+          if (keys.length > 0) await session.sendChoiceKeys(keys);
+          if (msg.text) {
+            await session.sendChoiceText(msg.text);
+            await session.sendChoiceKeys(["Enter"]);
+          }
+        } catch (e) {
+          console.error("answer_choice_prompt failed:", e.message);
+          sendTo(ws, {
+            type: "choice_prompt_error",
+            sessionId: msg.sessionId,
+            message: `選択の送信に失敗しました: ${e.message}`,
+          });
+          break;
+        }
+        // 送信後は次の質問やレビュー画面に進んでいることがあるので読み直して配る
+        await new Promise((r) => setTimeout(r, SCREEN_SETTLE_MS));
+        await refreshSessionStatus(session);
+        broadcastChoicePrompt(
+          session,
+          session.waitingFor ? await readChoicePrompt(session) : null
+        );
+        broadcastSessionList();
+        break;
+      }
+
       case "kill_session": {
         jsonlWatcher.stopWatching(msg.sessionId);
         sessionManager.killSession(msg.sessionId);
+        lastChoicePrompts.delete(msg.sessionId);
         broadcastSessionList();
         break;
       }
@@ -857,6 +986,7 @@ wss.on("connection", (ws) => {
           claudePid: msg.claudePid,
           claudeSessionId: msg.claudeSessionId,
           status: msg.status,
+          waitingFor: msg.waitingFor,
         });
         break;
       }
@@ -894,6 +1024,7 @@ wss.on("connection", (ws) => {
       case "detach_tmux_pane": {
         jsonlWatcher.stopWatching(msg.sessionId);
         tmuxSessionManager.detachSession(msg.sessionId);
+        lastChoicePrompts.delete(msg.sessionId);
         broadcastSessionList();
         break;
       }

@@ -7,6 +7,7 @@ import ThreadPanel from "./components/ThreadPanel.jsx";
 import CommentPanel from "./components/CommentPanel.jsx";
 import ReviewDraftPanel from "./components/ReviewDraftPanel.jsx";
 import InputBar from "./components/InputBar.jsx";
+import ChoicePrompt from "./components/ChoicePrompt.jsx";
 import NewSessionDialog from "./components/NewSessionDialog.jsx";
 import PreviewDrawer from "./components/PreviewDrawer.jsx";
 import FileExplorer from "./components/FileExplorer.jsx";
@@ -45,6 +46,10 @@ export default function App() {
   );
   // ホーム画面の操作エラー（tmux 再開の失敗など）。チャット欄には出せないのでバナーで見せる
   const [homeError, setHomeError] = useState(null);
+  // セッションごとの選択肢プロンプト（id -> {prompt, waitingFor}）。
+  // JSONL には回答後にしか出ないので、サーバーが画面から読んだものをそのまま持つ。
+  const [choicePrompts, setChoicePrompts] = useState({});
+  const [choiceError, setChoiceError] = useState(null);
   // 「未解決／続きをやる」印を付けた claudeSessionId（localStorage のみ）
   const [starredSessions, setStarredSessions] = useState(loadStarred);
   // 一覧取得時に添えるだけなので、star の変更で再取得は走らせない（JSONL 走査を避ける）
@@ -159,6 +164,22 @@ export default function App() {
   // ホーム画面の操作エラー（tmux window 作成の失敗など）
   useEffect(() => {
     return on("home_error", (msg) => setHomeError(msg.message));
+  }, [on]);
+
+  // TUI に出ている選択肢プロンプト（AskUserQuestion / ツール許可 / trust 確認）。
+  // サーバーが待ち状態のセッションの画面を読んで送ってくる。prompt が null なら待ちではない。
+  useEffect(() => {
+    return on("choice_prompt", (msg) => {
+      setChoicePrompts((prev) => ({
+        ...prev,
+        [msg.sessionId]: { prompt: msg.prompt, waitingFor: msg.waitingFor },
+      }));
+      setChoiceError(null);
+    });
+  }, [on]);
+
+  useEffect(() => {
+    return on("choice_prompt_error", (msg) => setChoiceError(msg.message));
   }, [on]);
 
   // JSONL ベースの chat_message を受信。
@@ -566,6 +587,28 @@ export default function App() {
     [send, activeSessionId, addUserMessage]
   );
 
+  // 選択肢プロンプトへの回答。keys は数字キー（選択/トグル）や Tab / Escape。
+  // text は "Type something" の自由入力（サーバーが 番号 → テキスト → Enter の順で送る）。
+  const handleAnswerChoice = useCallback(
+    ({ keys, text }) => {
+      if (!activeSessionId) return;
+      send({ type: "answer_choice_prompt", sessionId: activeSessionId, keys, text });
+    },
+    [send, activeSessionId]
+  );
+
+  const handleRefreshChoice = useCallback(() => {
+    if (!activeSessionId) return;
+    send({ type: "get_choice_prompt", sessionId: activeSessionId });
+  }, [send, activeSessionId]);
+
+  // タブを切り替えた/再接続した直後は、その場で画面を読んでカードの内容を合わせる
+  // （定期ポーリングを待たずに出したいため）
+  useEffect(() => {
+    if (!activeSessionId || showHome || !connected) return;
+    send({ type: "get_choice_prompt", sessionId: activeSessionId });
+  }, [send, activeSessionId, showHome, connected]);
+
   const handleResize = useCallback(
     (cols, rows) => {
       if (activeSessionId) {
@@ -723,6 +766,9 @@ export default function App() {
   // ホーム表示中はセッション固有の UI（ビュー切替・スレッド/レビュー/メモ・入力欄）を出さない
   const sessionUiVisible = !showHome && !!activeSessionId;
   const chatPanelsVisible = sessionUiVisible && effectiveViewMode === "chat";
+  // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
+  const activeChoice =
+    sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
 
   return (
     <div className="app">
@@ -952,6 +998,16 @@ export default function App() {
           />
         )}
       </div>
+
+      {activeChoice && (
+        <ChoicePrompt
+          prompt={activeChoice.prompt}
+          waitingFor={activeChoice.waitingFor}
+          error={choiceError}
+          onAnswer={handleAnswerChoice}
+          onRefresh={handleRefreshChoice}
+        />
+      )}
 
       {showHome ? null : isReadonly ? (
         <InputBar
