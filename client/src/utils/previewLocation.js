@@ -113,7 +113,7 @@ export function findNearestHeading(node, rootEl) {
 // 選択 Range と、その選択の「ソーステキスト」（コードファイルなら fileContent、
 // Markdown プレビューなら markdown ソース）を渡し、レビュー送信用の位置ラベルと
 // 前後コンテキストを構築する。
-// kind: "code" | "markdown" | "text"
+// kind: "code" | "markdown" | "text" | "html"
 export function buildLocationInfo({ kind, sourceText, selectedText, sourceStart, sourceEnd, heading }) {
   const info = { contextBefore: "", contextAfter: "", label: "" };
   if (sourceText && sourceStart >= 0 && sourceEnd >= sourceStart) {
@@ -123,7 +123,7 @@ export function buildLocationInfo({ kind, sourceText, selectedText, sourceStart,
   }
   const occ = sourceText ? getOccurrenceIndex(sourceText, selectedText, sourceStart) : { index: 0, total: 0 };
 
-  if ((kind === "code" || kind === "text") && sourceText && sourceStart >= 0) {
+  if ((kind === "code" || kind === "text" || kind === "html") && sourceText && sourceStart >= 0) {
     const { line, column } = offsetToLineCol(sourceText, sourceStart);
     info.label = occ.total > 1 ? `L${line}:C${column}, ${occ.index}/${occ.total}箇所目` : `L${line}:C${column}`;
   } else if (kind === "markdown") {

@@ -19,6 +19,7 @@ import {
   findOccurrenceOffset,
   getOccurrenceIndex,
   getRootTextOffset,
+  offsetToLineCol,
 } from "../utils/previewLocation.js";
 import "./PreviewDrawer.css";
 
@@ -115,6 +116,9 @@ export default function PreviewDrawer({
   // クリックで開いている行マーカーのポップオーバー
   const [activeMarker, setActiveMarker] = useState(null);
   const bodyRef = useRef(null);
+  const iframeRef = useRef(null);
+  // iframe 内のリスナから最新のソースを参照するための箱
+  const fileContentRef = useRef(null);
 
   // プレビュー本文だけをライトテーマで表示するか。選択は localStorage で記憶する
   const [lightMode, setLightMode] = useState(
@@ -159,8 +163,9 @@ export default function PreviewDrawer({
     document.addEventListener("mouseup", onUp);
   }, []);
 
+  // HTML は iframe で描画するが、コメントの行・前後文脈を出すためにソースも読む
   useEffect(() => {
-    if (!isMarkdownMode && filePath && (isText || isMarkdownFile)) {
+    if (!isMarkdownMode && filePath && (isText || isMarkdownFile || isHtml)) {
       setFileContent(null);
       setLoadError(false);
       fetch(previewUrl(filePath))
@@ -168,7 +173,11 @@ export default function PreviewDrawer({
         .then((text) => setFileContent(text))
         .catch(() => setLoadError(true));
     }
-  }, [filePath, isText, isMarkdownFile, isMarkdownMode]);
+  }, [filePath, isText, isMarkdownFile, isHtml, isMarkdownMode]);
+
+  useEffect(() => {
+    fileContentRef.current = fileContent;
+  }, [fileContent]);
 
   const lang = ext ? EXT_TO_LANG[ext.slice(1)] : null;
   const highlightedHtml = useMemo(
@@ -294,6 +303,77 @@ export default function PreviewDrawer({
       left: rect.left - bodyRect.left,
     });
   }, [computeLocation, fileContent]);
+
+  // HTML プレビューは iframe 内に描画されるため、親の mouseup では選択を拾えない。
+  // /preview は同一オリジンなので contentDocument に直接リスナを張り、
+  // iframe 内の座標を drawer 本文の座標に変換してポップアップを出す。
+  useEffect(() => {
+    if (!isHtml) return;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const onUp = () => {
+      const sel = iframe.contentWindow?.getSelection();
+      const text = sel?.toString().trim();
+      if (!text || text.length < 2) {
+        setSelectionPopup(null);
+        return;
+      }
+      const bodyEl = bodyRef.current;
+      const bodyRect = bodyEl?.getBoundingClientRect();
+      if (!bodyRect) return;
+
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const frameRect = iframe.getBoundingClientRect();
+
+      // 描画テキスト上の出現順を HTML ソース上の同じ出現順に対応づけて行・列を出す
+      // （タグを含むソースと表示テキストは一致しないため、Markdown と同じやり方）
+      const source = fileContentRef.current;
+      const docBody = iframe.contentDocument?.body;
+      let location = {};
+      let line = null;
+      if (source && docBody) {
+        const domStart = getRootTextOffset(docBody, range.startContainer, range.startOffset);
+        const occ = getOccurrenceIndex(docBody.textContent, text, domStart);
+        const sourceStart =
+          occ.index > 0 ? findOccurrenceOffset(source, text, occ.index) : source.indexOf(text);
+        if (sourceStart >= 0) {
+          location = buildLocationInfo({
+            kind: "html",
+            sourceText: source,
+            selectedText: text,
+            sourceStart,
+            sourceEnd: sourceStart + text.length,
+          });
+          line = offsetToLineCol(source, sourceStart).line;
+        }
+      }
+
+      setSelectionPopup({
+        text,
+        location: { ...location, line },
+        top: frameRect.top - bodyRect.top + rect.bottom + bodyEl.scrollTop,
+        left: frameRect.left - bodyRect.left + rect.left,
+      });
+    };
+
+    let attached = null;
+    const attach = () => {
+      const doc = iframe.contentDocument;
+      if (!doc || doc === attached) return;
+      attached?.removeEventListener("mouseup", onUp);
+      doc.addEventListener("mouseup", onUp);
+      attached = doc;
+    };
+    // 読み込み済みなら即、まだなら load 後に張る
+    attach();
+    iframe.addEventListener("load", attach);
+    return () => {
+      iframe.removeEventListener("load", attach);
+      attached?.removeEventListener("mouseup", onUp);
+    };
+  }, [isHtml, filePath]);
 
   const addComment = useCallback((selectedText, location, kind = "review") => {
     const id = ++commentIdSeq;
@@ -524,7 +604,7 @@ export default function PreviewDrawer({
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div
-        className={`drawer ${
+        className={`drawer ${isHtml ? "drawer-html" : ""} ${
           reviewItems.length > 0 || displaySaved.length > 0 || (responses && responses.length > 0)
             ? "drawer-with-review"
             : ""
@@ -606,6 +686,7 @@ export default function PreviewDrawer({
                 )}
                 {isHtml && (
                   <iframe
+                    ref={iframeRef}
                     src={previewUrl(filePath)}
                     className="drawer-iframe"
                     title={fileName}

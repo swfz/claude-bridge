@@ -141,6 +141,21 @@ describe("buildLocationInfo", () => {
     assert.ok(info.label.includes("2/2箇所目"));
   });
 
+  it("for html: builds L<line>:C<col> from the HTML source", () => {
+    const sourceText =
+      "<html>\n  <body>\n    <p>本文です</p>\n    <li>項目B: 別の選択対象</li>\n  </body>\n</html>";
+    const sel = "項目B: 別の選択";
+    const start = sourceText.indexOf(sel);
+    const info = buildLocationInfo({
+      kind: "html",
+      sourceText,
+      selectedText: sel,
+      sourceStart: start,
+      sourceEnd: start + sel.length,
+    });
+    assert.match(info.label, /^L4:C\d+$/);
+  });
+
   it("returns empty label when sourceText is missing", () => {
     const info = buildLocationInfo({
       kind: "markdown",
