@@ -33,6 +33,7 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - `claude-sessions.js` -- Claude セッション一覧・履歴読み込み
 - `storage.js` -- `~/.claude-bridge/` への永続化。`appendInbox()` で agent への送信を inbox に書き込む
 - `claude-agents.js` -- `claude agents --json` から agent view のセッション一覧を取得
+- `running-sessions.js` -- ホーム画面用。`~/.claude/sessions/*.json`（pid/sessionId/cwd/name/status/tmux）を読み、`ps` の生存 PID で絞って「今起動中の Claude セッション」を返す。`tmux` フィールドの paneId は `%<数字>` 形式のみ採用
 - `thread-store.js` -- スレッド CRUD
 
 ### クライアントのコンポーネント構成
@@ -40,6 +41,17 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - `App.jsx` -- 状態管理の中心。`sessionsRef` で sessions の最新値を参照（stale closure 対策）
 - `ChatView.jsx` -- highlight.js は静的 import で13言語を登録。`EditDiff` は全文ハイライト後に行分割
 - `ThreadPanel.jsx` -- リサイズハンドルは `widthRef` で useCallback の依存を空に
+- `HomeView.jsx` -- ホーム画面（起動中セッション一覧）。`utils/runningSessions.js` の純粋関数で突合・整形
+
+### ホーム画面（起動中セッション一覧）
+
+タブの左端の「⌂ Home」で開く既定画面。今このマシンで起動している Claude セッションを一覧し、ブリッジのタブとして開いているものを区別する。
+
+- データ源は `list_running_sessions` → `running_sessions`（`server/running-sessions.js`）。ブリッジのタブ（`session_list`）とは独立した情報で、突合はクライアントの `utils/runningSessions.js`（`annotateRunningSessions` / `findOpenTab`）が行う
+- 突合キーは `claudeSessionId` 優先、無ければ `claudePid`（tmux タブは JSONL 未解決でも pid は分かる）。死んだタブは「開いている」と扱わない
+- 開いているセッションには「タブで表示中」バッジ＋左の色帯が付き、クリックでそのタブへ移動。未オープンは tmux ペインがあれば `attach_tmux_pane`、無ければ `open_readonly_session`（閲覧）で開く
+- 起動中セッションに紐づかないタブ（閲覧で開いた過去セッション・終了したタブ）は下段の「その他の開いているタブ」に出す
+- ホーム表示は `showHome` state（localStorage 記憶）。`activeSessionId` は保持したまま切り替えるため Home ⇄ 作業中タブを往復できる。一覧はホーム表示中のみ 5 秒間隔でポーリングする
 
 ### agent view 連携（フックベース送信）
 

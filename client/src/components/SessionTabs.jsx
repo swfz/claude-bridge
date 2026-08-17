@@ -3,6 +3,8 @@ import "./SessionTabs.css";
 export default function SessionTabs({
   sessions,
   activeSessionId,
+  homeActive,
+  onHome,
   onSelect,
   onKill,
   onRestart,
@@ -13,6 +15,13 @@ export default function SessionTabs({
 }) {
   return (
     <div className="session-tabs">
+      <button
+        className={`tab-home ${homeActive ? "active" : ""}`}
+        onClick={onHome}
+        title="ホーム（起動中セッション一覧）"
+      >
+        ⌂ Home
+      </button>
       <div className="tabs-list">
         {sessions.map((session) => (
           <div

@@ -11,7 +11,11 @@ import NewSessionDialog from "./components/NewSessionDialog.jsx";
 import PreviewDrawer from "./components/PreviewDrawer.jsx";
 import FileExplorer from "./components/FileExplorer.jsx";
 import AgentSidePanel from "./components/AgentSidePanel.jsx";
+import HomeView from "./components/HomeView.jsx";
 import "./App.css";
+
+// ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
+const RUNNING_POLL_INTERVAL = 5000;
 
 export default function App() {
   const { send, on, connected } = useWebSocket();
@@ -22,6 +26,13 @@ export default function App() {
   );
   const [showNewSession, setShowNewSession] = useState(false);
   const [viewMode, setViewMode] = useState("chat");
+  // ホーム画面（起動中の Claude セッション一覧）。タブとは独立した表示モードで、
+  // activeSessionId は保持したまま切り替える（Home ⇄ 作業中タブを行き来できる）。
+  const [showHome, setShowHome] = useState(
+    () => localStorage.getItem("showHome") !== "false"
+  );
+  // サーバーが返す「今このマシンで起動中の Claude セッション」。null = 未取得
+  const [runningSessions, setRunningSessions] = useState(null);
   // アプリ全体のテーマ（背景/UI）。localStorage で記憶。プレビュー本文の独自トグルとは独立。
   const [appTheme, setAppTheme] = useState(
     () => localStorage.getItem("appTheme") || "dark"
@@ -95,7 +106,11 @@ export default function App() {
   // これを唯一の active 切り替えトリガーにすることで取り違えを防ぐ。
   useEffect(() => {
     return on("session_opened", (msg) => {
-      if (msg.bridgeSessionId) setActiveSessionId(msg.bridgeSessionId);
+      if (msg.bridgeSessionId) {
+        setActiveSessionId(msg.bridgeSessionId);
+        // 開いたセッションを見せたいのでホームからは抜ける
+        setShowHome(false);
+      }
     });
   }, [on]);
 
@@ -206,6 +221,27 @@ export default function App() {
       setAgents(msg.agents || []);
     });
   }, [on]);
+
+  useEffect(() => {
+    return on("running_sessions", (msg) => {
+      setRunningSessions(msg.sessions || []);
+    });
+  }, [on]);
+
+  // ホーム表示中だけポーリングする（裏では取りに行かない）
+  useEffect(() => {
+    if (!showHome || !connected) return;
+    send({ type: "list_running_sessions" });
+    const timer = setInterval(
+      () => send({ type: "list_running_sessions" }),
+      RUNNING_POLL_INTERVAL
+    );
+    return () => clearInterval(timer);
+  }, [showHome, connected, send]);
+
+  useEffect(() => {
+    localStorage.setItem("showHome", String(showHome));
+  }, [showHome]);
 
   useEffect(() => {
     return on("session_history", (msg) => {
@@ -480,6 +516,7 @@ export default function App() {
   const handleSwitchSession = useCallback((sessionId) => {
     // 表示は messagesBySession[activeSessionId] の派生なので active を変えるだけでよい
     // （cache 保存・復元やレース対策は不要になった）
+    setShowHome(false);
     setActiveSessionId(sessionId);
     setThreads([]);
     setComments([]);
@@ -621,13 +658,16 @@ export default function App() {
   // 閲覧専用セッションは JSONL を読むだけ。chat 固定でコメントは付けられるが送信はしない
   const isReadonly = activeSession?.type === "readonly";
   const effectiveViewMode = isReadonly ? "chat" : viewMode;
+  // ホーム表示中はセッション固有の UI（ビュー切替・スレッド/レビュー/メモ・入力欄）を出さない
+  const sessionUiVisible = !showHome && !!activeSessionId;
+  const chatPanelsVisible = sessionUiVisible && effectiveViewMode === "chat";
 
   return (
     <div className="app">
       <header className="app-header">
         <h1 className="app-title">Claude Bridge</h1>
         <div className="header-controls">
-          {activeSessionId && !isReadonly && (
+          {sessionUiVisible && !isReadonly && (
             <>
               <button
                 className={`toggle-btn thread-toggle ${showFileExplorer ? "active" : ""}`}
@@ -665,7 +705,7 @@ export default function App() {
               )}
             </>
           )}
-          {activeSessionId && effectiveViewMode === "chat" && (
+          {chatPanelsVisible && (
             <>
               <button
                 className={`toggle-btn thread-toggle ${showReviewPanel ? "active" : ""}`}
@@ -722,7 +762,9 @@ export default function App() {
 
       <SessionTabs
         sessions={sessions}
-        activeSessionId={activeSessionId}
+        activeSessionId={showHome ? null : activeSessionId}
+        homeActive={showHome}
+        onHome={() => setShowHome(true)}
         onSelect={handleSwitchSession}
         onKill={handleKillSession}
         onRestart={handleRestartSession}
@@ -733,7 +775,7 @@ export default function App() {
       />
 
       <div className="app-content">
-        {showFileExplorer && (
+        {showFileExplorer && sessionUiVisible && (
           <FileExplorer
             cwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
             onOpenPreview={(path) => {
@@ -743,7 +785,19 @@ export default function App() {
           />
         )}
         <main className="app-main">
-          {activeSessionId ? (
+          {showHome ? (
+            <HomeView
+              runningSessions={runningSessions}
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              loading={runningSessions === null}
+              onRefresh={() => send({ type: "list_running_sessions" })}
+              onSelectTab={handleSwitchSession}
+              onAttachTmux={handleAttachTmux}
+              onOpenReadonly={handleOpenReadonly}
+              onNew={() => setShowNewSession(true)}
+            />
+          ) : activeSessionId ? (
             effectiveViewMode === "raw" ? (
               <TerminalView
                 sessionId={activeSessionId}
@@ -782,7 +836,7 @@ export default function App() {
           )}
         </main>
 
-        {showThreadPanel && effectiveViewMode === "chat" && (
+        {showThreadPanel && chatPanelsVisible && (
           <ThreadPanel
             threads={threads}
             onReplyBatch={handleThreadReplyBatch}
@@ -790,7 +844,7 @@ export default function App() {
             onDelete={handleDeleteThread}
           />
         )}
-        {showReviewPanel && effectiveViewMode === "chat" && (
+        {showReviewPanel && chatPanelsVisible && (
           <ReviewDraftPanel
             items={reviewItems}
             readonly={isReadonly}
@@ -799,7 +853,7 @@ export default function App() {
             onClose={() => setShowReviewPanel(false)}
           />
         )}
-        {showCommentPanel && effectiveViewMode === "chat" && (
+        {showCommentPanel && chatPanelsVisible && (
           <CommentPanel
             comments={comments}
             onAdd={handleAddComment}
@@ -819,7 +873,7 @@ export default function App() {
         )}
       </div>
 
-      {activeSessionId && isReadonly ? (
+      {showHome ? null : isReadonly ? (
         <InputBar
           onSubmit={handleSendToReadonly}
           disabled={!activeSession?.claudeSessionId}
