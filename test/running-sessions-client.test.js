@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   findOpenTab,
   annotateRunningSessions,
+  annotateRecentSessions,
   findUnmatchedTabs,
   statusClass,
   formatElapsed,
@@ -69,6 +70,37 @@ describe("annotateRunningSessions", () => {
   });
 });
 
+describe("annotateRecentSessions", () => {
+  it("drops the sessions that are currently running", () => {
+    const result = annotateRecentSessions(
+      [{ sessionId: "sid-a" }, { sessionId: "sid-b" }],
+      [{ pid: 1, sessionId: "sid-a" }],
+      []
+    );
+    assert.deepEqual(
+      result.map((s) => s.sessionId),
+      ["sid-b"]
+    );
+  });
+
+  it("adds openTab for recent sessions opened as readonly tabs", () => {
+    const result = annotateRecentSessions(
+      [{ sessionId: "sid-b" }],
+      [],
+      [
+        { id: "t1", alive: true, claudeSessionId: "sid-other" },
+        { id: "t2", alive: true, claudeSessionId: "sid-b" },
+        { id: "t3", alive: false, claudeSessionId: "sid-b" },
+      ]
+    );
+    assert.equal(result[0].openTab.id, "t2");
+  });
+
+  it("returns an empty array for missing input", () => {
+    assert.deepEqual(annotateRecentSessions(null, null, null), []);
+  });
+});
+
 describe("findUnmatchedTabs", () => {
   it("returns tabs that are not backed by a running session", () => {
     const tabs = [
@@ -80,6 +112,18 @@ describe("findUnmatchedTabs", () => {
     assert.deepEqual(
       result.map((t) => t.id),
       ["t2", "t3"]
+    );
+  });
+
+  it("also excludes tabs that are shown in the recent list", () => {
+    const tabs = [
+      { id: "t1", alive: true, claudeSessionId: "sid-recent" },
+      { id: "t2", alive: true, claudeSessionId: "sid-unknown" },
+    ];
+    const result = findUnmatchedTabs([], tabs, [{ sessionId: "sid-recent" }]);
+    assert.deepEqual(
+      result.map((t) => t.id),
+      ["t2"]
     );
   });
 
@@ -117,5 +161,14 @@ describe("formatElapsed", () => {
   it("handles missing and future timestamps", () => {
     assert.equal(formatElapsed(null, now), "");
     assert.equal(formatElapsed(now + 5_000, now), "たった今");
+  });
+
+  it("accepts ISO strings (recent sessions use them)", () => {
+    const base = Date.parse("2026-08-17T05:00:00.000Z");
+    assert.equal(
+      formatElapsed("2026-08-17T03:00:00.000Z", base),
+      "2時間前"
+    );
+    assert.equal(formatElapsed("not a date", base), "");
   });
 });

@@ -30,7 +30,8 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - `tmux-session.js` -- tmux ペイン接続 (`TmuxSession`, `TmuxSessionManager`)。paneId は `%<数字>` 形式のバリデーション必須
 - `jsonl-watcher.js` -- JSONL ファイルの監視。`attachExisting` モードで既存セッションにも接続可能
 - `jsonl-utils.js` -- 共通ユーティリティ。`extractTextContent`, `extractToolUses`, `CLAUDE_PROJECTS_DIR` 等。jsonl-watcher.js と claude-sessions.js から参照
-- `claude-sessions.js` -- Claude セッション一覧・履歴読み込み
+- `claude-sessions.js` -- Claude セッション一覧・履歴読み込み。`listRecentSessions()` はホーム下段用（mtime で直近 N 日を絞る）
+- `session-summary.js` -- JSONL からカード用サマリ（タイトル・冒頭の依頼・直近のやりとり・cwd・ブランチ）を抽出。先頭 40 行＋末尾 128KB のみ読み、mtime でキャッシュ
 - `storage.js` -- `~/.claude-bridge/` への永続化。`appendInbox()` で agent への送信を inbox に書き込む
 - `claude-agents.js` -- `claude agents --json` から agent view のセッション一覧を取得
 - `running-sessions.js` -- ホーム画面用。`~/.claude/sessions/*.json`（pid/sessionId/cwd/name/status/tmux）を読み、`ps` の生存 PID で絞って「今起動中の Claude セッション」を返す。`tmux` フィールドの paneId は `%<数字>` 形式のみ採用
@@ -41,17 +42,22 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - `App.jsx` -- 状態管理の中心。`sessionsRef` で sessions の最新値を参照（stale closure 対策）
 - `ChatView.jsx` -- highlight.js は静的 import で13言語を登録。`EditDiff` は全文ハイライト後に行分割
 - `ThreadPanel.jsx` -- リサイズハンドルは `widthRef` で useCallback の依存を空に
-- `HomeView.jsx` -- ホーム画面（起動中セッション一覧）。`utils/runningSessions.js` の純粋関数で突合・整形
+- `HomeView.jsx` -- ホーム画面（起動中セッション＋直近セッション）。`utils/runningSessions.js` の純粋関数で突合・整形
 
-### ホーム画面（起動中セッション一覧）
+### ホーム画面（起動中セッション＋直近セッション）
 
-タブの左端の「⌂ Home」で開く既定画面。今このマシンで起動している Claude セッションを一覧し、ブリッジのタブとして開いているものを区別する。
+タブの左端の「⌂ Home」で開く既定画面。上段に「今このマシンで起動している Claude セッション」、下段に「直近 N 日に動いていた（起動していない）セッション」を並べ、ブリッジのタブとして開いているものを区別する。
 
-- データ源は `list_running_sessions` → `running_sessions`（`server/running-sessions.js`）。ブリッジのタブ（`session_list`）とは独立した情報で、突合はクライアントの `utils/runningSessions.js`（`annotateRunningSessions` / `findOpenTab`）が行う
+- 上段のデータ源は `list_running_sessions` → `running_sessions`（`server/running-sessions.js`）。ブリッジのタブ（`session_list`）とは独立した情報で、突合はクライアントの `utils/runningSessions.js`（`annotateRunningSessions` / `findOpenTab`）が行う
 - 突合キーは `claudeSessionId` 優先、無ければ `claudePid`（tmux タブは JSONL 未解決でも pid は分かる）。死んだタブは「開いている」と扱わない
 - 開いているセッションには「タブで表示中」バッジ＋左の色帯が付き、クリックでそのタブへ移動。未オープンは tmux ペインがあれば `attach_tmux_pane`、無ければ `open_readonly_session`（閲覧）で開く
-- 起動中セッションに紐づかないタブ（閲覧で開いた過去セッション・終了したタブ）は下段の「その他の開いているタブ」に出す
-- ホーム表示は `showHome` state（localStorage 記憶）。`activeSessionId` は保持したまま切り替えるため Home ⇄ 作業中タブを往復できる。一覧はホーム表示中のみ 5 秒間隔でポーリングする
+- 下段のデータ源は `list_recent_sessions {days}` → `recent_sessions`（`claude-sessions.js` の `listRecentSessions`）。`~/.claude/projects/**/*.jsonl` の mtime で絞る。起動中のものは `annotateRecentSessions` が除外するので上下段は重複しない。カードのクリック＝閲覧（`open_readonly_session`）、「再開」ボタン＝`resume_session`
+- 期間は 1/3/7/30 日のプリセット（既定 7 日、localStorage `homeRecentDays`）。サーバー側は `clampDays()` で 1〜365 に丸める
+- **Star（未解決／続きをやる印）**: カード右上の ☆/★ で付け外し。`utils/starredSessions.js` の純粋関数＋localStorage `homeStarredSessions`（claudeSessionId の配列）だけで管理し、サーバーには保存しない。Star 付きは上下段それぞれで先頭に並び（`sortStarredFirst`）、カード上辺に金色のライン、ヘッダに `★ N`。**Star 付きは期間外・limit 超過でも下段に必ず出す**（`list_recent_sessions` に `starred` を添え、`listRecentSessions({ includeSessionIds })` が期間フィルタと limit の外で拾う。サーバーは `sanitizeSessionIds()` で `/^[\w-]+$/`・200 件に制限）。star の付け外しでは一覧を取り直さない（JSONL 全走査を避けるため `starredRef` で送信時の値だけ使う）
+- カードには JSONL から抜いたタイトル（`ai-title`）・冒頭の依頼・直近のユーザー指示・直近の応答・git ブランチを出す（`server/session-summary.js`）。先頭 40 行と末尾 128KB だけ読み、mtime でキャッシュするのでポーリングしても読み直さない
+- `cwd` は projectDir 名から復元するとディレクトリ名のハイフンが壊れる（`claude-bridge` → `claude/bridge`）ため、JSONL に書かれた `cwd` を優先する。resume の起動先になるので重要
+- どちらの一覧にも紐づかないタブ（期間外のセッションを閲覧で開いた・終了したタブ）は最下段の「その他の開いているタブ」に出す
+- ホーム表示は `showHome` state（localStorage 記憶）。`activeSessionId` は保持したまま切り替えるため Home ⇄ 作業中タブを往復できる。起動中一覧はホーム表示中のみ 5 秒間隔でポーリングし、直近一覧はホームを開いた時・日数変更時・「更新」時だけ取得する（JSONL 全走査のため）
 
 ### agent view 連携（フックベース送信）
 
@@ -64,6 +70,7 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
   - **レビュー＝送る（pending review）**: `ReviewDraftPanel` で指摘を溜める。`save_review`/`get_review` で下書きを `review-<key>.json` に永続化（リロード/再オープンしても残る）。「Submit」で `submit_review` を投げると、**サーバーが対象セッション種別で送信先を出し分ける**（`readonly` → `storage.appendInbox(claudeSessionId)` ＝inbox / それ以外（PTY あり）→ `session.write` ＝Claude へ）。送信本文は `[レビュー N件] ...`。Submit 成功で下書きはクリア。ファイルプレビュー（`PreviewDrawer` の `reviewMode` + `ReviewPanel`）のファイルレビューも同じ `submit_review` 経由（各項目にファイル名を前置）で、readonly でも届く。
   - **コメント＝残す（参照専用）**: `save_comment`/`get_comments`/`delete_comment` ↔ `CommentPanel`（入力欄つき一覧）。`comments-<key>.json` に保存し**送信は一切しない**。セッションに対して残し、再オープン/resume/閲覧をまたいで参照できる。
   - メッセージ単位の Memo/Review ボタンや `CommentPopover`、`send_comment_to_claude` は廃止（`Thread` だけは別機能としてメッセージ単位で残存）。
+  - **プレビュー上の選択コメント**: コード/テキスト/Markdown は drawer 本文（`bodyRef`）の `mouseup` で選択を拾う。**HTML は iframe に描画されるため親の選択 API では拾えない**ので、`iframe.contentDocument` に直接 `mouseup` を張る（`/preview` は同一オリジンで `sandbox="allow-scripts allow-same-origin"` なのでアクセスできる）。ポップアップ位置は iframe の矩形分オフセットして本文座標に変換する。行・列は HTML ソースを別途 `fetch` し、表示テキスト上の出現順（`getOccurrenceIndex`）と同じ出現をソース内で探して（`findOccurrenceOffset`）算出する（`buildLocationInfo` の `kind: "html"`）。iframe 内には 💬 ガターは出せないので、位置は保存された `anchor.line`／ラベルで示す
 - **配信**（agent 側で受信）: claude-bridge 同梱フックを**グローバル** `~/.claude/settings.json` に登録（`npm run setup:hooks`）。
   - **turn 配信（Stop hook）に一本化**。応答終了ごとに発火し、inbox の未読をまとめて `{decision:"block", reason}` で注入する。対象が idle の場合は次の応答時に届く。常駐プロセス（monitor）は PID 再利用・サンドボックス・応答途中への割り込みで誤動作が多く廃止した
   - `scripts/hooks/bridge-check-inbox.js` -- Stop hook（turn 配信）の本体。応答終了時に未読を注入。`stop_hook_active` で無限ループ回避

@@ -47,6 +47,18 @@
   max-width: 1400px;
 }
 
+/* HTML は iframe にページがそのまま描画されるので、既定幅を 200px 広く取る
+   （ドラッグでリサイズすると inline style が優先されるので、ここは初期値だけ） */
+.drawer-html {
+  width: 70%;
+  max-width: 1200px;
+}
+
+.drawer-html.drawer-with-review {
+  width: 90%;
+  max-width: 1600px;
+}
+
 @keyframes drawer-slide-in {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }

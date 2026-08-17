@@ -1,29 +1,12 @@
-import { readdirSync, statSync, createReadStream } from "fs";
+import { readdirSync, statSync } from "fs";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { createInterface } from "readline";
 import {
   CLAUDE_PROJECTS_DIR,
   extractTextContent,
   extractToolUses,
 } from "./jsonl-utils.js";
-
-// JSONL の先頭 N 行だけ非同期で読む
-function readFirstLines(filePath, maxLines) {
-  return new Promise((resolve) => {
-    const lines = [];
-    const rl = createInterface({
-      input: createReadStream(filePath, { encoding: "utf-8" }),
-      crlfDelay: Infinity,
-    });
-    rl.on("line", (line) => {
-      lines.push(line);
-      if (lines.length >= maxLines) rl.close();
-    });
-    rl.on("close", () => resolve(lines));
-    rl.on("error", () => resolve(lines));
-  });
-}
+import { readFirstLines, readSessionSummary } from "./session-summary.js";
 
 // セッション JSONL から最初のユーザーメッセージを抽出
 function extractFirstUserMessage(lines) {
@@ -40,19 +23,19 @@ function extractFirstUserMessage(lines) {
   return "";
 }
 
-// ~/.claude/projects/ 以下のセッションを非同期で一覧
-export async function listClaudeSessions({ limit = 30 } = {}) {
+// ~/.claude/projects/ 以下の JSONL をファイル情報だけ集める（中身は読まない）。
+// dir はテストから差し替えられるようにしている。
+function collectSessionFiles(dir) {
   let projectDirs;
   try {
-    projectDirs = readdirSync(CLAUDE_PROJECTS_DIR);
+    projectDirs = readdirSync(dir);
   } catch {
     return [];
   }
 
-  // まずファイル情報だけ集める（高速）
   const candidates = [];
   for (const projectDir of projectDirs) {
-    const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
+    const projectPath = join(dir, projectDir);
     try {
       if (!statSync(projectPath).isDirectory()) continue;
     } catch {
@@ -78,6 +61,7 @@ export async function listClaudeSessions({ limit = 30 } = {}) {
           cwd,
           filePath,
           updatedAt: fileStat.mtime.toISOString(),
+          mtimeMs: fileStat.mtimeMs,
           size: fileStat.size,
         });
       } catch {
@@ -86,9 +70,52 @@ export async function listClaudeSessions({ limit = 30 } = {}) {
     }
   }
 
-  // 更新日時の降順でソートし、上位だけ詳細を読む
-  candidates.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-  const top = candidates.slice(0, limit);
+  // 更新日時の降順
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return candidates;
+}
+
+// ホーム画面用: 直近 days 日以内に更新されたセッション。
+// 起動中かどうかは見ない（突合はクライアント側）。
+export async function listRecentSessions({
+  days = 7,
+  limit = 50,
+  dir = CLAUDE_PROJECTS_DIR,
+  now = Date.now(),
+  includeSessionIds = [],
+} = {}) {
+  const since = now - days * 24 * 60 * 60 * 1000;
+  // Star を付けたセッションは「続きをやる」印なので、期間外でも limit で切らずに必ず返す
+  const pinned = new Set(includeSessionIds);
+  const files = collectSessionFiles(dir);
+  const top = [
+    ...files.filter((c) => pinned.has(c.sessionId)),
+    ...files
+      .filter((c) => !pinned.has(c.sessionId) && c.mtimeMs >= since)
+      .slice(0, limit),
+  ].sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  return Promise.all(
+    top.map(async (c) => {
+      // タイトル・冒頭の依頼・直近のやりとり（カードで中身が分かるように）
+      const summary = await readSessionSummary(c.filePath);
+      return {
+        sessionId: c.sessionId,
+        projectDir: c.projectDir,
+        updatedAt: c.updatedAt,
+        size: c.size,
+        ...summary,
+        // ディレクトリ名にハイフンを含むと projectDir からは cwd を復元できないので
+        // JSONL に書かれた cwd を優先する（再開時の起動先になる）
+        cwd: summary.cwd || c.cwd,
+      };
+    })
+  );
+}
+
+// ~/.claude/projects/ 以下のセッションを非同期で一覧
+export async function listClaudeSessions({ limit = 30 } = {}) {
+  const top = collectSessionFiles(CLAUDE_PROJECTS_DIR).slice(0, limit);
 
   // 先頭行だけ並列で読む
   const sessions = await Promise.all(
