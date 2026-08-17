@@ -66,11 +66,14 @@ export default function HomeView({
   activeSessionId,
   loading,
   recentLoading,
+  error,
+  onDismissError,
   onRefresh,
   onSelectTab,
   onAttachTmux,
   onOpenReadonly,
   onResume,
+  onResumeInTmux,
   onNew,
 }) {
   // Star を付けたものは「続きをやる」印なので、それぞれの一覧で先頭に寄せる
@@ -117,6 +120,14 @@ export default function HomeView({
     });
   };
 
+  const resumeInTmux = (r) => {
+    onResumeInTmux({
+      claudeSessionId: r.sessionId,
+      name: r.title || r.sessionId.slice(0, 8),
+      cwd: r.cwd,
+    });
+  };
+
   // カード全体のクリックは「一番やりたいこと」に割り当てる:
   // 開いていればそのタブへ移動、tmux ペインがあれば接続、無ければ閲覧で開く。
   const handleCardClick = (r) => {
@@ -144,6 +155,15 @@ export default function HomeView({
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="home-error">
+          <span className="home-error-text">{error}</span>
+          <button className="home-error-close" onClick={onDismissError} title="閉じる">
+            ×
+          </button>
+        </div>
+      )}
 
       {annotated.length === 0 ? (
         <p className="home-empty">
@@ -308,21 +328,29 @@ export default function HomeView({
                   >
                     {s.openTab ? (
                       <button
-                        className="home-action primary"
+                        className="home-action"
                         onClick={() => onSelectTab(s.openTab.id)}
                       >
                         タブへ移動
                       </button>
                     ) : (
-                      <button
-                        className="home-action primary"
-                        onClick={() => openReadonly(s)}
-                      >
+                      <button className="home-action" onClick={() => openReadonly(s)}>
                         閲覧で開く
                       </button>
                     )}
-                    <button className="home-action" onClick={() => resume(s)}>
-                      再開
+                    <button
+                      className="home-action primary"
+                      onClick={() => resumeInTmux(s)}
+                      title="tmux に新しい window を作って claude --resume で起こす。ブリッジを落としても生き残り、ターミナルからも操作できる"
+                    >
+                      tmux で再開
+                    </button>
+                    <button
+                      className="home-action"
+                      onClick={() => resume(s)}
+                      title="ブリッジ内で claude を起動（サーバーを落とすと終了・ブラウザからのみ操作）"
+                    >
+                      再開（内蔵）
                     </button>
                   </div>
                 </div>
