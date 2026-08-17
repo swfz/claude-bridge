@@ -7,7 +7,11 @@ import { fileURLToPath } from "url";
 import { SessionManager, ReadonlySessionManager } from "./session.js";
 import { Storage } from "./storage.js";
 import { ThreadStore } from "./thread-store.js";
-import { listClaudeSessions, loadSessionHistory } from "./claude-sessions.js";
+import {
+  listClaudeSessions,
+  listRecentSessions,
+  loadSessionHistory,
+} from "./claude-sessions.js";
 import { JsonlWatcher } from "./jsonl-watcher.js";
 import { cwdToProjectDir } from "./jsonl-utils.js";
 import {
@@ -239,6 +243,22 @@ const tmuxSessionManager = new TmuxSessionManager();
 const readonlySessionManager = new ReadonlySessionManager();
 const threadStore = new ThreadStore(storage);
 const jsonlWatcher = new JsonlWatcher();
+
+// クライアントから来るセッション ID 配列（Star 付きなど）を検証する。
+// ファイル名の一部になるので inbox と同じ文字種に限り、件数も抑える。
+function sanitizeSessionIds(ids) {
+  if (!Array.isArray(ids)) return [];
+  return ids
+    .filter((id) => typeof id === "string" && /^[\w-]+$/.test(id))
+    .slice(0, 200);
+}
+
+// ホーム画面の「直近のセッション」の期間。クライアント指定を 1〜365 日に丸める
+function clampDays(days) {
+  const n = Number(days);
+  if (!Number.isFinite(n)) return 7;
+  return Math.min(365, Math.max(1, Math.floor(n)));
+}
 
 function findSession(id) {
   return (
@@ -757,6 +777,19 @@ wss.on("connection", (ws) => {
         // どれがタブとして開かれているかの突合はクライアント側で行う。
         listRunningSessions().then((running) => {
           ws.send(JSON.stringify({ type: "running_sessions", sessions: running }));
+        });
+        break;
+      }
+
+      case "list_recent_sessions": {
+        // ホーム画面用: 直近 days 日に更新された Claude セッション（終了済みも含む）。
+        // 起動中セッションとの重複除去はクライアント側で行う。
+        const days = clampDays(msg.days);
+        const starred = sanitizeSessionIds(msg.starred);
+        listRecentSessions({ days, limit: 50, includeSessionIds: starred }).then((recent) => {
+          ws.send(
+            JSON.stringify({ type: "recent_sessions", days, sessions: recent })
+          );
         });
         break;
       }

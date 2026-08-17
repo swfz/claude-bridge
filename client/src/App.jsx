@@ -12,6 +12,11 @@ import PreviewDrawer from "./components/PreviewDrawer.jsx";
 import FileExplorer from "./components/FileExplorer.jsx";
 import AgentSidePanel from "./components/AgentSidePanel.jsx";
 import HomeView from "./components/HomeView.jsx";
+import {
+  loadStarred,
+  saveStarred,
+  toggleStarred,
+} from "./utils/starredSessions.js";
 import "./App.css";
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
@@ -33,6 +38,16 @@ export default function App() {
   );
   // サーバーが返す「今このマシンで起動中の Claude セッション」。null = 未取得
   const [runningSessions, setRunningSessions] = useState(null);
+  // ホームの「直近のセッション」（終了済みを含む JSONL 由来）。null = 未取得
+  const [recentSessions, setRecentSessions] = useState(null);
+  const [recentDays, setRecentDays] = useState(
+    () => Number(localStorage.getItem("homeRecentDays")) || 7
+  );
+  // 「未解決／続きをやる」印を付けた claudeSessionId（localStorage のみ）
+  const [starredSessions, setStarredSessions] = useState(loadStarred);
+  // 一覧取得時に添えるだけなので、star の変更で再取得は走らせない（JSONL 走査を避ける）
+  const starredRef = useRef(starredSessions);
+  starredRef.current = starredSessions;
   // アプリ全体のテーマ（背景/UI）。localStorage で記憶。プレビュー本文の独自トグルとは独立。
   const [appTheme, setAppTheme] = useState(
     () => localStorage.getItem("appTheme") || "dark"
@@ -228,6 +243,12 @@ export default function App() {
     });
   }, [on]);
 
+  useEffect(() => {
+    return on("recent_sessions", (msg) => {
+      setRecentSessions(msg.sessions || []);
+    });
+  }, [on]);
+
   // ホーム表示中だけポーリングする（裏では取りに行かない）
   useEffect(() => {
     if (!showHome || !connected) return;
@@ -238,6 +259,29 @@ export default function App() {
     );
     return () => clearInterval(timer);
   }, [showHome, connected, send]);
+
+  // 直近セッションは JSONL 全走査になるので、ホームを開いた時と日数変更時だけ取る。
+  // starred は「期間外でも一覧に含める対象」としてサーバーに渡す
+  useEffect(() => {
+    if (!showHome || !connected) return;
+    send({
+      type: "list_recent_sessions",
+      days: recentDays,
+      starred: starredRef.current,
+    });
+  }, [showHome, connected, recentDays, send]);
+
+  useEffect(() => {
+    localStorage.setItem("homeRecentDays", String(recentDays));
+  }, [recentDays]);
+
+  useEffect(() => {
+    saveStarred(starredSessions);
+  }, [starredSessions]);
+
+  const handleToggleStar = useCallback((sessionId) => {
+    setStarredSessions((prev) => toggleStarred(prev, sessionId));
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("showHome", String(showHome));
@@ -788,13 +832,27 @@ export default function App() {
           {showHome ? (
             <HomeView
               runningSessions={runningSessions}
+              recentSessions={recentSessions}
+              recentDays={recentDays}
+              onChangeRecentDays={setRecentDays}
+              starred={starredSessions}
+              onToggleStar={handleToggleStar}
               sessions={sessions}
               activeSessionId={activeSessionId}
               loading={runningSessions === null}
-              onRefresh={() => send({ type: "list_running_sessions" })}
+              recentLoading={recentSessions === null}
+              onRefresh={() => {
+                send({ type: "list_running_sessions" });
+                send({
+                  type: "list_recent_sessions",
+                  days: recentDays,
+                  starred: starredSessions,
+                });
+              }}
               onSelectTab={handleSwitchSession}
               onAttachTmux={handleAttachTmux}
               onOpenReadonly={handleOpenReadonly}
+              onResume={handleResumeSession}
               onNew={() => setShowNewSession(true)}
             />
           ) : activeSessionId ? (

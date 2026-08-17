@@ -3,6 +3,8 @@ import { promisify } from "util";
 import { readFile, readdir } from "fs/promises";
 import { join } from "path";
 import { SESSIONS_DIR } from "./claude-session-meta.js";
+import { readSessionSummaryFor } from "./session-summary.js";
+import { CLAUDE_PROJECTS_DIR } from "./jsonl-utils.js";
 
 const execAsync = promisify(exec);
 
@@ -53,7 +55,11 @@ export async function readLivePids() {
 // 起動中の Claude セッション一覧。~/.claude/sessions/*.json を読み、
 // プロセスが生きているものだけを最終更新の新しい順で返す。
 // dir / livePids はテストから差し替えられるようにしている。
-export async function listRunningSessions({ dir = SESSIONS_DIR, livePids } = {}) {
+export async function listRunningSessions({
+  dir = SESSIONS_DIR,
+  livePids,
+  projectsDir = CLAUDE_PROJECTS_DIR,
+} = {}) {
   let files;
   try {
     files = await readdir(dir);
@@ -75,7 +81,18 @@ export async function listRunningSessions({ dir = SESSIONS_DIR, livePids } = {})
   );
 
   const alive = livePids !== undefined ? livePids : await readLivePids();
-  return metas
+  const running = metas
     .filter((m) => m && (alive === null || alive.has(m.pid)))
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+
+  // カードで中身が分かるよう JSONL からタイトル・直近のやりとりを添える
+  // （mtime キャッシュ済みなのでポーリングしても読み直さない）
+  return Promise.all(
+    running.map(async (m) => ({
+      ...m,
+      ...(await readSessionSummaryFor(m.cwd, m.sessionId, projectsDir)),
+      // cwd はセッションメタ側が正（JSONL 由来で上書きしない）
+      cwd: m.cwd,
+    }))
+  );
 }

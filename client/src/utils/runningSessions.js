@@ -24,16 +24,34 @@ export function annotateRunningSessions(runningSessions, bridgeSessions) {
   }));
 }
 
-// 起動中セッションに紐づかない「開いているタブ」を返す。
-// 閲覧（readonly）で開いた過去セッションや、claude が終了したタブなど、
-// ホーム画面の主一覧には出ないがブラウザからは開いたままのものを拾う。
-export function findUnmatchedTabs(runningSessions, bridgeSessions) {
+// 起動中セッションにも直近セッションにも紐づかない「開いているタブ」を返す。
+// 閲覧（readonly）で開いた古いセッションや、claude が終了したタブなど、
+// ホーム画面の一覧には出ないがブラウザからは開いたままのものを拾う。
+export function findUnmatchedTabs(runningSessions, bridgeSessions, recentSessions) {
   const matched = new Set(
-    annotateRunningSessions(runningSessions, bridgeSessions)
+    [
+      ...annotateRunningSessions(runningSessions, bridgeSessions),
+      ...annotateRecentSessions(recentSessions, runningSessions, bridgeSessions),
+    ]
       .map((r) => r.openTab?.id)
       .filter(Boolean)
   );
   return (bridgeSessions || []).filter((s) => !matched.has(s.id));
+}
+
+// 直近のセッション（終了済みを含む JSONL 由来の一覧）を整形する。
+// 今起動中のものは上段のカードに出ているので除き、タブとして開いていれば openTab を付ける。
+export function annotateRecentSessions(recentSessions, runningSessions, bridgeSessions) {
+  const runningIds = new Set(
+    (runningSessions || []).map((r) => r.sessionId).filter(Boolean)
+  );
+  const tabs = (bridgeSessions || []).filter((s) => s.alive);
+  return (recentSessions || [])
+    .filter((s) => !runningIds.has(s.sessionId))
+    .map((s) => ({
+      ...s,
+      openTab: tabs.find((t) => t.claudeSessionId === s.sessionId) || null,
+    }));
 }
 
 // status 値（busy / shell / idle など）を表示用の 2 値に落とす。
@@ -42,9 +60,12 @@ export function statusClass(status) {
 }
 
 // 経過時間の短い日本語表記（ホームのカードに出す最終更新）。
+// 数値（epoch ms）と ISO 文字列のどちらも受ける。
 export function formatElapsed(timestamp, now = Date.now()) {
   if (!timestamp) return "";
-  const sec = Math.floor((now - timestamp) / 1000);
+  const ms = typeof timestamp === "string" ? Date.parse(timestamp) : timestamp;
+  if (!Number.isFinite(ms)) return "";
+  const sec = Math.floor((now - ms) / 1000);
   if (sec < 0) return "たった今";
   if (sec < 60) return `${sec}秒前`;
   const min = Math.floor(sec / 60);
