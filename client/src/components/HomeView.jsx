@@ -90,10 +90,14 @@ export default function HomeView({
     isStarred(starred, s.sessionId)
   ).length;
 
+  // タブの識別名はカードに出しているサマリー（AI タイトル）を優先する。
+  // r.name は自動生成スラッグで中身が分からないことが多い。
+  const tabName = (r) => r.title || r.name || r.sessionId.slice(0, 8);
+
   const openTmux = (r) => {
     onAttachTmux({
       paneId: r.paneId,
-      name: r.name || r.title || r.sessionId.slice(0, 8),
+      name: tabName(r),
       cwd: r.cwd,
       target: r.tmuxTarget,
       claudePid: r.pid,
@@ -105,7 +109,7 @@ export default function HomeView({
   const openReadonly = (r) => {
     onOpenReadonly({
       claudeSessionId: r.sessionId,
-      name: r.name || r.title || r.sessionId.slice(0, 8),
+      name: tabName(r),
       cwd: r.cwd,
       projectDir: r.projectDir,
     });
@@ -114,7 +118,7 @@ export default function HomeView({
   const resume = (r) => {
     onResume({
       claudeSessionId: r.sessionId,
-      name: r.title || r.sessionId.slice(0, 8),
+      name: tabName(r),
       cwd: r.cwd,
       projectDir: r.projectDir,
     });
@@ -123,7 +127,7 @@ export default function HomeView({
   const resumeInTmux = (r) => {
     onResumeInTmux({
       claudeSessionId: r.sessionId,
-      name: r.title || r.sessionId.slice(0, 8),
+      name: tabName(r),
       cwd: r.cwd,
     });
   };

@@ -41,7 +41,9 @@ export default function SessionTabs({
                 title={session.status}
               />
             )}
-            <span className="tab-name">{session.name}</span>
+            <span className="tab-name" title={session.name}>
+              {session.name}
+            </span>
             <span
               className={`tab-cwd ${session.type === "tmux" ? "tab-cwd-strong" : ""}`}
               title={session.cwd}
