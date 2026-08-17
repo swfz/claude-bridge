@@ -43,6 +43,8 @@ export default function App() {
   const [recentDays, setRecentDays] = useState(
     () => Number(localStorage.getItem("homeRecentDays")) || 7
   );
+  // ホーム画面の操作エラー（tmux 再開の失敗など）。チャット欄には出せないのでバナーで見せる
+  const [homeError, setHomeError] = useState(null);
   // 「未解決／続きをやる」印を付けた claudeSessionId（localStorage のみ）
   const [starredSessions, setStarredSessions] = useState(loadStarred);
   // 一覧取得時に添えるだけなので、star の変更で再取得は走らせない（JSONL 走査を避ける）
@@ -153,6 +155,11 @@ export default function App() {
       ]);
     });
   }, [on, updateSessionMessages]);
+
+  // ホーム画面の操作エラー（tmux window 作成の失敗など）
+  useEffect(() => {
+    return on("home_error", (msg) => setHomeError(msg.message));
+  }, [on]);
 
   // JSONL ベースの chat_message を受信。
   // active かどうかは見ず、必ず bridgeSessionId のメッセージ列に積む（混線防止）。
@@ -425,6 +432,17 @@ export default function App() {
       send({ type: "resume_session", claudeSessionId, name, cwd });
       setShowNewSession(false);
       setClaudeSessions(null);
+    },
+    [send]
+  );
+
+  // tmux に新しい window を作って `claude --resume` で起こす。
+  // PTY 直起動（handleResumeSession）と違い、ブリッジを落としても生き残る。
+  const handleResumeInTmux = useCallback(
+    ({ claudeSessionId, name, cwd }) => {
+      setHomeError(null);
+      send({ type: "resume_in_tmux", claudeSessionId, name, cwd });
+      setShowNewSession(false);
     },
     [send]
   );
@@ -841,7 +859,10 @@ export default function App() {
               activeSessionId={activeSessionId}
               loading={runningSessions === null}
               recentLoading={recentSessions === null}
+              error={homeError}
+              onDismissError={() => setHomeError(null)}
               onRefresh={() => {
+                setHomeError(null);
                 send({ type: "list_running_sessions" });
                 send({
                   type: "list_recent_sessions",
@@ -853,6 +874,7 @@ export default function App() {
               onAttachTmux={handleAttachTmux}
               onOpenReadonly={handleOpenReadonly}
               onResume={handleResumeSession}
+              onResumeInTmux={handleResumeInTmux}
               onNew={() => setShowNewSession(true)}
             />
           ) : activeSessionId ? (

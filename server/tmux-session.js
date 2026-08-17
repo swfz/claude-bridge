@@ -67,6 +67,90 @@ function escapeForShell(str) {
   return "'" + str.replace(/'/g, "'\\''") + "'";
 }
 
+// tmux サーバーが動いていないときに作る受け皿セッション名
+const FALLBACK_TMUX_SESSION = "bridge";
+// シェルの rc 読み込み中に send-keys すると入力が食われることがあるので少し待つ
+const SHELL_READY_DELAY_MS = 400;
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// `tmux list-sessions -F "#{session_last_attached}\t#{session_name}"` の出力から
+// 直近にアタッチされたセッション名を選ぶ。候補がなければ null。
+export function pickTargetSession(stdout) {
+  const rows = (stdout || "")
+    .trim()
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => {
+      const [lastAttached, name] = line.split("\t");
+      return { name, lastAttached: Number(lastAttached) || 0 };
+    })
+    .filter((r) => r.name && /^[\w.:-]+$/.test(r.name));
+
+  if (rows.length === 0) return null;
+  return rows.sort((a, b) => b.lastAttached - a.lastAttached)[0].name;
+}
+
+// window 名。tmux の target 記法（`sess:win.pane`）と衝突しない文字だけにする
+export function buildResumeWindowName(claudeSessionId) {
+  return `claude-${String(claudeSessionId).replace(/[^\w-]/g, "").slice(0, 8)}`;
+}
+
+// tmux に新しい window を作り、そこで `claude --resume <id>` を起動する。
+// PTY 直起動（resume_session）と違い、claude は tmux 側のプロセスになるので
+// ブリッジを落としても生き続け、ターミナルからも操作できる。
+export async function resumeInTmuxWindow({ claudeSessionId, cwd }) {
+  if (!/^[\w-]+$/.test(claudeSessionId || "")) {
+    throw new Error(`Invalid claudeSessionId: ${claudeSessionId}`);
+  }
+
+  const windowName = buildResumeWindowName(claudeSessionId);
+  const cwdArg = cwd ? ` -c ${escapeForShell(cwd)}` : "";
+  const format =
+    "-P -F '#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}'";
+
+  // 直近使ったセッションに window を足す。tmux サーバー自体が無ければ受け皿を作る
+  // （new-session の初期 window をそのまま使うので空 window は残らない）。
+  let sessionName = null;
+  try {
+    const { stdout } = await execAsync(
+      'tmux list-sessions -F "#{session_last_attached}\t#{session_name}"'
+    );
+    sessionName = pickTargetSession(stdout);
+  } catch {
+    sessionName = null;
+  }
+
+  const command = sessionName
+    ? `tmux new-window -t ${sessionName} -n ${escapeForShell(windowName)}${cwdArg} ${format}`
+    : `tmux new-session -d -s ${FALLBACK_TMUX_SESSION} -n ${escapeForShell(windowName)}${cwdArg} ${format}`;
+
+  let stdout;
+  try {
+    ({ stdout } = await execAsync(command));
+  } catch (e) {
+    // tmux 自体が無い場合はコマンド全文を見せても意味がないので短く伝える
+    if (/tmux: (not found|command not found)/.test(e.message)) {
+      throw new Error("tmux コマンドが見つかりません（内蔵の「再開（内蔵）」を使ってください）");
+    }
+    throw new Error(`tmux window の作成に失敗しました: ${e.message}`);
+  }
+
+  const [paneId, target] = stdout.trim().split("\t");
+  validatePaneId(paneId);
+
+  // シェル経由で流すので rc（mise/nvm 等）を通る。claude を抜けてもペインは残る
+  await delay(SHELL_READY_DELAY_MS);
+  await sendKeysToPane(paneId, `claude --resume ${claudeSessionId}`);
+
+  return {
+    paneId,
+    target: target || paneId,
+    sessionName: sessionName || FALLBACK_TMUX_SESSION,
+    windowName,
+  };
+}
+
 export function resolveTmuxJsonlTarget({ claudeSessionId, cwd }) {
   if (!claudeSessionId) return null;
   return {

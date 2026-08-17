@@ -17,6 +17,7 @@ import { cwdToProjectDir } from "./jsonl-utils.js";
 import {
   listClaudeTmuxPanes,
   resolveTmuxJsonlTarget,
+  resumeInTmuxWindow,
   TmuxSessionManager,
 } from "./tmux-session.js";
 import { listClaudeAgents } from "./claude-agents.js";
@@ -284,6 +285,52 @@ function allSessions() {
 
 function broadcastSessionList() {
   broadcast({ type: "session_list", sessions: allSessions() });
+}
+
+// 閉じた WebSocket への送信は 'error' を emit してプロセスを落とし得るので、
+// 非同期処理の完了後に返すものはこれを通す（リロードで ws が消えていても続行する）。
+function sendTo(ws, payload) {
+  if (ws.readyState !== ws.OPEN) return;
+  ws.send(JSON.stringify(payload));
+}
+
+// tmux ペインをブリッジのタブとして開く。attach_tmux_pane（既存ペインへの接続）と
+// resume_in_tmux（新しい window で resume 起動）の共通処理。
+function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, claudeSessionId, status }) {
+  const session = tmuxSessionManager.attachPane({
+    paneId,
+    name: name || `tmux: ${target}`,
+    cwd,
+    target,
+    claudePid,
+    status,
+  });
+
+  // ペインごとに解決済みの sessionId がある場合だけ JSONL に紐づける。
+  // cwd の最新 JSONL 推定は、複数 tmux セッション/同一 cwd で取り違えるため使わない。
+  const resolved = resolveTmuxJsonlTarget({ claudeSessionId, cwd });
+  if (resolved) {
+    loadSessionHistory(resolved.sessionId, resolved.projectDir).then((history) => {
+      sendTo(ws, {
+        type: "session_history",
+        bridgeSessionId: session.id,
+        messages: history,
+      });
+    });
+
+    // JSONL 監視開始（新規メッセージのみ配信）
+    jsonlWatcher.startWatching({
+      bridgeSessionId: session.id,
+      cwd,
+      sessionId: resolved.sessionId,
+      attachExisting: true,
+      onMessage: (chatMsg) => broadcast(chatMsg),
+    });
+  }
+
+  sendTo(ws, { type: "session_opened", bridgeSessionId: session.id });
+  broadcastSessionList();
+  return session;
 }
 
 // コメント/レビューの保存キーを解決する。claudeSessionId を優先し、無ければ
@@ -802,48 +849,45 @@ wss.on("connection", (ws) => {
       }
 
       case "attach_tmux_pane": {
-        const session = tmuxSessionManager.attachPane({
+        attachTmuxPaneAsSession(ws, {
           paneId: msg.paneId,
-          name: msg.name || `tmux: ${msg.target}`,
+          name: msg.name,
           cwd: msg.cwd,
           target: msg.target,
           claudePid: msg.claudePid,
+          claudeSessionId: msg.claudeSessionId,
           status: msg.status,
         });
+        break;
+      }
 
-        // ペインごとに解決済みの sessionId がある場合だけ JSONL に紐づける。
-        // cwd の最新 JSONL 推定は、複数 tmux セッション/同一 cwd で取り違えるため使わない。
-        const resolved = resolveTmuxJsonlTarget({
+      case "resume_in_tmux": {
+        // 起動していないセッションを tmux 側で起こす。PTY 直起動（resume_session）と違い
+        // ブリッジを落としても生き残り、ターミナルからも操作できる。
+        resumeInTmuxWindow({
           claudeSessionId: msg.claudeSessionId,
           cwd: msg.cwd,
-        });
-        if (resolved) {
-          loadSessionHistory(resolved.sessionId, resolved.projectDir).then(
-            (history) => {
-              ws.send(
-                JSON.stringify({
-                  type: "session_history",
-                  bridgeSessionId: session.id,
-                  messages: history,
-                })
-              );
-            }
-          );
-
-          // JSONL 監視開始（新規メッセージのみ配信）
-          jsonlWatcher.startWatching({
-            bridgeSessionId: session.id,
-            cwd: msg.cwd,
-            sessionId: resolved.sessionId,
-            attachExisting: true,
-            onMessage: (chatMsg) => broadcast(chatMsg),
+        })
+          .then((pane) => {
+            attachTmuxPaneAsSession(ws, {
+              paneId: pane.paneId,
+              name: msg.name || pane.windowName,
+              cwd: msg.cwd,
+              target: pane.target,
+              // claude はシェル経由で起動するので pid はまだ分からない。
+              // 起動中一覧のポーリングで拾えるので null のままにする。
+              claudePid: null,
+              claudeSessionId: msg.claudeSessionId,
+              status: null,
+            });
+          })
+          .catch((e) => {
+            console.error("resume_in_tmux failed:", e.message);
+            sendTo(ws, {
+              type: "home_error",
+              message: `tmux で再開できませんでした: ${e.message}`,
+            });
           });
-        }
-
-        ws.send(
-          JSON.stringify({ type: "session_opened", bridgeSessionId: session.id })
-        );
-        broadcastSessionList();
         break;
       }
 

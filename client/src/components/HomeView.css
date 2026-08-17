@@ -37,6 +37,39 @@
   padding: 24px 0;
 }
 
+/* ホームでの操作エラー（tmux 再開の失敗など）。チャット欄に出せないのでここで見せる */
+.home-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid #c05252;
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: rgba(192, 82, 82, 0.12);
+}
+
+.home-error-text {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.home-error-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.home-error-close:hover {
+  color: var(--text-primary);
+}
+
 .home-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

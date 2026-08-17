@@ -27,7 +27,7 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 
 - `index.js` -- エントリポイント。メッセージルーティング。ヘルパー `findSession()` / `broadcastSessionList()` でセッション操作を集約
 - `session.js` -- node-pty セッション管理 (`Session`, `SessionManager`)
-- `tmux-session.js` -- tmux ペイン接続 (`TmuxSession`, `TmuxSessionManager`)。paneId は `%<数字>` 形式のバリデーション必須
+- `tmux-session.js` -- tmux ペイン接続 (`TmuxSession`, `TmuxSessionManager`) と、新しい window で `claude --resume` を起こす `resumeInTmuxWindow()`。paneId は `%<数字>` 形式のバリデーション必須
 - `jsonl-watcher.js` -- JSONL ファイルの監視。`attachExisting` モードで既存セッションにも接続可能
 - `jsonl-utils.js` -- 共通ユーティリティ。`extractTextContent`, `extractToolUses`, `CLAUDE_PROJECTS_DIR` 等。jsonl-watcher.js と claude-sessions.js から参照
 - `claude-sessions.js` -- Claude セッション一覧・履歴読み込み。`listRecentSessions()` はホーム下段用（mtime で直近 N 日を絞る）
@@ -51,7 +51,12 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - 上段のデータ源は `list_running_sessions` → `running_sessions`（`server/running-sessions.js`）。ブリッジのタブ（`session_list`）とは独立した情報で、突合はクライアントの `utils/runningSessions.js`（`annotateRunningSessions` / `findOpenTab`）が行う
 - 突合キーは `claudeSessionId` 優先、無ければ `claudePid`（tmux タブは JSONL 未解決でも pid は分かる）。死んだタブは「開いている」と扱わない
 - 開いているセッションには「タブで表示中」バッジ＋左の色帯が付き、クリックでそのタブへ移動。未オープンは tmux ペインがあれば `attach_tmux_pane`、無ければ `open_readonly_session`（閲覧）で開く
-- 下段のデータ源は `list_recent_sessions {days}` → `recent_sessions`（`claude-sessions.js` の `listRecentSessions`）。`~/.claude/projects/**/*.jsonl` の mtime で絞る。起動中のものは `annotateRecentSessions` が除外するので上下段は重複しない。カードのクリック＝閲覧（`open_readonly_session`）、「再開」ボタン＝`resume_session`
+- 下段のデータ源は `list_recent_sessions {days}` → `recent_sessions`（`claude-sessions.js` の `listRecentSessions`）。`~/.claude/projects/**/*.jsonl` の mtime で絞る。起動中のものは `annotateRecentSessions` が除外するので上下段は重複しない。カードのクリック＝閲覧（`open_readonly_session`）
+- **下段の起こし方は 2 つ**（用途が違うので両方残している）
+  - **「tmux で再開」＝ `resume_in_tmux`（既定・primary）**: `resumeInTmuxWindow()`（`server/tmux-session.js`）が **直近アタッチされた tmux セッションに新しい window を作り**（`tmux list-sessions` の `session_last_attached` 最大＝`pickTargetSession()`）、シェルを起こしてから `send-keys` で `claude --resume <id>` を流す。作成後は `attachTmuxPaneAsSession()`（`server/index.js` の共通ヘルパー。`attach_tmux_pane` と共用）で tmux タブとして開き、JSONL 監視＋履歴読み込みまで行う。tmux サーバーが動いていない場合だけ `bridge` セッションを `new-session -d` で作り、その初期 window をそのまま使う（空 window を残さない）。claude の pid は起動直後には分からないので `claudePid: null` で開き、上段のポーリングで拾わせる
+  - **「再開（内蔵）」＝ `resume_session`**: node-pty でブリッジの子プロセスとして `claude --resume` を起動する従来モード。ブリッジを落とすと claude も死に、ターミナルからは触れず、シェルの rc を通らないので env が違う。手軽さ用に残してあるが既定にはしない
+  - 失敗時は `home_error` を返し、HomeView 上部の `.home-error` バナーで見せる（チャット欄の `error` はホーム表示中に見えないため別経路）。tmux 未インストールはコマンド全文ではなく短文にする
+  - シェルに渡す値の検証: `claudeSessionId` は `/^[\w-]+$/`、tmux セッション名は `validateSessionName()` 相当の `/^[\w.:-]+$/`、生成された paneId は `validatePaneId()`（`%<数字>`）、cwd と window 名は `escapeForShell()`
 - 期間は 1/3/7/30 日のプリセット（既定 7 日、localStorage `homeRecentDays`）。サーバー側は `clampDays()` で 1〜365 に丸める
 - **Star（未解決／続きをやる印）**: カード右上の ☆/★ で付け外し。`utils/starredSessions.js` の純粋関数＋localStorage `homeStarredSessions`（claudeSessionId の配列）だけで管理し、サーバーには保存しない。Star 付きは上下段それぞれで先頭に並び（`sortStarredFirst`）、カード上辺に金色のライン、ヘッダに `★ N`。**Star 付きは期間外・limit 超過でも下段に必ず出す**（`list_recent_sessions` に `starred` を添え、`listRecentSessions({ includeSessionIds })` が期間フィルタと limit の外で拾う。サーバーは `sanitizeSessionIds()` で `/^[\w-]+$/`・200 件に制限）。star の付け外しでは一覧を取り直さない（JSONL 全走査を避けるため `starredRef` で送信時の値だけ使う）
 - カードには JSONL から抜いたタイトル（`ai-title`）・冒頭の依頼・直近のユーザー指示・直近の応答・git ブランチを出す（`server/session-summary.js`）。先頭 40 行と末尾 128KB だけ読み、mtime でキャッシュするのでポーリングしても読み直さない
