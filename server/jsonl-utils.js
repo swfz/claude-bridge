@@ -56,6 +56,14 @@ function toolUseSummary(name, input) {
       return `${input.pattern}${input.path ? " in " + shortPath(input.path) : ""}`;
     case "Agent":
       return input.description || "Agent";
+    case "AskUserQuestion":
+      // 回答済みの選択肢は会話ログに残るので、何を聞かれたかが分かるようにする
+      return (
+        (input.questions || [])
+          .map((q) => q?.question)
+          .filter(Boolean)
+          .join(" / ") || "AskUserQuestion"
+      );
     default:
       return name;
   }
