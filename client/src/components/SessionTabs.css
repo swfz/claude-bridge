@@ -1,7 +1,7 @@
 .session-tabs {
   display: flex;
   flex-direction: column;
-  width: 240px;
+  position: relative;
   flex-shrink: 0;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
@@ -9,6 +9,21 @@
   padding: 8px 6px;
   gap: 6px;
   overflow: hidden;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: var(--accent);
 }
 
 /* ホームは常に最上段に固定 */
@@ -190,6 +205,18 @@
 
 .tab-status-idle {
   background: var(--success);
+}
+
+.tab-status-waiting {
+  background: var(--warning, #f0ad4e);
+  box-shadow: 0 0 6px 2px var(--warning, #f0ad4e);
+  animation: tab-status-pulse 1.2s ease-in-out infinite;
+}
+
+.tab-badge-waiting {
+  background: var(--warning, #f0ad4e);
+  color: #1a1200;
+  animation: tab-status-pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes tab-status-pulse {

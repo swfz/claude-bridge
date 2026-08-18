@@ -1,4 +1,15 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./SessionTabs.css";
+
+const MIN_WIDTH = 160;
+const MAX_WIDTH = 480;
+const DEFAULT_WIDTH = 240;
+
+function readStoredWidth() {
+  const stored = Number(localStorage.getItem("sidebarWidth"));
+  if (!Number.isFinite(stored) || stored <= 0) return DEFAULT_WIDTH;
+  return Math.max(MIN_WIDTH, Math.min(stored, MAX_WIDTH));
+}
 
 export default function SessionTabs({
   sessions,
@@ -13,8 +24,44 @@ export default function SessionTabs({
   onCloseReadonly,
   onNew,
 }) {
+  const [width, setWidth] = useState(readStoredWidth);
+  const widthRef = useRef(width);
+  widthRef.current = width;
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  useEffect(() => {
+    localStorage.setItem("sidebarWidth", String(width));
+  }, [width]);
+
+  const onDragStart = useCallback((e) => {
+    e.preventDefault();
+    dragging.current = true;
+    startX.current = e.clientX;
+    startWidth.current = widthRef.current;
+
+    const onMove = (ev) => {
+      if (!dragging.current) return;
+      const delta = ev.clientX - startX.current;
+      setWidth(Math.max(MIN_WIDTH, Math.min(startWidth.current + delta, MAX_WIDTH)));
+    };
+    const onUp = () => {
+      dragging.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
+
   return (
-    <div className="session-tabs">
+    <div className="session-tabs" style={{ width, minWidth: width }}>
+      <div
+        className="sidebar-resize-handle"
+        onMouseDown={onDragStart}
+        onDragStart={(e) => e.preventDefault()}
+      />
       <button
         className={`tab-home ${homeActive ? "active" : ""}`}
         onClick={onHome}
@@ -44,6 +91,16 @@ export default function SessionTabs({
               )}
               {session.type === "readonly" && (
                 <span className="tab-badge">閲覧</span>
+              )}
+              {session.waitingFor && session.alive && (
+                <span
+                  className="tab-badge tab-badge-waiting"
+                  title={session.waitingFor}
+                >
+                  {session.waitingFor === "permission prompt"
+                    ? "許可待ち"
+                    : "回答待ち"}
+                </span>
               )}
               <span className="tab-name" title={session.name}>
                 {session.name}
