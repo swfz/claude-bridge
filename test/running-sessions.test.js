@@ -7,6 +7,7 @@ import {
   parsePaneId,
   normalizeRunningSession,
   listRunningSessions,
+  mapPaneIdsToPids,
 } from "../server/running-sessions.js";
 
 describe("parsePaneId", () => {
@@ -146,5 +147,70 @@ describe("listRunningSessions", () => {
       livePids: new Set(),
     });
     assert.deepEqual(result, []);
+  });
+});
+
+describe("mapPaneIdsToPids", () => {
+  async function makeDir(files) {
+    const dir = await mkdtemp(join(tmpdir(), "cb-sessions-"));
+    for (const [name, content] of Object.entries(files)) {
+      await writeFile(join(dir, name), content);
+    }
+    return dir;
+  }
+
+  it("resolves a pid from a matching, alive paneId", async () => {
+    const dir = await makeDir({
+      "1.json": JSON.stringify({ pid: 1, sessionId: "a", tmux: "0:@1.%5" }),
+    });
+    const result = await mapPaneIdsToPids(["%5"], { dir, livePids: new Set([1]) });
+    assert.deepEqual(Array.from(result.entries()), [["%5", 1]]);
+  });
+
+  it("ignores candidates whose pid is not alive", async () => {
+    const dir = await makeDir({
+      "1.json": JSON.stringify({ pid: 1, sessionId: "a", tmux: "0:@1.%5" }),
+    });
+    const result = await mapPaneIdsToPids(["%5"], { dir, livePids: new Set([]) });
+    assert.equal(result.size, 0);
+  });
+
+  it("picks the candidate with the newest updatedAt when a paneId is reused", async () => {
+    const dir = await makeDir({
+      "1.json": JSON.stringify({
+        pid: 1,
+        sessionId: "old",
+        tmux: "0:@1.%5",
+        updatedAt: 100,
+      }),
+      "2.json": JSON.stringify({
+        pid: 2,
+        sessionId: "new",
+        tmux: "0:@1.%5",
+        updatedAt: 200,
+      }),
+    });
+    const result = await mapPaneIdsToPids(["%5"], {
+      dir,
+      livePids: new Set([1, 2]),
+    });
+    assert.equal(result.get("%5"), 2);
+  });
+
+  it("returns an empty map without reading the directory when paneIds is empty", async () => {
+    const result = await mapPaneIdsToPids([], {
+      dir: join(tmpdir(), "cb-sessions-does-not-exist"),
+      livePids: new Set(),
+    });
+    assert.equal(result.size, 0);
+  });
+
+  it("ignores broken json files", async () => {
+    const dir = await makeDir({
+      "1.json": "{ this is not json",
+      "2.json": JSON.stringify({ pid: 2, sessionId: "b", tmux: "0:@1.%5" }),
+    });
+    const result = await mapPaneIdsToPids(["%5"], { dir, livePids: new Set([2]) });
+    assert.equal(result.get("%5"), 2);
   });
 });

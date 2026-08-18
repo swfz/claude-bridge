@@ -2,6 +2,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { randomUUID } from "crypto";
 import { readStatusByPid } from "./claude-session-meta.js";
+import { mapPaneIdsToPids } from "./running-sessions.js";
 import { cwdToProjectDir } from "./jsonl-utils.js";
 import {
   assertValidChoiceKeys,
@@ -313,11 +314,30 @@ export class TmuxSessionManager {
   }
 
   // 各 tmux セッションの status / waitingFor を最新化。変化があれば true を返す
-  async refreshStatuses() {
+  // resolvePids / readStatus はテストから差し替えられるようにしている。
+  async refreshStatuses({ resolvePids = mapPaneIdsToPids, readStatus = readStatusByPid } = {}) {
     let changed = false;
+
+    // resume_in_tmux 直後は claudePid が分からないので、ステータスファイルの
+    // tmux フィールド（paneId）から逆引きしてバックフィルする
+    // （これをしないと該当タブでは選択肢プロンプトが永久に検知されない）
+    const unresolved = Array.from(this.sessions.values()).filter(
+      (s) => s.claudePid == null
+    );
+    if (unresolved.length > 0) {
+      const pidByPane = await resolvePids(unresolved.map((s) => s.paneId));
+      for (const s of unresolved) {
+        const pid = pidByPane.get(s.paneId);
+        if (pid != null) {
+          s.claudePid = pid;
+          changed = true;
+        }
+      }
+    }
+
     for (const s of this.sessions.values()) {
       if (s.claudePid == null) continue;
-      const { status, waitingFor } = await readStatusByPid(s.claudePid);
+      const { status, waitingFor } = await readStatus(s.claudePid);
       if (status !== s.status || waitingFor !== s.waitingFor) {
         s.status = status;
         s.waitingFor = waitingFor;

@@ -132,4 +132,51 @@ describe("TmuxSessionManager", () => {
     assert.equal(list.length, 1);
     assert.equal(list[0].name, "s2");
   });
+
+  describe("refreshStatuses", () => {
+    it("backfills claudePid from resolvePids when it is unresolved, and refreshes status", async () => {
+      const session = manager.attachPane({
+        paneId: "%5",
+        name: "s1",
+        cwd: "/a",
+        target: "0:1.1",
+      });
+      assert.equal(session.claudePid, null);
+
+      const resolvePids = async (paneIds) => {
+        assert.deepEqual(paneIds, ["%5"]);
+        return new Map([["%5", 4242]]);
+      };
+      const readStatus = async (pid) => {
+        assert.equal(pid, 4242);
+        return { status: "waiting", waitingFor: "input needed" };
+      };
+
+      const changed = await manager.refreshStatuses({ resolvePids, readStatus });
+
+      assert.equal(changed, true);
+      assert.equal(session.claudePid, 4242);
+      assert.equal(session.status, "waiting");
+      assert.equal(session.waitingFor, "input needed");
+    });
+
+    it("leaves claudePid null when resolvePids cannot find it", async () => {
+      const session = manager.attachPane({
+        paneId: "%9",
+        name: "s1",
+        cwd: "/a",
+        target: "0:1.1",
+      });
+
+      const resolvePids = async () => new Map();
+      const readStatus = async () => {
+        throw new Error("should not be called when claudePid is unresolved");
+      };
+
+      const changed = await manager.refreshStatuses({ resolvePids, readStatus });
+
+      assert.equal(changed, false);
+      assert.equal(session.claudePid, null);
+    });
+  });
 });
