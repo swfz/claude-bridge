@@ -66,8 +66,13 @@
   border-left: 2px solid var(--text-secondary);
 }
 
+/* AI タイトル（サマリー）をそのままタブ名にするため、長文はここで省略する */
 .tab-name {
   font-weight: 500;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab-cwd {
