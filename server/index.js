@@ -27,6 +27,7 @@ import {
 } from "./claude-session-meta.js";
 import { listRunningSessions } from "./running-sessions.js";
 import { parseChoicePrompt } from "./choice-prompt.js";
+import { readRateLimits } from "./rate-limits.js";
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -424,6 +425,42 @@ const statusInterval = setInterval(async () => {
 }, STATUS_INTERVAL);
 wss.on("close", () => clearInterval(statusInterval));
 
+// Claude のレート制限（5時間/7日ウィンドウの使用率）。bridge-statusline-tee.js が
+// 横流ししたファイルを読むだけ（外部通信なし）なのでローカルファイル読みとして短い間隔で回す。
+const RATE_LIMITS_INTERVAL = 15_000;
+// { usage, fetchedAt } を保持。取得に失敗しても古い値は消さない（stale 表示を許容する）
+let lastRateLimits = null;
+// 直前にクライアントへ配った内容（JSON 文字列）。statusline が更新されない間は
+// 同じ内容が続くので、変化があったときだけ broadcast する。
+let lastRateLimitsJson = null;
+// 失敗理由が変わったときだけログを出す（毎回吐いてログを埋めないため）
+let lastRateLimitFailureReason = null;
+async function pollRateLimits() {
+  const result = await readRateLimits();
+  if (result.ok) {
+    lastRateLimits = { usage: result.usage, fetchedAt: result.fetchedAt };
+    lastRateLimitFailureReason = null;
+    const json = JSON.stringify({ usage: result.usage, fetchedAt: result.fetchedAt });
+    if (json === lastRateLimitsJson) return;
+    lastRateLimitsJson = json;
+    broadcast({ type: "rate_limits", usage: result.usage, fetchedAt: result.fetchedAt });
+    return;
+  }
+  if (result.reason !== lastRateLimitFailureReason) {
+    lastRateLimitFailureReason = result.reason;
+    if (result.reason === "no-file") {
+      console.log(
+        "rate limits: statusline 連携が未設定です（npm run setup:statusline で登録してください）"
+      );
+    } else {
+      console.error(`rate limits: read failed (${result.reason})`);
+    }
+  }
+}
+pollRateLimits();
+const rateLimitsInterval = setInterval(pollRateLimits, RATE_LIMITS_INTERVAL);
+wss.on("close", () => clearInterval(rateLimitsInterval));
+
 wss.on("connection", (ws) => {
   console.log("WebSocket client connected");
   ws.isAlive = true;
@@ -435,6 +472,15 @@ wss.on("connection", (ws) => {
       sessions: allSessions(),
     })
   );
+
+  // 直近のレート制限情報があれば接続直後に送る（次のポーリングを待たせない）
+  if (lastRateLimits) {
+    sendTo(ws, {
+      type: "rate_limits",
+      usage: lastRateLimits.usage,
+      fetchedAt: lastRateLimits.fetchedAt,
+    });
+  }
 
   // 選択肢プロンプトの読み取り/送信で await するため async。
   // 各 case は自分で try/catch する（このハンドラの外に例外を投げない）
