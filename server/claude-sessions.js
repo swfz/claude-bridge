@@ -135,16 +135,9 @@ export async function listClaudeSessions({ limit = 30 } = {}) {
   return sessions;
 }
 
-// セッション JSONL から会話履歴を抽出
-export async function loadSessionHistory(sessionId, projectDir) {
-  const filePath = join(CLAUDE_PROJECTS_DIR, projectDir, `${sessionId}.jsonl`);
-  let content;
-  try {
-    content = await readFile(filePath, "utf-8");
-  } catch {
-    return [];
-  }
-
+// JSONL の文字列を会話履歴（メッセージ配列）に変換する。
+// セッション本体とサブエージェントのトランスクリプトは同じ形式なので両方から使う。
+export function parseHistoryLines(content) {
   const messages = [];
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
@@ -187,4 +180,16 @@ export async function loadSessionHistory(sessionId, projectDir) {
   }
 
   return messages;
+}
+
+// セッション JSONL から会話履歴を抽出
+export async function loadSessionHistory(sessionId, projectDir) {
+  const filePath = join(CLAUDE_PROJECTS_DIR, projectDir, `${sessionId}.jsonl`);
+  let content;
+  try {
+    content = await readFile(filePath, "utf-8");
+  } catch {
+    return [];
+  }
+  return parseHistoryLines(content);
 }

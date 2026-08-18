@@ -33,7 +33,8 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - `choice-keys.js` -- 選択肢操作のキー表現。抽象キー名のホワイトリスト（`assertValidChoiceKeys`）と PTY 用シーケンス変換（`toPtySequence`）、自由入力の整形（`sanitizeChoiceText`）
 - `jsonl-watcher.js` -- JSONL ファイルの監視。`attachExisting` モードで既存セッションにも接続可能
 - `jsonl-utils.js` -- 共通ユーティリティ。`extractTextContent`, `extractToolUses`, `CLAUDE_PROJECTS_DIR` 等。jsonl-watcher.js と claude-sessions.js から参照
-- `claude-sessions.js` -- Claude セッション一覧・履歴読み込み。`listRecentSessions()` はホーム下段用（mtime で直近 N 日を絞る）
+- `claude-sessions.js` -- Claude セッション一覧・履歴読み込み。`listRecentSessions()` はホーム下段用（mtime で直近 N 日を絞る）。「JSONL 文字列 → メッセージ配列」は `parseHistoryLines()` として切り出してあり、`loadSessionHistory()` とサブエージェントのトランスクリプト読み込みで共用する
+- `subagent-tasks.js` -- サブエージェント（Agent ツール）の一覧 `listSubagentTasks()` とトランスクリプト読み込み `readSubagentTranscript()`。親 JSONL の走査はモジュール内キャッシュで前回オフセット以降だけ読み足す。agentId は `/^[A-Za-z0-9_-]+$/` で検証
 - `session-summary.js` -- JSONL からカード用サマリ（タイトル・冒頭の依頼・直近のやりとり・cwd・ブランチ）を抽出。先頭 40 行＋末尾 128KB のみ読み、mtime でキャッシュ
 - `storage.js` -- `~/.claude-bridge/` への永続化。`appendInbox()` で agent への送信を inbox に書き込む
 - `claude-agents.js` -- `claude agents --json` から agent view のセッション一覧を取得
@@ -53,6 +54,17 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - `HomeView.jsx` -- ホーム画面（起動中セッション＋直近セッション）。`utils/runningSessions.js` の純粋関数で突合・整形
 - `RateLimitMeter.jsx` -- ヘッダー右側の 5h/7d レート制限メーター。`rate_limits` メッセージを表示するだけの純表示コンポーネント（データが無ければ非表示）。バー色は使用率で `--success` / `--warning` / `--accent`、ツールチップにリセット時刻・残り時間・モデル別 weekly・取得時刻。`fetchedAt` が 10 分より古い（statusline 連携が止まっている＝セッション非稼働の疑い）と `stale` クラスで薄く表示し、ツールチップにも注記する（60 秒間隔の内部 tick で再判定するだけで、データ自体はサーバー push 任せ）
 - `ChoicePrompt.jsx` -- 選択肢プロンプトのカード（入力欄の直上）。選択肢ボタン＝キー送信で、状態は毎回サーバーが読み直した画面から来る（クライアントは選択状態を持たない）
+- `TaskStrip.jsx` -- サブエージェントタスクのチップ列（入力欄の直上、選択肢カードの上）。実行中は `⚙`、完了は `✓`。完了は 3 件を超えたら「✓ 他 N 件」に畳む
+- `SubagentDrawer.jsx` -- サブエージェントの会話を見せる右サイドドロワー。本文は `ChatView.jsx` の `ChatMessage`（export 済み）を `readonly` で再利用する
+
+### サブエージェントタスクの一覧とトランスクリプト
+
+セッションが起動したサブエージェント（Agent ツール）を入力欄直上のチップで並べ、クリックで右サイドのドロワーに会話を出す。
+
+- **データ源は `~/.claude/projects/<projectDir>/<claudeSessionId>/subagents/`**。`agent-<agentId>.meta.json`（`{agentType, description, toolUseId, spawnDepth}`）が一覧、`agent-<agentId>.jsonl` が会話（通常セッションと同じ形式・`isSidechain: true`）。ファイルを読むだけなので **readonly セッションでも動く**（PTY 不要）
+- **完了判定は親 JSONL の tool_result**。サブエージェントが終わると親（`<claudeSessionId>.jsonl`）に meta の `toolUseId` を `tool_use_id` として持つ tool_result が書かれる。あれば `completed`、無ければ `running`。親 JSONL は数十 MB になり得るので `Map<jsonlPath, {offset, ids}>` に溜め、**追記分（前回オフセット以降）だけ読み足す**（末尾の書きかけ行は最後の改行までで打ち切る）。`toolUseId` を持たない古い meta は判定できないので completed 扱い
+- WS メッセージ: `list_subagent_tasks {sessionId}` → `subagent_tasks {tasks}` / `get_subagent_transcript {sessionId, agentId}` → `subagent_transcript {agentId, status, messages}`。読み先（`projectDir` / `claudeSessionId`）は `resolveClaudeTarget()` が readonly セッション自身か `jsonlWatcher.getSessionMeta()` から解決する（解決できなければ `tasks: []`）
+- 一覧は作業中タブを見ている間だけ 5 秒間隔でポーリング（ホーム表示中は止める）。ドロワーは開いている agent が `running` の間だけ 4 秒間隔で会話を取り直し、タブ切替・ホーム表示で閉じる
 
 ### ホーム画面（起動中セッション＋直近セッション）
 

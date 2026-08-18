@@ -237,7 +237,9 @@ function MarkdownContent({ content, sessionCwd, onOpenPreview, onOpenFileReview 
   );
 }
 
-function ChatMessage({
+// サブエージェントのトランスクリプト（SubagentDrawer）からも使うので export する。
+// その場合 threads/comments は空、操作ハンドラは渡らない（readonly 表示）。
+export function ChatMessage({
   message,
   threads,
   comments,
@@ -292,13 +294,13 @@ function ChatMessage({
       </div>
     );
   }
-  const messageThreads = threads.filter((t) => t.messageId === message.id);
+  const messageThreads = (threads || []).filter((t) => t.messageId === message.id);
   // このメッセージ（uuid）に紐付いたコメント
   const messageComments = (comments || []).filter(
     (c) => c.anchor && c.anchor.messageUuid && c.anchor.messageUuid === message.uuid
   );
 
-  const isLong = message.content.length > COLLAPSE_THRESHOLD;
+  const isLong = (message.content || "").length > COLLAPSE_THRESHOLD;
   const shouldCollapse = isLong && !expanded;
 
   // 範囲選択したら、選択範囲の上にアクションメニューを出す（即 Thread 化はしない）
@@ -338,9 +340,9 @@ function ChatMessage({
     if (!text) return;
     const anchor = { type: "message", messageUuid: message.uuid || null, quote: noteDraft.quote };
     if (noteDraft.mode === "review") {
-      onAddAnchoredReview({ anchor, text });
+      onAddAnchoredReview?.({ anchor, text });
     } else {
-      onAddAnchoredComment({ anchor, text });
+      onAddAnchoredComment?.({ anchor, text });
     }
     setNoteDraft(null);
   };
@@ -374,13 +376,15 @@ function ChatMessage({
         )}
         {!isHuman && (
           <div className="header-actions">
-            <button
-              className="btn-header-action"
-              onClick={() => onPreviewMarkdown(message.content, `Claude #${message.id}`)}
-              title="サイドパネルでプレビュー"
-            >
-              Preview
-            </button>
+            {onPreviewMarkdown && (
+              <button
+                className="btn-header-action"
+                onClick={() => onPreviewMarkdown(message.content, `Claude #${message.id}`)}
+                title="サイドパネルでプレビュー"
+              >
+                Preview
+              </button>
+            )}
             {!readonly && (
               <button
                 className="btn-header-action"
@@ -433,15 +437,19 @@ function ChatMessage({
         </div>
       )}
 
-      {selMenu && !noteDraft && (
+      {selMenu && !noteDraft && (onAddAnchoredReview || onAddAnchoredComment || onStartThread) && (
         <div
           className="selection-menu"
           style={{ top: selMenu.top, left: selMenu.left }}
           onMouseDown={(e) => e.preventDefault()}
         >
-          <button onClick={() => openNote("review")}>レビューに追加</button>
-          <button onClick={() => openNote("comment")}>コメントに残す</button>
-          {!readonly && (
+          {onAddAnchoredReview && (
+            <button onClick={() => openNote("review")}>レビューに追加</button>
+          )}
+          {onAddAnchoredComment && (
+            <button onClick={() => openNote("comment")}>コメントに残す</button>
+          )}
+          {!readonly && onStartThread && (
             <button onClick={() => runSelAction((t) => onStartThread(message.id, t))}>
               スレッド
             </button>
