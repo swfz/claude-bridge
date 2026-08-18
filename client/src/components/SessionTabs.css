@@ -111,6 +111,32 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab-cwd-project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+/* worktree 名はプロジェクト名と区別できるようバッジ風に */
+.tab-cwd-worktree {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  background: var(--bg-primary);
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 16px;
 }
 
 /* tmux タブは rename されていないこともあるため cwd を識別子として強調 */
@@ -121,7 +147,7 @@
   background: var(--bg-primary);
   padding: 1px 6px;
   border-radius: 3px;
-  display: inline-block;
+  display: inline-flex;
 }
 
 .tab-close {
