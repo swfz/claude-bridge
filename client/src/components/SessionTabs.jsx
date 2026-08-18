@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { parseCwd } from "../utils/cwdLabel.js";
 import "./SessionTabs.css";
 
 const MIN_WIDTH = 160;
@@ -73,7 +74,9 @@ export default function SessionTabs({
         ＋ 新しいセッション
       </button>
       <div className="tabs-list">
-        {sessions.map((session) => (
+        {sessions.map((session) => {
+          const { project, worktree } = parseCwd(session.cwd);
+          return (
           <div
             key={session.id}
             className={`tab ${session.id === activeSessionId ? "active" : ""} ${!session.alive ? "dead" : ""}`}
@@ -155,10 +158,14 @@ export default function SessionTabs({
               className={`tab-cwd ${session.type === "tmux" ? "tab-cwd-strong" : ""}`}
               title={session.cwd}
             >
-              {session.cwd.split("/").pop()}
+              <span className="tab-cwd-project">{project}</span>
+              {worktree && (
+                <span className="tab-cwd-worktree">⎇ {worktree}</span>
+              )}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
