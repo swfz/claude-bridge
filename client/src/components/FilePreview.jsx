@@ -60,7 +60,7 @@ export default function FilePreview({ href, onOpenPreview, onOpenFileReview }) {
         </span>
         <button
           className="file-link"
-          onClick={() => canPreview && onOpenPreview(localPath)}
+          onClick={() => canPreview && onOpenPreview?.(localPath)}
           title={localPath}
         >
           {fileName}
@@ -69,7 +69,7 @@ export default function FilePreview({ href, onOpenPreview, onOpenFileReview }) {
           <>
             <button
               className="file-btn file-btn-preview"
-              onClick={() => onOpenPreview(localPath)}
+              onClick={() => onOpenPreview?.(localPath)}
             >
               プレビュー
             </button>

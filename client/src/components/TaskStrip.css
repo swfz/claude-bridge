@@ -1,0 +1,77 @@
+/* 入力欄の直上に置くサブエージェントタスクのチップ列 */
+.task-strip {
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.task-strip-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+
+.task-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.task-chip:hover {
+  border-color: var(--accent);
+}
+
+.task-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-chip-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+/* 実行中は歯車が回っていることが分かるよう点滅させる */
+.task-chip-running {
+  border-color: var(--warning);
+}
+
+.task-chip-running .task-chip-icon {
+  color: var(--warning);
+  animation: task-chip-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes task-chip-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.task-chip-done {
+  color: var(--text-secondary);
+}
+
+.task-chip-done .task-chip-icon {
+  color: var(--success);
+}
+
+.task-chip-more {
+  color: var(--text-secondary);
+  border-style: dashed;
+}

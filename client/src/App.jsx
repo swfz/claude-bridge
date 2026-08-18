@@ -8,6 +8,8 @@ import CommentPanel from "./components/CommentPanel.jsx";
 import ReviewDraftPanel from "./components/ReviewDraftPanel.jsx";
 import InputBar from "./components/InputBar.jsx";
 import ChoicePrompt from "./components/ChoicePrompt.jsx";
+import TaskStrip from "./components/TaskStrip.jsx";
+import SubagentDrawer from "./components/SubagentDrawer.jsx";
 import NewSessionDialog from "./components/NewSessionDialog.jsx";
 import PreviewDrawer from "./components/PreviewDrawer.jsx";
 import FileExplorer from "./components/FileExplorer.jsx";
@@ -23,6 +25,8 @@ import "./App.css";
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
 const RUNNING_POLL_INTERVAL = 5000;
+// 作業中タブでサブエージェントのタスク一覧を取り直す間隔
+const SUBAGENT_POLL_INTERVAL = 5000;
 
 export default function App() {
   const { send, on, connected } = useWebSocket();
@@ -51,6 +55,10 @@ export default function App() {
   // JSONL には回答後にしか出ないので、サーバーが画面から読んだものをそのまま持つ。
   const [choicePrompts, setChoicePrompts] = useState({});
   const [choiceError, setChoiceError] = useState(null);
+  // セッションが起動したサブエージェントのタスク一覧（bridgeSessionId -> tasks）
+  const [subagentTasks, setSubagentTasks] = useState({});
+  // トランスクリプトを表示中のサブエージェント（null なら閉じている）
+  const [subagentDrawer, setSubagentDrawer] = useState(null);
   // 「未解決／続きをやる」印を付けた claudeSessionId（localStorage のみ）
   const [starredSessions, setStarredSessions] = useState(loadStarred);
   // 一覧取得時に添えるだけなので、star の変更で再取得は走らせない（JSONL 走査を避ける）
@@ -216,6 +224,24 @@ export default function App() {
     return on("choice_prompt_error", (msg) => setChoiceError(msg.message));
   }, [on]);
 
+  // サブエージェント（Agent ツール）の一覧。JSONL のファイル読みなので readonly でも来る
+  useEffect(() => {
+    return on("subagent_tasks", (msg) => {
+      setSubagentTasks((prev) => ({ ...prev, [msg.sessionId]: msg.tasks || [] }));
+    });
+  }, [on]);
+
+  // ドロワーで開いているサブエージェントの会話。別の agent のものは捨てる
+  useEffect(() => {
+    return on("subagent_transcript", (msg) => {
+      setSubagentDrawer((prev) =>
+        prev && prev.agentId === msg.agentId
+          ? { ...prev, messages: msg.messages || [], status: msg.status ?? prev.status }
+          : prev
+      );
+    });
+  }, [on]);
+
   // JSONL ベースの chat_message を受信。
   // active かどうかは見ず、必ず bridgeSessionId のメッセージ列に積む（混線防止）。
   // human は addUserMessage で先行追加されている場合があるため重複チェック。
@@ -321,6 +347,40 @@ export default function App() {
     );
     return () => clearInterval(timer);
   }, [showHome, connected, send]);
+
+  // 作業中タブを見ている間だけサブエージェントの一覧を取り直す（タブ切替時は即時 1 回）
+  useEffect(() => {
+    if (showHome || !activeSessionId || !connected) return;
+    const request = () =>
+      send({ type: "list_subagent_tasks", sessionId: activeSessionId });
+    request();
+    const timer = setInterval(request, SUBAGENT_POLL_INTERVAL);
+    return () => clearInterval(timer);
+  }, [showHome, activeSessionId, connected, send]);
+
+  // 別セッションのタスクを見せ続けないよう、タブ切替・ホーム表示でドロワーを閉じる
+  useEffect(() => {
+    setSubagentDrawer(null);
+  }, [activeSessionId, showHome]);
+
+  const handleOpenSubagentTask = useCallback((task) => {
+    setSubagentDrawer({
+      agentId: task.agentId,
+      description: task.description,
+      agentType: task.agentType,
+      status: task.status,
+      messages: [],
+    });
+  }, []);
+
+  // ドロワーからの取得要求（初回＋実行中のポーリング）
+  const handleRequestTranscript = useCallback(
+    (agentId) => {
+      if (!activeSessionId || !agentId) return;
+      send({ type: "get_subagent_transcript", sessionId: activeSessionId, agentId });
+    },
+    [send, activeSessionId]
+  );
 
   // 直近セッションは JSONL 全走査になるので、ホームを開いた時と日数変更時だけ取る。
   // starred は「期間外でも一覧に含める対象」としてサーバーに渡す
@@ -1053,6 +1113,13 @@ export default function App() {
             )}
           </div>
 
+          {sessionUiVisible && (
+            <TaskStrip
+              tasks={subagentTasks[activeSessionId] || []}
+              onOpenTask={handleOpenSubagentTask}
+            />
+          )}
+
           {activeChoice && (
             <ChoicePrompt
               prompt={activeChoice.prompt}
@@ -1090,6 +1157,22 @@ export default function App() {
           onRequestTmuxPanes={handleRequestTmuxPanes}
           claudeSessions={claudeSessions}
           tmuxPanes={tmuxPanes}
+        />
+      )}
+
+      {subagentDrawer && (
+        <SubagentDrawer
+          agentId={subagentDrawer.agentId}
+          description={subagentDrawer.description}
+          agentType={subagentDrawer.agentType}
+          status={subagentDrawer.status}
+          messages={subagentDrawer.messages}
+          onRequestTranscript={handleRequestTranscript}
+          onOpenPreview={(path) => {
+            setPreviewData({ filePath: path });
+            setDrawerOpenedAt(messages.length);
+          }}
+          onClose={() => setSubagentDrawer(null)}
         />
       )}
 

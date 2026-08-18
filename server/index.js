@@ -27,6 +27,10 @@ import {
 } from "./claude-session-meta.js";
 import { listRunningSessions } from "./running-sessions.js";
 import { parseChoicePrompt } from "./choice-prompt.js";
+import {
+  listSubagentTasks,
+  readSubagentTranscript,
+} from "./subagent-tasks.js";
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -336,6 +340,20 @@ function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, cla
   sendTo(ws, { type: "session_opened", bridgeSessionId: session.id });
   broadcastSessionList();
   return session;
+}
+
+// JSONL の読み先（<projectDir>/<claudeSessionId>）を解決する。readonly セッションは
+// 自分で両方持ち、それ以外は watcher が監視中の JSONL から把握している。
+function resolveClaudeTarget(session) {
+  if (!session) return null;
+  const meta =
+    session.claudeSessionId && session.projectDir
+      ? {
+          claudeSessionId: session.claudeSessionId,
+          projectDir: session.projectDir,
+        }
+      : jsonlWatcher.getSessionMeta(session.id);
+  return meta?.claudeSessionId && meta?.projectDir ? meta : null;
 }
 
 // コメント/レビューの保存キーを解決する。claudeSessionId を優先し、無ければ
@@ -1103,6 +1121,59 @@ wss.on("connection", (ws) => {
               error: e.message,
             })
           );
+        }
+        break;
+      }
+
+      // セッションが起動したサブエージェント（Agent ツール）の一覧。
+      // 情報源は <projectDir>/<claudeSessionId>/subagents/ なので readonly でも動く。
+      case "list_subagent_tasks": {
+        try {
+          const target = resolveClaudeTarget(findSession(msg.sessionId));
+          const tasks = target ? await listSubagentTasks(target) : [];
+          sendTo(ws, { type: "subagent_tasks", sessionId: msg.sessionId, tasks });
+        } catch (e) {
+          console.error("list_subagent_tasks failed:", e.message);
+          sendTo(ws, { type: "subagent_tasks", sessionId: msg.sessionId, tasks: [] });
+        }
+        break;
+      }
+
+      case "get_subagent_transcript": {
+        try {
+          const target = resolveClaudeTarget(findSession(msg.sessionId));
+          const messages = target
+            ? await readSubagentTranscript({ ...target, agentId: msg.agentId })
+            : null;
+          if (!messages) {
+            sendTo(ws, {
+              type: "subagent_transcript",
+              sessionId: msg.sessionId,
+              agentId: msg.agentId,
+              status: null,
+              messages: [],
+              error: "サブエージェントの会話を読み込めませんでした。",
+            });
+            break;
+          }
+          const tasks = await listSubagentTasks(target);
+          sendTo(ws, {
+            type: "subagent_transcript",
+            sessionId: msg.sessionId,
+            agentId: msg.agentId,
+            status: tasks.find((t) => t.agentId === msg.agentId)?.status ?? null,
+            messages,
+          });
+        } catch (e) {
+          console.error("get_subagent_transcript failed:", e.message);
+          sendTo(ws, {
+            type: "subagent_transcript",
+            sessionId: msg.sessionId,
+            agentId: msg.agentId,
+            status: null,
+            messages: [],
+            error: `サブエージェントの会話を読み込めませんでした: ${e.message}`,
+          });
         }
         break;
       }
