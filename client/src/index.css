@@ -23,7 +23,8 @@ html, body, #root {
   --border: #2a2a4a;
   --tab-active: #0f3460;
   --tab-active-text: #ffffff;
-  --tab-inactive: #16213e;
+  /* サイドバー背景 (--bg-secondary) と同色だとタブの境界が見えないため一段明るく */
+  --tab-inactive: #1f2b4f;
   --input-bg: #16213e;
   --success: #4caf50;
   --warning: #ff9800;
