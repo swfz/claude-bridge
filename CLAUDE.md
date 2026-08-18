@@ -14,7 +14,8 @@ npm start            # サーバーのみ起動（ビルド済み前提）
 npm run build        # クライアントビルド
 npm test             # テスト実行
 npm run install:all  # 全依存インストール
-npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に登録
+npm run setup:hooks       # agent view 連携フックを ~/.claude/settings.json に登録
+npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.claude/settings.json に登録
 ```
 
 ## アーキテクチャ
@@ -39,6 +40,11 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - `claude-agents.js` -- `claude agents --json` から agent view のセッション一覧を取得
 - `running-sessions.js` -- ホーム画面用。`~/.claude/sessions/*.json`（pid/sessionId/cwd/name/status/tmux）を読み、`ps` の生存 PID で絞って「今起動中の Claude セッション」を返す。`tmux` フィールドの paneId は `%<数字>` 形式のみ採用
 - `thread-store.js` -- スレッド CRUD
+- `rate-limits.js` -- Claude のレート制限（5h/7d ウィンドウの使用率）取得。**credentials・外部通信は使わない**。Claude Code が statusLine コマンドの stdin に渡す `rate_limits`（`used_percentage` / epoch 秒の `resets_at`）を `scripts/statusline/bridge-statusline-tee.js` がファイル（`<dataDir>/rate-limits.json`）に横流しし、`readRateLimits()` はそれを読むだけ。ローカルファイル読みなので `index.js` は 15 秒間隔でポーリングし、内容が変わったときだけ `rate_limits {usage, fetchedAt}` をブロードキャスト（`fetchedAt` は tee が書いた取得時刻で、statusline 連携が止まっていれば古いまま＝クライアント側の stale 判定に使われる）。statusline 未連携（ファイル無し）は `no-file` として一度だけ案内ログを出す
+
+### statusLine tee（レート制限表示のデータ源）
+
+`scripts/statusline/bridge-statusline-tee.js` を `~/.claude/settings.json` の `statusLine.command` に割り込ませ（`npm run setup:statusline`）、stdin で渡ってくる JSON のうち `rate_limits` だけを `<dataDir>/rate-limits.json` に `{ rate_limits, ts }` としてアトミック書き込み（tmp + rename）した上で、元々登録されていた statusLine コマンドへ stdin をそのまま引き継ぐ（表示は一切変えない）。tee 部分の失敗（parse 不能・書き込み失敗）で元コマンドの実行を止めない。依存なし（node 組み込みのみ）で statusLine の呼び出し頻度に耐える軽さを保つ。`scripts/setup-statusline.js` は元の `statusLine.command` を `<dataDir>/statusline-original.json` に退避してから差し替え、`--uninstall` で退避内容に戻す（再実行時はラッパー自身を original として保存しない）。
 
 ### クライアントのコンポーネント構成
 
@@ -46,6 +52,7 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - `ChatView.jsx` -- highlight.js は静的 import で13言語を登録。`EditDiff` は全文ハイライト後に行分割
 - `ThreadPanel.jsx` -- リサイズハンドルは `widthRef` で useCallback の依存を空に
 - `HomeView.jsx` -- ホーム画面（起動中セッション＋直近セッション）。`utils/runningSessions.js` の純粋関数で突合・整形
+- `RateLimitMeter.jsx` -- ヘッダー右側の 5h/7d レート制限メーター。`rate_limits` メッセージを表示するだけの純表示コンポーネント（データが無ければ非表示）。バー色は使用率で `--success` / `--warning` / `--accent`、ツールチップにリセット時刻・残り時間・モデル別 weekly・取得時刻。`fetchedAt` が 10 分より古い（statusline 連携が止まっている＝セッション非稼働の疑い）と `stale` クラスで薄く表示し、ツールチップにも注記する（60 秒間隔の内部 tick で再判定するだけで、データ自体はサーバー push 任せ）
 - `ChoicePrompt.jsx` -- 選択肢プロンプトのカード（入力欄の直上）。選択肢ボタン＝キー送信で、状態は毎回サーバーが読み直した画面から来る（クライアントは選択状態を持たない）
 - `TaskStrip.jsx` -- サブエージェントタスクのチップ列（入力欄の直上、選択肢カードの上）。実行中は `⚙`、完了は `✓`。完了は 3 件を超えたら「✓ 他 N 件」に畳む
 - `SubagentDrawer.jsx` -- サブエージェントの会話を見せる右サイドドロワー。本文は `ChatView.jsx` の `ChatMessage`（export 済み）を `readonly` で再利用する
