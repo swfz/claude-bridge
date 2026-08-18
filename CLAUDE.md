@@ -56,7 +56,7 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 - 開いているセッションには「タブで表示中」バッジ＋左の色帯が付き、クリックでそのタブへ移動。未オープンは tmux ペインがあれば `attach_tmux_pane`、無ければ `open_readonly_session`（閲覧）で開く
 - 下段のデータ源は `list_recent_sessions {days}` → `recent_sessions`（`claude-sessions.js` の `listRecentSessions`）。`~/.claude/projects/**/*.jsonl` の mtime で絞る。起動中のものは `annotateRecentSessions` が除外するので上下段は重複しない。カードのクリック＝閲覧（`open_readonly_session`）
 - **下段の起こし方は 2 つ**（用途が違うので両方残している）
-  - **「tmux で再開」＝ `resume_in_tmux`（既定・primary）**: `resumeInTmuxWindow()`（`server/tmux-session.js`）が **直近アタッチされた tmux セッションに新しい window を作り**（`tmux list-sessions` の `session_last_attached` 最大＝`pickTargetSession()`）、シェルを起こしてから `send-keys` で `claude --resume <id>` を流す。作成後は `attachTmuxPaneAsSession()`（`server/index.js` の共通ヘルパー。`attach_tmux_pane` と共用）で tmux タブとして開き、JSONL 監視＋履歴読み込みまで行う。tmux サーバーが動いていない場合だけ `bridge` セッションを `new-session -d` で作り、その初期 window をそのまま使う（空 window を残さない）。claude の pid は起動直後には分からないので `claudePid: null` で開き、上段のポーリングで拾わせる
+  - **「tmux で再開」＝ `resume_in_tmux`（既定・primary）**: `resumeInTmuxWindow()`（`server/tmux-session.js`）が **直近アタッチされた tmux セッションに新しい window を作り**（`tmux list-sessions` の `session_last_attached` 最大＝`pickTargetSession()`）、シェルを起こしてから `send-keys` で `claude --resume <id>` を流す。作成後は `attachTmuxPaneAsSession()`（`server/index.js` の共通ヘルパー。`attach_tmux_pane` と共用）で tmux タブとして開き、JSONL 監視＋履歴読み込みまで行う。tmux サーバーが動いていない場合だけ `bridge` セッションを `new-session -d` で作り、その初期 window をそのまま使う（空 window を残さない）。claude の pid は起動直後には分からないので `claudePid: null` で開き、サーバーの `statusInterval` が `mapPaneIdsToPids()`（`server/running-sessions.js`。ステータスファイルの `tmux` フィールドの paneId 突合）でバックフィルする
   - **「再開（内蔵）」＝ `resume_session`**: node-pty でブリッジの子プロセスとして `claude --resume` を起動する従来モード。ブリッジを落とすと claude も死に、ターミナルからは触れず、シェルの rc を通らないので env が違う。手軽さ用に残してあるが既定にはしない
   - 失敗時は `home_error` を返し、HomeView 上部の `.home-error` バナーで見せる（チャット欄の `error` はホーム表示中に見えないため別経路）。tmux 未インストールはコマンド全文ではなく短文にする
   - シェルに渡す値の検証: `claudeSessionId` は `/^[\w-]+$/`、tmux セッション名は `validateSessionName()` 相当の `/^[\w.:-]+$/`、生成された paneId は `validatePaneId()`（`%<数字>`）、cwd と window 名は `escapeForShell()`
@@ -71,7 +71,7 @@ npm run setup:hooks  # agent view 連携フックを ~/.claude/settings.json に
 
 TUI に出る「番号つきの選択肢」をブラウザから選べるようにする仕組み。入力欄の直上に `ChoicePrompt` のカードを出し、ボタンのクリックを**キー入力として PTY / tmux ペインへ送る**。
 
-- **待ちの検知は `~/.claude/sessions/<pid>.json` の `status:"waiting"` + `waitingFor`**（`"input needed"` = AskUserQuestion 等、`"permission prompt"` = ツール許可）。`claude-session-meta.js` の `readStatusByPid()` が `{status, waitingFor}` を返し、4 秒間隔の `statusInterval`（`index.js`）が両 manager の `refreshStatuses()` と `pollChoicePrompts()` を回す
+- **待ちの検知は `~/.claude/sessions/<pid>.json` の `status:"waiting"` + `waitingFor`**（`"input needed"` = AskUserQuestion 等、`"permission prompt"` = ツール許可）。`claude-session-meta.js` の `readStatusByPid()` が `{status, waitingFor}` を返し、4 秒間隔の `statusInterval`（`index.js`）が両 manager の `refreshStatuses()` と `pollChoicePrompts()` を回す。`claudePid` が未解決な tmux セッション（`resume_in_tmux` 直後など）は `TmuxSessionManager.refreshStatuses()` が `mapPaneIdsToPids()` で paneId 突合してからバックフィルする（これが無いと該当タブでは選択肢プロンプトが永久に検知されない）
 - **選択肢の中身は JSONL から取れない。** AskUserQuestion の `tool_use` が JSONL に書かれるのは**回答が終わったあと**（記録される `timestamp` は生成時刻なので、ファイルを見ると回答前から在ったように見えるが、待っている間はまだ書かれていない）。したがって情報源は画面テキストだけで、`parseChoicePrompt()`（`server/choice-prompt.js`）が構造化する
   - 画面の取得元: tmux は `capturePane()`、内蔵 PTY は `@xterm/headless` で ANSI を再現した `Session.getScreenText()`
   - **readonly セッションは対象外**（PTY が無く、inbox は Stop hook 経由なので選択待ち中は届かない）
