@@ -18,6 +18,7 @@ import {
   saveStarred,
   toggleStarred,
 } from "./utils/starredSessions.js";
+import { statusMapOf, updateAttention } from "./utils/attention.js";
 import "./App.css";
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
@@ -55,6 +56,20 @@ export default function App() {
   // 一覧取得時に添えるだけなので、star の変更で再取得は走らせない（JSONL 走査を避ける）
   const starredRef = useRef(starredSessions);
   starredRef.current = starredSessions;
+  // 「ターン完了（未確認）」印を付けたタブの id（tmux のベル通知相当）。サーバーには持たせない。
+  const [attentionIds, setAttentionIds] = useState(() => new Set());
+  // 直近の session_list の status スナップショット（busy -> 非busy の遷移検出に使う）
+  const prevStatusRef = useRef(new Map());
+  // 「未確認」を解除する（タブを選んだ／実際に見た）
+  const clearAttention = useCallback((sessionId) => {
+    if (!sessionId) return;
+    setAttentionIds((prev) => {
+      if (!prev.has(sessionId)) return prev;
+      const next = new Set(prev);
+      next.delete(sessionId);
+      return next;
+    });
+  }, []);
   // アプリ全体のテーマ（背景/UI）。localStorage で記憶。プレビュー本文の独自トグルとは独立。
   const [appTheme, setAppTheme] = useState(
     () => localStorage.getItem("appTheme") || "dark"
@@ -69,6 +84,11 @@ export default function App() {
   // セッション横断の pending review（Submit するまで溜める下書き）
   const [reviewItems, setReviewItems] = useState([]);
   const activeSessionIdRef = useRef(null);
+  // attention 判定の isViewingActive で使う（session_list ハンドラは on 依存のみで stale closure になるため）
+  const showHomeRef = useRef(showHome);
+  useEffect(() => {
+    showHomeRef.current = showHome;
+  }, [showHome]);
   // 指定セッションのメッセージだけを更新する（active かどうかは見ない）。
   // updater は配列、または (prev[]) => next[] の関数。
   const updateSessionMessages = useCallback((sessionId, updater) => {
@@ -111,6 +131,19 @@ export default function App() {
     return on("session_list", (msg) => {
       setSessions(msg.sessions);
       sessionsRef.current = msg.sessions;
+      // busy -> 非busy に遷移した alive セッションを「未確認」に追加する（見ている最中のアクティブタブは除く）。
+      // setAttentionIds の更新関数は遅延実行されるため、prevStatusRef はローカルに退避してから差し替える
+      const prevStatuses = prevStatusRef.current;
+      prevStatusRef.current = statusMapOf(msg.sessions);
+      setAttentionIds((prev) =>
+        updateAttention({
+          prev: prevStatuses,
+          current: prev,
+          sessions: msg.sessions,
+          activeSessionId: activeSessionIdRef.current,
+          isViewingActive: !showHomeRef.current && !document.hidden,
+        })
+      );
       const aliveSessions = msg.sessions.filter((s) => s.alive);
       if (aliveSessions.length === 0) return;
       // 「開いたセッションを active にする」のは session_opened が担う（末尾推定はしない）。
@@ -132,9 +165,10 @@ export default function App() {
         setActiveSessionId(msg.bridgeSessionId);
         // 開いたセッションを見せたいのでホームからは抜ける
         setShowHome(false);
+        clearAttention(msg.bridgeSessionId);
       }
     });
-  }, [on]);
+  }, [on, clearAttention]);
 
   useEffect(() => {
     return on("session_exited", (msg) => {
@@ -618,15 +652,32 @@ export default function App() {
     [send, activeSessionId]
   );
 
-  const handleSwitchSession = useCallback((sessionId) => {
-    // 表示は messagesBySession[activeSessionId] の派生なので active を変えるだけでよい
-    // （cache 保存・復元やレース対策は不要になった）
-    setShowHome(false);
-    setActiveSessionId(sessionId);
-    setThreads([]);
-    setComments([]);
-    setReviewItems([]);
-  }, []);
+  const handleSwitchSession = useCallback(
+    (sessionId) => {
+      // 表示は messagesBySession[activeSessionId] の派生なので active を変えるだけでよい
+      // （cache 保存・復元やレース対策は不要になった）
+      setShowHome(false);
+      setActiveSessionId(sessionId);
+      setThreads([]);
+      setComments([]);
+      setReviewItems([]);
+      clearAttention(sessionId);
+    },
+    [clearAttention]
+  );
+
+  // 別タブ／別ウィンドウから戻ってきたときに、今見ているアクティブタブの「未確認」を解除する
+  // （busy -> idle の遷移が起きても、そのとき見ていなければ点いたままにしたいので session_list 側では消さない）
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden) return;
+      if (showHomeRef.current) return;
+      clearAttention(activeSessionIdRef.current);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [clearAttention]);
 
   const handleStartThread = useCallback(
     (messageId, selectedText) => {
@@ -873,6 +924,7 @@ export default function App() {
           sessions={sessions}
           activeSessionId={showHome ? null : activeSessionId}
           homeActive={showHome}
+          attentionIds={attentionIds}
           onHome={() => setShowHome(true)}
           onSelect={handleSwitchSession}
           onKill={handleKillSession}

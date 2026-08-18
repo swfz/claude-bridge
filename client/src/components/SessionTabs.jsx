@@ -16,6 +16,7 @@ export default function SessionTabs({
   sessions,
   activeSessionId,
   homeActive,
+  attentionIds,
   onHome,
   onSelect,
   onKill,
@@ -76,10 +77,11 @@ export default function SessionTabs({
       <div className="tabs-list">
         {sessions.map((session) => {
           const { project, worktree } = parseCwd(session.cwd);
+          const hasAttention = session.alive && attentionIds?.has(session.id);
           return (
           <div
             key={session.id}
-            className={`tab ${session.id === activeSessionId ? "active" : ""} ${!session.alive ? "dead" : ""}`}
+            className={`tab ${session.id === activeSessionId ? "active" : ""} ${!session.alive ? "dead" : ""} ${hasAttention ? "tab-attention" : ""}`}
             onClick={() => session.alive && onSelect(session.id)}
           >
             <div className="tab-row">
@@ -94,6 +96,14 @@ export default function SessionTabs({
               )}
               {session.type === "readonly" && (
                 <span className="tab-badge">閲覧</span>
+              )}
+              {hasAttention && (
+                <span
+                  className="tab-badge tab-badge-attention"
+                  title="応答が完了しました（未確認）"
+                >
+                  完了
+                </span>
               )}
               {session.waitingFor && session.alive && (
                 <span
