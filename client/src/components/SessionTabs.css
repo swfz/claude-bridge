@@ -245,6 +245,22 @@
   animation: tab-status-pulse 1.2s ease-in-out infinite;
 }
 
+/* ターン完了（未確認）＝ tmux のベル通知相当。waiting（黄）と区別するため success（緑）を使う */
+.tab.tab-attention {
+  border-left-color: var(--success);
+}
+
+.tab-badge-attention {
+  background: var(--success);
+  color: #04180a;
+  animation: tab-status-pulse 1.2s ease-in-out infinite;
+}
+
+/* ライトモードの success は暗い緑なので文字は白に戻す */
+body.light-mode .tab-badge-attention {
+  color: #fff;
+}
+
 @keyframes tab-status-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
