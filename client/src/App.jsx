@@ -13,6 +13,7 @@ import PreviewDrawer from "./components/PreviewDrawer.jsx";
 import FileExplorer from "./components/FileExplorer.jsx";
 import AgentSidePanel from "./components/AgentSidePanel.jsx";
 import HomeView from "./components/HomeView.jsx";
+import RateLimitMeter from "./components/RateLimitMeter.jsx";
 import {
   loadStarred,
   saveStarred,
@@ -113,6 +114,8 @@ export default function App() {
   const [agents, setAgents] = useState([]);
   const [showAgentPanel, setShowAgentPanel] = useState(false);
   const [syncNotice, setSyncNotice] = useState(null);
+  // Claude のレート制限（5h/7d ウィンドウの使用率）。サーバーが 3 分間隔で配ってくる
+  const [rateLimits, setRateLimits] = useState(null);
 
   // コメント/レビューの保存・取得キー。claudeSessionId を優先し（再オープン/resume/閲覧
   // をまたいで同じ Claude セッションを参照するため）、無ければブリッジ ID。
@@ -309,6 +312,10 @@ export default function App() {
     return on("recent_sessions", (msg) => {
       setRecentSessions(msg.sessions || []);
     });
+  }, [on]);
+
+  useEffect(() => {
+    return on("rate_limits", (msg) => setRateLimits({ usage: msg.usage, fetchedAt: msg.fetchedAt }));
   }, [on]);
 
   // ホーム表示中だけポーリングする（裏では取りに行かない）
@@ -910,6 +917,7 @@ export default function App() {
           >
             {appTheme === "light" ? "Dark" : "Light"}
           </button>
+          <RateLimitMeter rateLimits={rateLimits} />
           <div className="connection-status">
             <span
               className={`status-dot ${connected ? "connected" : "disconnected"}`}
