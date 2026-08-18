@@ -10,7 +10,8 @@
     "start": "node server/index.js",
     "test": "node --experimental-test-module-mocks --test 'test/**/*.test.js'",
     "install:all": "npm install && npm --prefix client install",
-    "setup:hooks": "node scripts/setup-hooks.js"
+    "setup:hooks": "node scripts/setup-hooks.js",
+    "setup:statusline": "node scripts/setup-statusline.js"
   },
   "dependencies": {
     "@xterm/headless": "^6.0.0",
