@@ -316,7 +316,18 @@ tr.comment-anchored > th:first-child {
   width: 100%;
   height: 100%;
   border: none;
-  background: white;
+  /* iframe 要素の color-scheme は中のドキュメントの prefers-color-scheme として伝わる
+     （CSS Color Adjust）。プレビューの明暗トグル・アプリのライトテーマに合わせて切り替え、
+     テーマ対応 HTML がプレビューの明暗に追従するようにする。
+     背景はページのキャンバスが透過のときの下地（preview-light / light-mode では
+     --bg-primary が白に差し替わるので、ここは var のままでよい）。 */
+  color-scheme: dark;
+  background: var(--bg-primary);
+}
+
+body.light-mode .drawer-iframe,
+.drawer-body.preview-light .drawer-iframe {
+  color-scheme: light;
 }
 
 .drawer-text {

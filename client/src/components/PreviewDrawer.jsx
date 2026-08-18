@@ -21,6 +21,7 @@ import {
   getRootTextOffset,
   offsetToLineCol,
 } from "../utils/previewLocation.js";
+import { resolveInjectedScheme } from "../utils/previewColorScheme.js";
 import "./PreviewDrawer.css";
 
 // YAML frontmatter を GitHub 風の key/value テーブルとして表示する
@@ -374,6 +375,48 @@ export default function PreviewDrawer({
       attached?.removeEventListener("mouseup", onUp);
     };
   }, [isHtml, filePath]);
+
+  // HTML プレビューのダークモード対策。color-scheme を宣言していないページに、
+  // 実際の背景の明暗（透過ならプレビューの明暗）に合った color-scheme を root へ注入する。
+  // 「ダーク背景だけ指定して文字色なし（黒文字が沈む）」「明るい文字だけ指定して背景透過
+  // （白地で消える）」の両方で、UA 既定の文字色・キャンバス色が背景に追従するようになる。
+  // iframe 要素側の color-scheme（CSS）は中の prefers-color-scheme として伝わるため、
+  // テーマ対応ページはトグルで明暗が切り替わる。その反映を待ってから測るので少し遅延させる。
+  useEffect(() => {
+    if (!isHtml) return;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const apply = () => {
+      const doc = iframe.contentDocument;
+      const root = doc?.documentElement;
+      if (!root || !doc.body) return;
+      const win = doc.defaultView;
+      const scheme = resolveInjectedScheme({
+        declared: win.getComputedStyle(root).colorScheme,
+        ownInjected: root.dataset.bridgeColorScheme || null,
+        bodyBg: win.getComputedStyle(doc.body).backgroundColor,
+        htmlBg: win.getComputedStyle(root).backgroundColor,
+        previewScheme:
+          lightMode || document.body.classList.contains("light-mode") ? "light" : "dark",
+      });
+      if (!scheme) return;
+      root.style.colorScheme = scheme;
+      root.dataset.bridgeColorScheme = scheme;
+    };
+
+    let timer = null;
+    const applyLater = () => {
+      clearTimeout(timer);
+      timer = setTimeout(apply, 50);
+    };
+    applyLater();
+    iframe.addEventListener("load", applyLater);
+    return () => {
+      clearTimeout(timer);
+      iframe.removeEventListener("load", applyLater);
+    };
+  }, [isHtml, filePath, lightMode]);
 
   const addComment = useCallback((selectedText, location, kind = "review") => {
     const id = ++commentIdSeq;
