@@ -868,156 +868,160 @@ export default function App() {
         </div>
       </header>
 
-      <SessionTabs
-        sessions={sessions}
-        activeSessionId={showHome ? null : activeSessionId}
-        homeActive={showHome}
-        onHome={() => setShowHome(true)}
-        onSelect={handleSwitchSession}
-        onKill={handleKillSession}
-        onRestart={handleRestartSession}
-        onRemovePast={handleRemovePastSession}
-        onDetachTmux={handleDetachTmux}
-        onCloseReadonly={handleCloseReadonly}
-        onNew={() => setShowNewSession(true)}
-      />
+      <div className="app-body">
+        <SessionTabs
+          sessions={sessions}
+          activeSessionId={showHome ? null : activeSessionId}
+          homeActive={showHome}
+          onHome={() => setShowHome(true)}
+          onSelect={handleSwitchSession}
+          onKill={handleKillSession}
+          onRestart={handleRestartSession}
+          onRemovePast={handleRemovePastSession}
+          onDetachTmux={handleDetachTmux}
+          onCloseReadonly={handleCloseReadonly}
+          onNew={() => setShowNewSession(true)}
+        />
 
-      <div className="app-content">
-        {showFileExplorer && sessionUiVisible && (
-          <FileExplorer
-            cwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
-            onOpenPreview={(path) => {
-              setPreviewData({ filePath: path });
-              setDrawerOpenedAt(messages.length);
-            }}
-          />
-        )}
-        <main className="app-main">
-          {showHome ? (
-            <HomeView
-              runningSessions={runningSessions}
-              recentSessions={recentSessions}
-              recentDays={recentDays}
-              onChangeRecentDays={setRecentDays}
-              starred={starredSessions}
-              onToggleStar={handleToggleStar}
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              loading={runningSessions === null}
-              recentLoading={recentSessions === null}
-              error={homeError}
-              onDismissError={() => setHomeError(null)}
-              onRefresh={() => {
-                setHomeError(null);
-                send({ type: "list_running_sessions" });
-                send({
-                  type: "list_recent_sessions",
-                  days: recentDays,
-                  starred: starredSessions,
-                });
-              }}
-              onSelectTab={handleSwitchSession}
-              onAttachTmux={handleAttachTmux}
-              onOpenReadonly={handleOpenReadonly}
-              onResume={handleResumeSession}
-              onResumeInTmux={handleResumeInTmux}
-              onNew={() => setShowNewSession(true)}
-            />
-          ) : activeSessionId ? (
-            effectiveViewMode === "raw" ? (
-              <TerminalView
-                sessionId={activeSessionId}
-                on={on}
-                onResize={handleResize}
-                send={send}
+        <div className="app-workspace">
+          <div className="app-content">
+            {showFileExplorer && sessionUiVisible && (
+              <FileExplorer
+                cwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
+                onOpenPreview={(path) => {
+                  setPreviewData({ filePath: path });
+                  setDrawerOpenedAt(messages.length);
+                }}
               />
-            ) : (
-              <ChatView
-                messages={messages}
+            )}
+            <main className="app-main">
+              {showHome ? (
+                <HomeView
+                  runningSessions={runningSessions}
+                  recentSessions={recentSessions}
+                  recentDays={recentDays}
+                  onChangeRecentDays={setRecentDays}
+                  starred={starredSessions}
+                  onToggleStar={handleToggleStar}
+                  sessions={sessions}
+                  activeSessionId={activeSessionId}
+                  loading={runningSessions === null}
+                  recentLoading={recentSessions === null}
+                  error={homeError}
+                  onDismissError={() => setHomeError(null)}
+                  onRefresh={() => {
+                    setHomeError(null);
+                    send({ type: "list_running_sessions" });
+                    send({
+                      type: "list_recent_sessions",
+                      days: recentDays,
+                      starred: starredSessions,
+                    });
+                  }}
+                  onSelectTab={handleSwitchSession}
+                  onAttachTmux={handleAttachTmux}
+                  onOpenReadonly={handleOpenReadonly}
+                  onResume={handleResumeSession}
+                  onResumeInTmux={handleResumeInTmux}
+                  onNew={() => setShowNewSession(true)}
+                />
+              ) : activeSessionId ? (
+                effectiveViewMode === "raw" ? (
+                  <TerminalView
+                    sessionId={activeSessionId}
+                    on={on}
+                    onResize={handleResize}
+                    send={send}
+                  />
+                ) : (
+                  <ChatView
+                    messages={messages}
+                    threads={threads}
+                    comments={comments}
+                    sessionCwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
+                    onStartThread={handleStartThread}
+                    onAddAnchoredReview={handleAddAnchoredReview}
+                    onAddAnchoredComment={handleAddAnchoredComment}
+                    onDeleteComment={handleDeleteComment}
+                    jumpToUuid={jumpToUuid}
+                    onJumpDone={() => setJumpToUuid(null)}
+                    onOpenPreview={(path) => { setPreviewData({ filePath: path }); setDrawerOpenedAt(messages.length); }}
+                    onPreviewMarkdown={(markdown, title) => { setPreviewData({ markdown, title }); setDrawerOpenedAt(messages.length); }}
+                    onOpenFileReview={(path) => { setPreviewData({ filePath: path, reviewMode: true }); setDrawerOpenedAt(messages.length); }}
+                    readonly={isReadonly}
+                  />
+                )
+              ) : (
+                <div className="empty-state">
+                  <p>セッションがありません</p>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => setShowNewSession(true)}
+                  >
+                    新しいセッションを作成
+                  </button>
+                </div>
+              )}
+            </main>
+
+            {showThreadPanel && chatPanelsVisible && (
+              <ThreadPanel
                 threads={threads}
-                comments={comments}
-                sessionCwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
-                onStartThread={handleStartThread}
-                onAddAnchoredReview={handleAddAnchoredReview}
-                onAddAnchoredComment={handleAddAnchoredComment}
-                onDeleteComment={handleDeleteComment}
-                jumpToUuid={jumpToUuid}
-                onJumpDone={() => setJumpToUuid(null)}
-                onOpenPreview={(path) => { setPreviewData({ filePath: path }); setDrawerOpenedAt(messages.length); }}
-                onPreviewMarkdown={(markdown, title) => { setPreviewData({ markdown, title }); setDrawerOpenedAt(messages.length); }}
-                onOpenFileReview={(path) => { setPreviewData({ filePath: path, reviewMode: true }); setDrawerOpenedAt(messages.length); }}
-                readonly={isReadonly}
+                onReplyBatch={handleThreadReplyBatch}
+                onResolve={handleResolveThread}
+                onDelete={handleDeleteThread}
               />
-            )
-          ) : (
-            <div className="empty-state">
-              <p>セッションがありません</p>
-              <button
-                className="btn btn-primary"
-                onClick={() => setShowNewSession(true)}
-              >
-                新しいセッションを作成
-              </button>
-            </div>
+            )}
+            {showReviewPanel && chatPanelsVisible && (
+              <ReviewDraftPanel
+                items={reviewItems}
+                readonly={isReadonly}
+                onSave={handleSaveReview}
+                onSubmit={handleSubmitReview}
+                onClose={() => setShowReviewPanel(false)}
+              />
+            )}
+            {showCommentPanel && chatPanelsVisible && (
+              <CommentPanel
+                comments={comments}
+                onAdd={handleAddComment}
+                onDelete={handleDeleteComment}
+                onJump={handleJumpToAnchor}
+                onClose={() => setShowCommentPanel(false)}
+              />
+            )}
+            {showAgentPanel && (
+              <AgentSidePanel
+                agents={agents}
+                activeClaudeSessionId={activeSession?.claudeSessionId}
+                syncNotice={syncNotice}
+                onSelectAgent={handleOpenAgent}
+                onRefreshAgents={handleRefreshAgents}
+              />
+            )}
+          </div>
+
+          {activeChoice && (
+            <ChoicePrompt
+              prompt={activeChoice.prompt}
+              waitingFor={activeChoice.waitingFor}
+              error={choiceError}
+              onAnswer={handleAnswerChoice}
+              onRefresh={handleRefreshChoice}
+            />
           )}
-        </main>
 
-        {showThreadPanel && chatPanelsVisible && (
-          <ThreadPanel
-            threads={threads}
-            onReplyBatch={handleThreadReplyBatch}
-            onResolve={handleResolveThread}
-            onDelete={handleDeleteThread}
-          />
-        )}
-        {showReviewPanel && chatPanelsVisible && (
-          <ReviewDraftPanel
-            items={reviewItems}
-            readonly={isReadonly}
-            onSave={handleSaveReview}
-            onSubmit={handleSubmitReview}
-            onClose={() => setShowReviewPanel(false)}
-          />
-        )}
-        {showCommentPanel && chatPanelsVisible && (
-          <CommentPanel
-            comments={comments}
-            onAdd={handleAddComment}
-            onDelete={handleDeleteComment}
-            onJump={handleJumpToAnchor}
-            onClose={() => setShowCommentPanel(false)}
-          />
-        )}
-        {showAgentPanel && (
-          <AgentSidePanel
-            agents={agents}
-            activeClaudeSessionId={activeSession?.claudeSessionId}
-            syncNotice={syncNotice}
-            onSelectAgent={handleOpenAgent}
-            onRefreshAgents={handleRefreshAgents}
-          />
-        )}
+          {showHome ? null : isReadonly ? (
+            <InputBar
+              onSubmit={handleSendToReadonly}
+              disabled={!activeSession?.claudeSessionId}
+              placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
+            />
+          ) : (
+            <InputBar onSubmit={handleInput} disabled={!activeSessionId} />
+          )}
+        </div>
       </div>
-
-      {activeChoice && (
-        <ChoicePrompt
-          prompt={activeChoice.prompt}
-          waitingFor={activeChoice.waitingFor}
-          error={choiceError}
-          onAnswer={handleAnswerChoice}
-          onRefresh={handleRefreshChoice}
-        />
-      )}
-
-      {showHome ? null : isReadonly ? (
-        <InputBar
-          onSubmit={handleSendToReadonly}
-          disabled={!activeSession?.claudeSessionId}
-          placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
-        />
-      ) : (
-        <InputBar onSubmit={handleInput} disabled={!activeSessionId} />
-      )}
 
       {showNewSession && (
         <NewSessionDialog

@@ -1,24 +1,30 @@
 .session-tabs {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  width: 240px;
+  flex-shrink: 0;
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
-  padding: 0 8px;
-  min-height: 36px;
+  border-right: 1px solid var(--border);
+  border-bottom: none;
+  padding: 8px 6px;
+  gap: 6px;
+  overflow: hidden;
 }
 
-/* ホームは常に左端に固定。タブのスクロールに巻き込まれないよう tabs-list の外に置く */
+/* ホームは常に最上段に固定 */
 .tab-home {
   background: var(--tab-inactive);
   border: none;
+  border-left: 3px solid transparent;
   color: var(--text-secondary);
-  border-radius: 6px 6px 0 0;
-  padding: 6px 12px;
-  margin-right: 6px;
+  border-radius: 6px;
+  padding: 6px 10px;
   font-size: 13px;
+  text-align: left;
   white-space: nowrap;
   cursor: pointer;
   flex-shrink: 0;
+  width: 100%;
 }
 
 .tab-home:hover {
@@ -29,25 +35,27 @@
   background: var(--tab-active);
   color: var(--tab-active-text);
   font-weight: 600;
+  border-left-color: var(--accent);
 }
 
 .tabs-list {
   display: flex;
+  flex-direction: column;
   gap: 2px;
-  overflow-x: auto;
+  overflow-y: auto;
   flex: 1;
 }
 
 .tab {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
   background: var(--tab-inactive);
-  border-radius: 6px 6px 0 0;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
   cursor: pointer;
   font-size: 13px;
-  white-space: nowrap;
   transition: background 0.15s;
 }
 
@@ -58,18 +66,25 @@
 .tab.active {
   background: var(--tab-active);
   color: var(--tab-active-text);
+  border-left-color: var(--accent);
 }
 
 .tab.dead {
   opacity: 0.5;
   cursor: default;
-  border-left: 2px solid var(--text-secondary);
+}
+
+.tab-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* AI タイトル（サマリー）をそのままタブ名にするため、長文はここで省略する */
 .tab-name {
   font-weight: 500;
-  max-width: 240px;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -78,6 +93,9 @@
 .tab-cwd {
   font-size: 11px;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* tmux タブは rename されていないこともあるため cwd を識別子として強調 */
@@ -88,6 +106,7 @@
   background: var(--bg-primary);
   padding: 1px 6px;
   border-radius: 3px;
+  display: inline-block;
 }
 
 .tab-close {
@@ -98,6 +117,7 @@
   font-size: 14px;
   padding: 0 2px;
   line-height: 1;
+  margin-left: auto;
 }
 
 .tab-close:hover {
@@ -107,6 +127,7 @@
 .tab-dead-actions {
   display: flex;
   gap: 2px;
+  margin-left: auto;
 }
 
 .tab-restart {
@@ -128,10 +149,12 @@
   border: 1px dashed var(--border);
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 18px;
-  padding: 2px 10px;
+  font-size: 13px;
+  padding: 6px 10px;
   border-radius: 6px;
-  margin-left: 4px;
+  text-align: left;
+  width: 100%;
+  flex-shrink: 0;
   transition: all 0.15s;
 }
 
@@ -148,6 +171,7 @@
   color: white;
   font-weight: 600;
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 
 .tab-status {
