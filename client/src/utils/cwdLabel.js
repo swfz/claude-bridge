@@ -4,11 +4,7 @@
 
 // 単独の "worktrees" より前に ".claude/worktrees" を試す
 // （後者が一致するパスで ".claude" を project と誤認しないため）
-const WORKTREE_MARKERS = [
-  [".claude", "worktrees"],
-  [".worktrees"],
-  ["worktrees"],
-];
+const WORKTREE_MARKERS = [['.claude', 'worktrees'], ['.worktrees'], ['worktrees']];
 
 /**
  * cwd を { project, worktree } に分解する。
@@ -16,10 +12,10 @@ const WORKTREE_MARKERS = [
  * @returns {{ project: string, worktree: string | null }}
  */
 export function parseCwd(cwd) {
-  if (!cwd || typeof cwd !== "string") return { project: "", worktree: null };
+  if (!cwd || typeof cwd !== 'string') return { project: '', worktree: null };
 
-  const segments = cwd.split("/").filter((s) => s.length > 0);
-  if (segments.length === 0) return { project: "", worktree: null };
+  const segments = cwd.split('/').filter((s) => s.length > 0);
+  if (segments.length === 0) return { project: '', worktree: null };
 
   // 末尾側から探すため逆順に走査する
   for (let i = segments.length - 1; i >= 0; i--) {

@@ -1,29 +1,25 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useWebSocket } from "./hooks/useWebSocket.js";
-import SessionTabs from "./components/SessionTabs.jsx";
-import TerminalView from "./components/TerminalView.jsx";
-import ChatView from "./components/ChatView.jsx";
-import ThreadPanel from "./components/ThreadPanel.jsx";
-import CommentPanel from "./components/CommentPanel.jsx";
-import ReviewDraftPanel from "./components/ReviewDraftPanel.jsx";
-import InputBar from "./components/InputBar.jsx";
-import ChoicePrompt from "./components/ChoicePrompt.jsx";
-import TaskStrip from "./components/TaskStrip.jsx";
-import SubagentDrawer from "./components/SubagentDrawer.jsx";
-import NewSessionDialog from "./components/NewSessionDialog.jsx";
-import PreviewDrawer from "./components/PreviewDrawer.jsx";
-import FileExplorer from "./components/FileExplorer.jsx";
-import AgentSidePanel from "./components/AgentSidePanel.jsx";
-import HomeView from "./components/HomeView.jsx";
-import RateLimitMeter from "./components/RateLimitMeter.jsx";
-import {
-  loadStarred,
-  saveStarred,
-  toggleStarred,
-} from "./utils/starredSessions.js";
-import { statusMapOf, updateAttention } from "./utils/attention.js";
-import { pickNotifyTargets } from "./utils/notifications.js";
-import "./App.css";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useWebSocket } from './hooks/useWebSocket.js';
+import SessionTabs from './components/SessionTabs.jsx';
+import TerminalView from './components/TerminalView.jsx';
+import ChatView from './components/ChatView.jsx';
+import ThreadPanel from './components/ThreadPanel.jsx';
+import CommentPanel from './components/CommentPanel.jsx';
+import ReviewDraftPanel from './components/ReviewDraftPanel.jsx';
+import InputBar from './components/InputBar.jsx';
+import ChoicePrompt from './components/ChoicePrompt.jsx';
+import TaskStrip from './components/TaskStrip.jsx';
+import SubagentDrawer from './components/SubagentDrawer.jsx';
+import NewSessionDialog from './components/NewSessionDialog.jsx';
+import PreviewDrawer from './components/PreviewDrawer.jsx';
+import FileExplorer from './components/FileExplorer.jsx';
+import AgentSidePanel from './components/AgentSidePanel.jsx';
+import HomeView from './components/HomeView.jsx';
+import RateLimitMeter from './components/RateLimitMeter.jsx';
+import { loadStarred, saveStarred, toggleStarred } from './utils/starredSessions.js';
+import { statusMapOf, updateAttention } from './utils/attention.js';
+import { pickNotifyTargets } from './utils/notifications.js';
+import './App.css';
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
 const RUNNING_POLL_INTERVAL = 5000;
@@ -34,27 +30,19 @@ export default function App() {
   const { send, on, connected } = useWebSocket();
   const [sessions, setSessions] = useState([]);
   const sessionsRef = useRef(sessions);
-  const [activeSessionId, setActiveSessionId] = useState(
-    () => localStorage.getItem("activeSessionId") || null
-  );
+  const [activeSessionId, setActiveSessionId] = useState(() => localStorage.getItem('activeSessionId') || null);
   const [showNewSession, setShowNewSession] = useState(false);
-  const [viewMode, setViewMode] = useState("chat");
+  const [viewMode, setViewMode] = useState('chat');
   // ホーム画面（起動中の Claude セッション一覧）。タブとは独立した表示モードで、
   // activeSessionId は保持したまま切り替える（Home ⇄ 作業中タブを行き来できる）。
-  const [showHome, setShowHome] = useState(
-    () => localStorage.getItem("showHome") !== "false"
-  );
+  const [showHome, setShowHome] = useState(() => localStorage.getItem('showHome') !== 'false');
   // ターン完了時のデスクトップ通知（Notification API）の ON/OFF。localStorage で記憶。
-  const [notifyEnabled, setNotifyEnabled] = useState(
-    () => localStorage.getItem("desktopNotify") === "true"
-  );
+  const [notifyEnabled, setNotifyEnabled] = useState(() => localStorage.getItem('desktopNotify') === 'true');
   // サーバーが返す「今このマシンで起動中の Claude セッション」。null = 未取得
   const [runningSessions, setRunningSessions] = useState(null);
   // ホームの「直近のセッション」（終了済みを含む JSONL 由来）。null = 未取得
   const [recentSessions, setRecentSessions] = useState(null);
-  const [recentDays, setRecentDays] = useState(
-    () => Number(localStorage.getItem("homeRecentDays")) || 7
-  );
+  const [recentDays, setRecentDays] = useState(() => Number(localStorage.getItem('homeRecentDays')) || 7);
   // ホーム画面の操作エラー（tmux 再開の失敗など）。チャット欄には出せないのでバナーで見せる
   const [homeError, setHomeError] = useState(null);
   // セッションごとの選択肢プロンプト（id -> {prompt, waitingFor}）。
@@ -85,9 +73,7 @@ export default function App() {
     });
   }, []);
   // アプリ全体のテーマ（背景/UI）。localStorage で記憶。プレビュー本文の独自トグルとは独立。
-  const [appTheme, setAppTheme] = useState(
-    () => localStorage.getItem("appTheme") || "dark"
-  );
+  const [appTheme, setAppTheme] = useState(() => localStorage.getItem('appTheme') || 'dark');
   // セッションごとのメッセージを一元管理する唯一の真実（id -> message[]）。
   // 表示用の messages はここから activeSessionId で派生させる（単一 messages state や
   // messageCache の二重管理をやめ、active と表示内容のズレ＝混線を構造的に防ぐ）。
@@ -114,7 +100,7 @@ export default function App() {
     if (!sessionId) return;
     setMessagesBySession((prev) => {
       const cur = prev[sessionId] || [];
-      const next = typeof updater === "function" ? updater(cur) : updater;
+      const next = typeof updater === 'function' ? updater(cur) : updater;
       return { ...prev, [sessionId]: next };
     });
   }, []);
@@ -137,19 +123,17 @@ export default function App() {
 
   // コメント/レビューの保存・取得キー。claudeSessionId を優先し（再オープン/resume/閲覧
   // をまたいで同じ Claude セッションを参照するため）、無ければブリッジ ID。
-  const sessionKey =
-    sessions.find((s) => s.id === activeSessionId)?.claudeSessionId ||
-    activeSessionId;
+  const sessionKey = sessions.find((s) => s.id === activeSessionId)?.claudeSessionId || activeSessionId;
 
   // アプリ全体テーマを body のクラスに反映し localStorage に記憶する。
   // light のとき body.light-mode が付き、index.css の var() がライト配色へ切り替わる。
   useEffect(() => {
-    document.body.classList.toggle("light-mode", appTheme === "light");
-    localStorage.setItem("appTheme", appTheme);
+    document.body.classList.toggle('light-mode', appTheme === 'light');
+    localStorage.setItem('appTheme', appTheme);
   }, [appTheme]);
 
   useEffect(() => {
-    return on("session_list", (msg) => {
+    return on('session_list', (msg) => {
       setSessions(msg.sessions);
       sessionsRef.current = msg.sessions;
       // busy -> 非busy に遷移した alive セッションを「未確認」に追加する（見ている最中のアクティブタブは除く）。
@@ -163,21 +147,21 @@ export default function App() {
           sessions: msg.sessions,
           activeSessionId: activeSessionIdRef.current,
           isViewingActive: !showHomeRef.current && !document.hidden,
-        })
+        }),
       );
       // デスクトップ通知: タブが見えていないときだけ（見えていればタブ装飾で分かる）
       if (
         notifyEnabledRef.current &&
-        typeof Notification !== "undefined" &&
-        Notification.permission === "granted" &&
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted' &&
         document.hidden
       ) {
         for (const s of pickNotifyTargets({
           prev: prevStatuses,
           sessions: msg.sessions,
         })) {
-          const n = new Notification(s.name || "Claude Bridge", {
-            body: "ターンが完了しました",
+          const n = new Notification(s.name || 'Claude Bridge', {
+            body: 'ターンが完了しました',
             tag: `bridge-attention-${s.id}`, // 同一セッションの通知は上書きして溜めない
           });
           n.onclick = () => {
@@ -191,9 +175,7 @@ export default function App() {
       if (aliveSessions.length === 0) return;
       // 「開いたセッションを active にする」のは session_opened が担う（末尾推定はしない）。
       // ここは active が未設定 or 死んでいるときだけ fallback で最新へ寄せる。
-      const currentAlive = aliveSessions.find(
-        (s) => s.id === activeSessionIdRef.current
-      );
+      const currentAlive = aliveSessions.find((s) => s.id === activeSessionIdRef.current);
       if (!currentAlive) {
         setActiveSessionId(aliveSessions[aliveSessions.length - 1].id);
       }
@@ -203,7 +185,7 @@ export default function App() {
   // サーバーが「今開いた/接続したセッション」を通知する。末尾推定をやめ、
   // これを唯一の active 切り替えトリガーにすることで取り違えを防ぐ。
   useEffect(() => {
-    return on("session_opened", (msg) => {
+    return on('session_opened', (msg) => {
       if (msg.bridgeSessionId) {
         setActiveSessionId(msg.bridgeSessionId);
         // 開いたセッションを見せたいのでホームからは抜ける
@@ -214,23 +196,19 @@ export default function App() {
   }, [on, clearAttention]);
 
   useEffect(() => {
-    return on("session_exited", (msg) => {
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === msg.sessionId ? { ...s, alive: false } : s
-        )
-      );
+    return on('session_exited', (msg) => {
+      setSessions((prev) => prev.map((s) => (s.id === msg.sessionId ? { ...s, alive: false } : s)));
     });
   }, [on]);
 
   // エラー通知（現在アクティブなセッションのメッセージ列に system として追加）
   useEffect(() => {
-    return on("error", (msg) => {
+    return on('error', (msg) => {
       updateSessionMessages(activeSessionIdRef.current, (prev) => [
         ...prev,
         {
           id: `error-${Date.now()}`,
-          role: "system",
+          role: 'system',
           content: msg.message,
           timestamp: new Date().toISOString(),
         },
@@ -240,13 +218,13 @@ export default function App() {
 
   // ホーム画面の操作エラー（tmux window 作成の失敗など）
   useEffect(() => {
-    return on("home_error", (msg) => setHomeError(msg.message));
+    return on('home_error', (msg) => setHomeError(msg.message));
   }, [on]);
 
   // TUI に出ている選択肢プロンプト（AskUserQuestion / ツール許可 / trust 確認）。
   // サーバーが待ち状態のセッションの画面を読んで送ってくる。prompt が null なら待ちではない。
   useEffect(() => {
-    return on("choice_prompt", (msg) => {
+    return on('choice_prompt', (msg) => {
       setChoicePrompts((prev) => ({
         ...prev,
         [msg.sessionId]: { prompt: msg.prompt, waitingFor: msg.waitingFor },
@@ -256,23 +234,23 @@ export default function App() {
   }, [on]);
 
   useEffect(() => {
-    return on("choice_prompt_error", (msg) => setChoiceError(msg.message));
+    return on('choice_prompt_error', (msg) => setChoiceError(msg.message));
   }, [on]);
 
   // サブエージェント（Agent ツール）の一覧。JSONL のファイル読みなので readonly でも来る
   useEffect(() => {
-    return on("subagent_tasks", (msg) => {
+    return on('subagent_tasks', (msg) => {
       setSubagentTasks((prev) => ({ ...prev, [msg.sessionId]: msg.tasks || [] }));
     });
   }, [on]);
 
   // ドロワーで開いているサブエージェントの会話。別の agent のものは捨てる
   useEffect(() => {
-    return on("subagent_transcript", (msg) => {
+    return on('subagent_transcript', (msg) => {
       setSubagentDrawer((prev) =>
         prev && prev.agentId === msg.agentId
           ? { ...prev, messages: msg.messages || [], status: msg.status ?? prev.status }
-          : prev
+          : prev,
       );
     });
   }, [on]);
@@ -281,10 +259,10 @@ export default function App() {
   // active かどうかは見ず、必ず bridgeSessionId のメッセージ列に積む（混線防止）。
   // human は addUserMessage で先行追加されている場合があるため重複チェック。
   useEffect(() => {
-    return on("chat_message", (msg) => {
+    return on('chat_message', (msg) => {
       const session = sessionsRef.current.find((s) => s.id === msg.bridgeSessionId);
-      const isTmux = session?.type === "tmux";
-      if (!(msg.role === "assistant" || (isTmux && msg.role === "human"))) return;
+      const isTmux = session?.type === 'tmux';
+      if (!(msg.role === 'assistant' || (isTmux && msg.role === 'human'))) return;
 
       const newMsg = {
         id: `jsonl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -297,10 +275,7 @@ export default function App() {
       };
 
       updateSessionMessages(msg.bridgeSessionId, (prev) => {
-        if (
-          msg.role === "human" &&
-          prev.some((m) => m.role === "human" && m.content === msg.content)
-        ) {
+        if (msg.role === 'human' && prev.some((m) => m.role === 'human' && m.content === msg.content)) {
           return prev;
         }
         return [...prev, newMsg];
@@ -309,7 +284,7 @@ export default function App() {
   }, [on, updateSessionMessages]);
 
   useEffect(() => {
-    return on("thread_update", (msg) => {
+    return on('thread_update', (msg) => {
       if (msg.sessionId === activeSessionId) {
         setThreads(msg.threads);
       }
@@ -317,7 +292,7 @@ export default function App() {
   }, [on, activeSessionId]);
 
   useEffect(() => {
-    return on("comments_update", (msg) => {
+    return on('comments_update', (msg) => {
       if (msg.sessionId === activeSessionId) {
         setComments(msg.comments);
       }
@@ -325,7 +300,7 @@ export default function App() {
   }, [on, activeSessionId]);
 
   useEffect(() => {
-    return on("review_update", (msg) => {
+    return on('review_update', (msg) => {
       if (msg.sessionId === activeSessionId) {
         setReviewItems(msg.items || []);
       }
@@ -333,65 +308,61 @@ export default function App() {
   }, [on, activeSessionId]);
 
   useEffect(() => {
-    return on("submit_review_result", (msg) => {
+    return on('submit_review_result', (msg) => {
       setSyncNotice(
         msg.ok
-          ? `レビュー ${msg.count} 件を送信しました（${msg.via === "inbox" ? "inbox 経由" : "PTY"}）。`
-          : "レビューの送信に失敗しました。"
+          ? `レビュー ${msg.count} 件を送信しました（${msg.via === 'inbox' ? 'inbox 経由' : 'PTY'}）。`
+          : 'レビューの送信に失敗しました。',
       );
     });
   }, [on]);
 
   useEffect(() => {
-    return on("claude_sessions", (msg) => {
+    return on('claude_sessions', (msg) => {
       setClaudeSessions(msg.sessions);
     });
   }, [on]);
 
   useEffect(() => {
-    return on("tmux_panes", (msg) => {
+    return on('tmux_panes', (msg) => {
       setTmuxPanes(msg.panes);
     });
   }, [on]);
 
   useEffect(() => {
-    return on("agents", (msg) => {
+    return on('agents', (msg) => {
       setAgents(msg.agents || []);
     });
   }, [on]);
 
   useEffect(() => {
-    return on("running_sessions", (msg) => {
+    return on('running_sessions', (msg) => {
       setRunningSessions(msg.sessions || []);
     });
   }, [on]);
 
   useEffect(() => {
-    return on("recent_sessions", (msg) => {
+    return on('recent_sessions', (msg) => {
       setRecentSessions(msg.sessions || []);
     });
   }, [on]);
 
   useEffect(() => {
-    return on("rate_limits", (msg) => setRateLimits({ usage: msg.usage, fetchedAt: msg.fetchedAt }));
+    return on('rate_limits', (msg) => setRateLimits({ usage: msg.usage, fetchedAt: msg.fetchedAt }));
   }, [on]);
 
   // ホーム表示中だけポーリングする（裏では取りに行かない）
   useEffect(() => {
     if (!showHome || !connected) return;
-    send({ type: "list_running_sessions" });
-    const timer = setInterval(
-      () => send({ type: "list_running_sessions" }),
-      RUNNING_POLL_INTERVAL
-    );
+    send({ type: 'list_running_sessions' });
+    const timer = setInterval(() => send({ type: 'list_running_sessions' }), RUNNING_POLL_INTERVAL);
     return () => clearInterval(timer);
   }, [showHome, connected, send]);
 
   // 作業中タブを見ている間だけサブエージェントの一覧を取り直す（タブ切替時は即時 1 回）
   useEffect(() => {
     if (showHome || !activeSessionId || !connected) return;
-    const request = () =>
-      send({ type: "list_subagent_tasks", sessionId: activeSessionId });
+    const request = () => send({ type: 'list_subagent_tasks', sessionId: activeSessionId });
     request();
     const timer = setInterval(request, SUBAGENT_POLL_INTERVAL);
     return () => clearInterval(timer);
@@ -416,9 +387,9 @@ export default function App() {
   const handleRequestTranscript = useCallback(
     (agentId) => {
       if (!activeSessionId || !agentId) return;
-      send({ type: "get_subagent_transcript", sessionId: activeSessionId, agentId });
+      send({ type: 'get_subagent_transcript', sessionId: activeSessionId, agentId });
     },
-    [send, activeSessionId]
+    [send, activeSessionId],
   );
 
   // 直近セッションは JSONL 全走査になるので、ホームを開いた時と日数変更時だけ取る。
@@ -426,14 +397,14 @@ export default function App() {
   useEffect(() => {
     if (!showHome || !connected) return;
     send({
-      type: "list_recent_sessions",
+      type: 'list_recent_sessions',
       days: recentDays,
       starred: starredRef.current,
     });
   }, [showHome, connected, recentDays, send]);
 
   useEffect(() => {
-    localStorage.setItem("homeRecentDays", String(recentDays));
+    localStorage.setItem('homeRecentDays', String(recentDays));
   }, [recentDays]);
 
   useEffect(() => {
@@ -445,15 +416,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("showHome", String(showHome));
+    localStorage.setItem('showHome', String(showHome));
   }, [showHome]);
 
   useEffect(() => {
-    localStorage.setItem("desktopNotify", String(notifyEnabled));
+    localStorage.setItem('desktopNotify', String(notifyEnabled));
   }, [notifyEnabled]);
 
   useEffect(() => {
-    return on("session_history", (msg) => {
+    return on('session_history', (msg) => {
       if (!msg.messages || msg.messages.length === 0) return;
 
       // 境界 timestamp: attach/resume 時点での履歴末尾の時刻を localStorage に保存し、
@@ -492,9 +463,9 @@ export default function App() {
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
     if (activeSessionId) {
-      localStorage.setItem("activeSessionId", activeSessionId);
+      localStorage.setItem('activeSessionId', activeSessionId);
     } else {
-      localStorage.removeItem("activeSessionId");
+      localStorage.removeItem('activeSessionId');
     }
   }, [activeSessionId]);
 
@@ -502,9 +473,9 @@ export default function App() {
   // コメント/レビューは sessionKey 依存にして、claudeSessionId が後から埋まった場合も再取得する。
   useEffect(() => {
     if (activeSessionId) {
-      send({ type: "get_threads", sessionId: activeSessionId });
-      send({ type: "get_comments", sessionId: activeSessionId, sessionKey });
-      send({ type: "get_review", sessionId: activeSessionId, sessionKey });
+      send({ type: 'get_threads', sessionId: activeSessionId });
+      send({ type: 'get_comments', sessionId: activeSessionId, sessionKey });
+      send({ type: 'get_review', sessionId: activeSessionId, sessionKey });
     }
   }, [activeSessionId, sessionKey, send]);
 
@@ -517,7 +488,7 @@ export default function App() {
     const session = sessions.find((s) => s.id === activeSessionId);
     if (session?.claudeSessionId) {
       send({
-        type: "load_session_history",
+        type: 'load_session_history',
         sessionId: activeSessionId,
         claudeSessionId: session.claudeSessionId,
         projectDir: session.projectDir,
@@ -527,15 +498,15 @@ export default function App() {
 
   const handleCreateSession = useCallback(
     ({ name, cwd }) => {
-      send({ type: "new_session", name, cwd });
+      send({ type: 'new_session', name, cwd });
       setShowNewSession(false);
     },
-    [send]
+    [send],
   );
 
   const handleKillSession = useCallback(
     (sessionId) => {
-      send({ type: "kill_session", sessionId });
+      send({ type: 'kill_session', sessionId });
       // 境界情報は kill されたセッションには無意味なのでクリーンアップ
       localStorage.removeItem(`historyBoundary:${sessionId}`);
       setMessagesBySession((prev) => {
@@ -548,26 +519,26 @@ export default function App() {
         setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
       }
     },
-    [send, sessions, activeSessionId]
+    [send, sessions, activeSessionId],
   );
 
   const handleRestartSession = useCallback(
     (sessionId) => {
-      send({ type: "restart_session", sessionId });
+      send({ type: 'restart_session', sessionId });
     },
-    [send]
+    [send],
   );
 
   const handleRemovePastSession = useCallback(
     (sessionId) => {
-      send({ type: "remove_past_session", sessionId });
+      send({ type: 'remove_past_session', sessionId });
     },
-    [send]
+    [send],
   );
 
   const handleDetachTmux = useCallback(
     (sessionId) => {
-      send({ type: "detach_tmux_pane", sessionId });
+      send({ type: 'detach_tmux_pane', sessionId });
       localStorage.removeItem(`historyBoundary:${sessionId}`);
       setMessagesBySession((prev) => {
         const next = { ...prev };
@@ -575,23 +546,23 @@ export default function App() {
         return next;
       });
     },
-    [send]
+    [send],
   );
 
   const handleResumeSession = useCallback(
     ({ claudeSessionId, name, cwd, projectDir }) => {
       // 履歴を先に取得
       send({
-        type: "load_session_history",
+        type: 'load_session_history',
         claudeSessionId,
         projectDir,
       });
       // セッションを resume で起動
-      send({ type: "resume_session", claudeSessionId, name, cwd });
+      send({ type: 'resume_session', claudeSessionId, name, cwd });
       setShowNewSession(false);
       setClaudeSessions(null);
     },
-    [send]
+    [send],
   );
 
   // tmux に新しい window を作って `claude --resume` で起こす。
@@ -599,20 +570,20 @@ export default function App() {
   const handleResumeInTmux = useCallback(
     ({ claudeSessionId, name, cwd }) => {
       setHomeError(null);
-      send({ type: "resume_in_tmux", claudeSessionId, name, cwd });
+      send({ type: 'resume_in_tmux', claudeSessionId, name, cwd });
       setShowNewSession(false);
     },
-    [send]
+    [send],
   );
 
   const handleRequestClaudeSessions = useCallback(() => {
-    send({ type: "list_claude_sessions" });
+    send({ type: 'list_claude_sessions' });
   }, [send]);
 
   const handleAttachTmux = useCallback(
     ({ paneId, name, cwd, target, claudePid, claudeSessionId, status }) => {
       send({
-        type: "attach_tmux_pane",
+        type: 'attach_tmux_pane',
         paneId,
         name,
         cwd,
@@ -624,22 +595,22 @@ export default function App() {
       setShowNewSession(false);
       setTmuxPanes(null);
     },
-    [send]
+    [send],
   );
 
   // claude を起動せず、既存セッションの JSONL を読むだけの閲覧（コメント可）ビューを開く
   const handleOpenReadonly = useCallback(
     ({ claudeSessionId, name, cwd, projectDir }) => {
-      send({ type: "open_readonly_session", claudeSessionId, name, cwd, projectDir });
+      send({ type: 'open_readonly_session', claudeSessionId, name, cwd, projectDir });
       setShowNewSession(false);
       setClaudeSessions(null);
     },
-    [send]
+    [send],
   );
 
   const handleCloseReadonly = useCallback(
     (sessionId) => {
-      send({ type: "close_readonly_session", sessionId });
+      send({ type: 'close_readonly_session', sessionId });
       setMessagesBySession((prev) => {
         const next = { ...prev };
         delete next[sessionId];
@@ -650,12 +621,12 @@ export default function App() {
         setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
       }
     },
-    [send, sessions, activeSessionId]
+    [send, sessions, activeSessionId],
   );
 
   // --- agent view 連携パネル ---
   const handleRefreshAgents = useCallback(() => {
-    send({ type: "list_agents" });
+    send({ type: 'list_agents' });
   }, [send]);
 
   // 一覧で選んだ agent を、メインタブに readonly セッションとして開く
@@ -669,34 +640,32 @@ export default function App() {
         cwd: agent.cwd,
       });
     },
-    [handleOpenReadonly]
+    [handleOpenReadonly],
   );
 
   // readonly セッション（メインタブ）から、その claudeSessionId へフックベース送信
   const handleSendToReadonly = useCallback(
     (text) => {
-      const t = (text || "").trim();
+      const t = (text || '').trim();
       const s = sessionsRef.current.find((x) => x.id === activeSessionId);
       const sid = s?.claudeSessionId;
       if (!t || !sid) return;
-      send({ type: "send_to_agent", claudeSessionId: sid, comments: [t] });
+      send({ type: 'send_to_agent', claudeSessionId: sid, comments: [t] });
     },
-    [send, activeSessionId]
+    [send, activeSessionId],
   );
 
   // コメント送信（inbox 書き込み）の結果
   useEffect(() => {
-    return on("send_to_agent_result", (msg) => {
+    return on('send_to_agent_result', (msg) => {
       setSyncNotice(
-        msg.ok
-          ? "コメントを送信しました（対象セッションのフックが取り込みます）。"
-          : "送信に失敗しました。"
+        msg.ok ? 'コメントを送信しました（対象セッションのフックが取り込みます）。' : '送信に失敗しました。',
       );
     });
   }, [on]);
 
   const handleRequestTmuxPanes = useCallback(() => {
-    send({ type: "list_tmux_panes" });
+    send({ type: 'list_tmux_panes' });
   }, [send]);
 
   const addUserMessage = useCallback(
@@ -705,23 +674,23 @@ export default function App() {
         ...prev,
         {
           id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          role: "human",
+          role: 'human',
           content: text,
           timestamp: new Date().toISOString(),
         },
       ]);
     },
-    [updateSessionMessages]
+    [updateSessionMessages],
   );
 
   const handleInput = useCallback(
     (text) => {
       if (activeSessionId) {
         addUserMessage(text);
-        send({ type: "input", sessionId: activeSessionId, text: text + "\r" });
+        send({ type: 'input', sessionId: activeSessionId, text: text + '\r' });
       }
     },
-    [send, activeSessionId, addUserMessage]
+    [send, activeSessionId, addUserMessage],
   );
 
   // 選択肢プロンプトへの回答。keys は数字キー（選択/トグル）や Tab / Escape。
@@ -729,30 +698,30 @@ export default function App() {
   const handleAnswerChoice = useCallback(
     ({ keys, text }) => {
       if (!activeSessionId) return;
-      send({ type: "answer_choice_prompt", sessionId: activeSessionId, keys, text });
+      send({ type: 'answer_choice_prompt', sessionId: activeSessionId, keys, text });
     },
-    [send, activeSessionId]
+    [send, activeSessionId],
   );
 
   const handleRefreshChoice = useCallback(() => {
     if (!activeSessionId) return;
-    send({ type: "get_choice_prompt", sessionId: activeSessionId });
+    send({ type: 'get_choice_prompt', sessionId: activeSessionId });
   }, [send, activeSessionId]);
 
   // タブを切り替えた/再接続した直後は、その場で画面を読んでカードの内容を合わせる
   // （定期ポーリングを待たずに出したいため）
   useEffect(() => {
     if (!activeSessionId || showHome || !connected) return;
-    send({ type: "get_choice_prompt", sessionId: activeSessionId });
+    send({ type: 'get_choice_prompt', sessionId: activeSessionId });
   }, [send, activeSessionId, showHome, connected]);
 
   const handleResize = useCallback(
     (cols, rows) => {
       if (activeSessionId) {
-        send({ type: "resize", sessionId: activeSessionId, cols, rows });
+        send({ type: 'resize', sessionId: activeSessionId, cols, rows });
       }
     },
-    [send, activeSessionId]
+    [send, activeSessionId],
   );
 
   const handleSwitchSession = useCallback(
@@ -766,7 +735,7 @@ export default function App() {
       setReviewItems([]);
       clearAttention(sessionId);
     },
-    [clearAttention]
+    [clearAttention],
   );
 
   // 通知クリック時に最新の handleSwitchSession を呼ぶため（session_list ハンドラの
@@ -781,18 +750,16 @@ export default function App() {
       setNotifyEnabled(false);
       return;
     }
-    if (Notification.permission === "granted") {
+    if (Notification.permission === 'granted') {
       setNotifyEnabled(true);
       return;
     }
-    if (Notification.permission === "denied") {
-      alert(
-        "ブラウザの通知権限がブロックされています。サイト設定から許可してください。"
-      );
+    if (Notification.permission === 'denied') {
+      alert('ブラウザの通知権限がブロックされています。サイト設定から許可してください。');
       return;
     }
     const permission = await Notification.requestPermission();
-    if (permission === "granted") {
+    if (permission === 'granted') {
       setNotifyEnabled(true);
     }
   }, [notifyEnabled]);
@@ -805,115 +772,114 @@ export default function App() {
       if (showHomeRef.current) return;
       clearAttention(activeSessionIdRef.current);
     };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [clearAttention]);
 
   const handleStartThread = useCallback(
     (messageId, selectedText) => {
       if (activeSessionId) {
         send({
-          type: "new_thread",
+          type: 'new_thread',
           sessionId: activeSessionId,
           messageId,
-          selectedText: selectedText || "(メッセージ全体)",
+          selectedText: selectedText || '(メッセージ全体)',
         });
         setShowThreadPanel(true);
       }
     },
-    [send, activeSessionId]
+    [send, activeSessionId],
   );
 
   const handleThreadReplyBatch = useCallback(
     (replies) => {
       if (!activeSessionId || replies.length === 0) return;
       send({
-        type: "thread_reply_batch",
+        type: 'thread_reply_batch',
         sessionId: activeSessionId,
         replies,
       });
     },
-    [send, activeSessionId]
+    [send, activeSessionId],
   );
 
   const handleResolveThread = useCallback(
     (threadId) => {
       if (activeSessionId) {
         send({
-          type: "resolve_thread",
+          type: 'resolve_thread',
           sessionId: activeSessionId,
           threadId,
         });
       }
     },
-    [send, activeSessionId]
+    [send, activeSessionId],
   );
 
   const handleDeleteThread = useCallback(
     (threadId) => {
       if (activeSessionId) {
         send({
-          type: "delete_thread",
+          type: 'delete_thread',
           sessionId: activeSessionId,
           threadId,
         });
       }
     },
-    [send, activeSessionId]
+    [send, activeSessionId],
   );
 
   // コメント＝送信しない・参照専用。anchor があれば「この箇所」に紐付く、無ければセッション全体メモ。
   const handleAddComment = useCallback(
     (text, anchor = null) => {
-      const t = (text || "").trim();
+      const t = (text || '').trim();
       if (activeSessionId && t) {
-        send({ type: "save_comment", sessionId: activeSessionId, sessionKey, text: t, anchor });
+        send({ type: 'save_comment', sessionId: activeSessionId, sessionKey, text: t, anchor });
       }
     },
-    [send, activeSessionId, sessionKey]
+    [send, activeSessionId, sessionKey],
   );
 
   const handleDeleteComment = useCallback(
     (commentId) => {
       if (activeSessionId) {
-        send({ type: "delete_comment", sessionId: activeSessionId, sessionKey, commentId });
+        send({ type: 'delete_comment', sessionId: activeSessionId, sessionKey, commentId });
       }
     },
-    [send, activeSessionId, sessionKey]
+    [send, activeSessionId, sessionKey],
   );
 
   // レビュー＝pending review を保存（下書き、送信はしない）
   const handleSaveReview = useCallback(
     (items) => {
       if (activeSessionId) {
-        send({ type: "save_review", sessionId: activeSessionId, sessionKey, items });
+        send({ type: 'save_review', sessionId: activeSessionId, sessionKey, items });
       }
     },
-    [send, activeSessionId, sessionKey]
+    [send, activeSessionId, sessionKey],
   );
 
   // レビュー Submit＝溜めた指摘を一括送信。送信先（PTY/inbox）はサーバーが種別で出し分ける。
   const handleSubmitReview = useCallback(
     (items) => {
-      const list = (items ?? reviewItems).filter((it) => (it.text || "").trim());
+      const list = (items ?? reviewItems).filter((it) => (it.text || '').trim());
       if (!activeSessionId || list.length === 0) return;
-      send({ type: "submit_review", sessionId: activeSessionId, sessionKey, items: list });
+      send({ type: 'submit_review', sessionId: activeSessionId, sessionKey, items: list });
     },
-    [send, activeSessionId, sessionKey, reviewItems]
+    [send, activeSessionId, sessionKey, reviewItems],
   );
 
   // 範囲選択 → レビューに追加。選択箇所を anchor（対象）に、本文（指摘）は別に書いて渡す。
   const handleAddAnchoredReview = useCallback(
     ({ anchor, text }) => {
-      const t = (text || "").trim();
+      const t = (text || '').trim();
       if (!activeSessionId || !t) return;
       const next = [...reviewItems, { id: `r-${Date.now()}`, text: t, anchor: anchor || null }];
       setReviewItems(next);
-      send({ type: "save_review", sessionId: activeSessionId, sessionKey, items: next });
+      send({ type: 'save_review', sessionId: activeSessionId, sessionKey, items: next });
       setShowReviewPanel(true);
     },
-    [send, activeSessionId, sessionKey, reviewItems]
+    [send, activeSessionId, sessionKey, reviewItems],
   );
 
   // 範囲選択 → コメントに残す。選択箇所を anchor に、本文は別に書いて保存（送信しない）。
@@ -922,20 +888,23 @@ export default function App() {
       handleAddComment(text, anchor || null);
       setShowCommentPanel(true);
     },
-    [handleAddComment]
+    [handleAddComment],
   );
 
   // コメント一覧 → コメントした箇所へ移動。メッセージ＝該当メッセージへスクロール、
   // ファイル＝そのファイルのプレビューを開く。
-  const handleJumpToAnchor = useCallback((anchor) => {
-    if (!anchor) return;
-    if (anchor.type === "message" && anchor.messageUuid) {
-      setJumpToUuid(anchor.messageUuid);
-    } else if (anchor.type === "file" && anchor.filePath) {
-      setPreviewData({ filePath: anchor.filePath });
-      setDrawerOpenedAt((messagesBySession[activeSessionId] || []).length);
-    }
-  }, [messagesBySession, activeSessionId]);
+  const handleJumpToAnchor = useCallback(
+    (anchor) => {
+      if (!anchor) return;
+      if (anchor.type === 'message' && anchor.messageUuid) {
+        setJumpToUuid(anchor.messageUuid);
+      } else if (anchor.type === 'file' && anchor.filePath) {
+        setPreviewData({ filePath: anchor.filePath });
+        setDrawerOpenedAt((messagesBySession[activeSessionId] || []).length);
+      }
+    },
+    [messagesBySession, activeSessionId],
+  );
 
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
 
@@ -943,14 +912,13 @@ export default function App() {
   // 表示メッセージは唯一の真実 messagesBySession から activeSessionId で派生させる
   const messages = (activeSessionId && messagesBySession[activeSessionId]) || [];
   // 閲覧専用セッションは JSONL を読むだけ。chat 固定でコメントは付けられるが送信はしない
-  const isReadonly = activeSession?.type === "readonly";
-  const effectiveViewMode = isReadonly ? "chat" : viewMode;
+  const isReadonly = activeSession?.type === 'readonly';
+  const effectiveViewMode = isReadonly ? 'chat' : viewMode;
   // ホーム表示中はセッション固有の UI（ビュー切替・スレッド/レビュー/メモ・入力欄）を出さない
   const sessionUiVisible = !showHome && !!activeSessionId;
-  const chatPanelsVisible = sessionUiVisible && effectiveViewMode === "chat";
+  const chatPanelsVisible = sessionUiVisible && effectiveViewMode === 'chat';
   // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
-  const activeChoice =
-    sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
+  const activeChoice = sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
 
   return (
     <div className="app">
@@ -960,7 +928,7 @@ export default function App() {
           {sessionUiVisible && !isReadonly && (
             <>
               <button
-                className={`toggle-btn thread-toggle ${showFileExplorer ? "active" : ""}`}
+                className={`toggle-btn thread-toggle ${showFileExplorer ? 'active' : ''}`}
                 onClick={() => setShowFileExplorer(!showFileExplorer)}
                 title="ファイラを表示/非表示"
               >
@@ -968,29 +936,25 @@ export default function App() {
               </button>
               <div className="view-toggle">
                 <button
-                  className={`toggle-btn ${viewMode === "raw" ? "active" : ""}`}
-                  onClick={() => setViewMode("raw")}
+                  className={`toggle-btn ${viewMode === 'raw' ? 'active' : ''}`}
+                  onClick={() => setViewMode('raw')}
                 >
                   Raw
                 </button>
                 <button
-                  className={`toggle-btn ${viewMode === "chat" ? "active" : ""}`}
-                  onClick={() => setViewMode("chat")}
+                  className={`toggle-btn ${viewMode === 'chat' ? 'active' : ''}`}
+                  onClick={() => setViewMode('chat')}
                 >
                   Chat
                 </button>
               </div>
-              {viewMode === "chat" && (
+              {viewMode === 'chat' && (
                 <button
-                  className={`toggle-btn thread-toggle ${showThreadPanel ? "active" : ""}`}
+                  className={`toggle-btn thread-toggle ${showThreadPanel ? 'active' : ''}`}
                   onClick={() => setShowThreadPanel(!showThreadPanel)}
                 >
                   Threads
-                  {unresolvedCount > 0 && (
-                    <span className="thread-count-badge">
-                      {unresolvedCount}
-                    </span>
-                  )}
+                  {unresolvedCount > 0 && <span className="thread-count-badge">{unresolvedCount}</span>}
                 </button>
               )}
             </>
@@ -998,31 +962,29 @@ export default function App() {
           {chatPanelsVisible && (
             <>
               <button
-                className={`toggle-btn thread-toggle ${showReviewPanel ? "active" : ""}`}
+                className={`toggle-btn thread-toggle ${showReviewPanel ? 'active' : ''}`}
                 onClick={() => setShowReviewPanel(!showReviewPanel)}
                 title="レビュー（指摘を溜めて Submit で一括送信）"
               >
                 Review
-                {reviewItems.filter((it) => (it.text || "").trim()).length > 0 && (
+                {reviewItems.filter((it) => (it.text || '').trim()).length > 0 && (
                   <span className="thread-count-badge">
-                    {reviewItems.filter((it) => (it.text || "").trim()).length}
+                    {reviewItems.filter((it) => (it.text || '').trim()).length}
                   </span>
                 )}
               </button>
               <button
-                className={`toggle-btn thread-toggle ${showCommentPanel ? "active" : ""}`}
+                className={`toggle-btn thread-toggle ${showCommentPanel ? 'active' : ''}`}
                 onClick={() => setShowCommentPanel(!showCommentPanel)}
                 title="コメント（送信せずセッションに残す・参照専用）"
               >
                 Memo
-                {comments.length > 0 && (
-                  <span className="thread-count-badge">{comments.length}</span>
-                )}
+                {comments.length > 0 && <span className="thread-count-badge">{comments.length}</span>}
               </button>
             </>
           )}
           <button
-            className={`toggle-btn thread-toggle ${showAgentPanel ? "active" : ""}`}
+            className={`toggle-btn thread-toggle ${showAgentPanel ? 'active' : ''}`}
             onClick={() => {
               const next = !showAgentPanel;
               setShowAgentPanel(next);
@@ -1034,28 +996,24 @@ export default function App() {
           </button>
           <button
             className="toggle-btn thread-toggle"
-            onClick={() =>
-              setAppTheme((t) => (t === "light" ? "dark" : "light"))
-            }
+            onClick={() => setAppTheme((t) => (t === 'light' ? 'dark' : 'light'))}
             title="アプリ全体のテーマを切り替え（ライト/ダーク）"
           >
-            {appTheme === "light" ? "Dark" : "Light"}
+            {appTheme === 'light' ? 'Dark' : 'Light'}
           </button>
-          {"Notification" in window && (
+          {'Notification' in window && (
             <button
-              className={`toggle-btn thread-toggle ${notifyEnabled ? "active" : ""}`}
+              className={`toggle-btn thread-toggle ${notifyEnabled ? 'active' : ''}`}
               onClick={handleToggleNotify}
               title="ターン完了時のデスクトップ通知を ON/OFF"
             >
-              {notifyEnabled ? "🔔" : "🔕"}
+              {notifyEnabled ? '🔔' : '🔕'}
             </button>
           )}
           <RateLimitMeter rateLimits={rateLimits} />
           <div className="connection-status">
-            <span
-              className={`status-dot ${connected ? "connected" : "disconnected"}`}
-            />
-            {connected ? "Connected" : "Disconnected"}
+            <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
+            {connected ? 'Connected' : 'Disconnected'}
           </div>
         </div>
       </header>
@@ -1104,9 +1062,9 @@ export default function App() {
                   onDismissError={() => setHomeError(null)}
                   onRefresh={() => {
                     setHomeError(null);
-                    send({ type: "list_running_sessions" });
+                    send({ type: 'list_running_sessions' });
                     send({
-                      type: "list_recent_sessions",
+                      type: 'list_recent_sessions',
                       days: recentDays,
                       starred: starredSessions,
                     });
@@ -1119,13 +1077,8 @@ export default function App() {
                   onNew={() => setShowNewSession(true)}
                 />
               ) : activeSessionId ? (
-                effectiveViewMode === "raw" ? (
-                  <TerminalView
-                    sessionId={activeSessionId}
-                    on={on}
-                    onResize={handleResize}
-                    send={send}
-                  />
+                effectiveViewMode === 'raw' ? (
+                  <TerminalView sessionId={activeSessionId} on={on} onResize={handleResize} send={send} />
                 ) : (
                   <ChatView
                     messages={messages}
@@ -1138,19 +1091,25 @@ export default function App() {
                     onDeleteComment={handleDeleteComment}
                     jumpToUuid={jumpToUuid}
                     onJumpDone={() => setJumpToUuid(null)}
-                    onOpenPreview={(path) => { setPreviewData({ filePath: path }); setDrawerOpenedAt(messages.length); }}
-                    onPreviewMarkdown={(markdown, title) => { setPreviewData({ markdown, title }); setDrawerOpenedAt(messages.length); }}
-                    onOpenFileReview={(path) => { setPreviewData({ filePath: path, reviewMode: true }); setDrawerOpenedAt(messages.length); }}
+                    onOpenPreview={(path) => {
+                      setPreviewData({ filePath: path });
+                      setDrawerOpenedAt(messages.length);
+                    }}
+                    onPreviewMarkdown={(markdown, title) => {
+                      setPreviewData({ markdown, title });
+                      setDrawerOpenedAt(messages.length);
+                    }}
+                    onOpenFileReview={(path) => {
+                      setPreviewData({ filePath: path, reviewMode: true });
+                      setDrawerOpenedAt(messages.length);
+                    }}
                     readonly={isReadonly}
                   />
                 )
               ) : (
                 <div className="empty-state">
                   <p>セッションがありません</p>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => setShowNewSession(true)}
-                  >
+                  <button className="btn btn-primary" onClick={() => setShowNewSession(true)}>
                     新しいセッションを作成
                   </button>
                 </div>
@@ -1195,10 +1154,7 @@ export default function App() {
           </div>
 
           {sessionUiVisible && (
-            <TaskStrip
-              tasks={subagentTasks[activeSessionId] || []}
-              onOpenTask={handleOpenSubagentTask}
-            />
+            <TaskStrip tasks={subagentTasks[activeSessionId] || []} onOpenTask={handleOpenSubagentTask} />
           )}
 
           {activeChoice && (
@@ -1270,23 +1226,26 @@ export default function App() {
           markdown={previewData.markdown}
           title={previewData.title}
           reviewMode={previewData.reviewMode}
-          onClose={() => { setPreviewData(null); setDrawerOpenedAt(null); }}
+          onClose={() => {
+            setPreviewData(null);
+            setDrawerOpenedAt(null);
+          }}
           onReviewSubmit={(target, items) => {
             if (!activeSessionId) {
-              console.warn("No active session for review submit");
+              console.warn('No active session for review submit');
               return;
             }
             // ファイルレビューもセッションのレビューと同じ submit_review 経由で送る。
             // サーバーが対象セッション種別で PTY/inbox を出し分けるため readonly でも届く。
             // 各項目にファイル名を前置して文脈を残す。
-            const fileName = target.split("/").pop();
+            const fileName = target.split('/').pop();
             const labeled = items
-              .map((t) => (t || "").trim())
+              .map((t) => (t || '').trim())
               .filter(Boolean)
               .map((t) => ({ text: `${fileName}: ${t}` }));
             if (labeled.length === 0) return;
             send({
-              type: "submit_review",
+              type: 'submit_review',
               sessionId: activeSessionId,
               sessionKey,
               items: labeled,
@@ -1295,12 +1254,12 @@ export default function App() {
           onSaveComment={(note, location) => {
             // プレビューで「コメントに残す」: 送信せずセッションのコメントに保存（ファイルアンカー付き）
             if (!activeSessionId) return;
-            const t = (note || "").trim();
+            const t = (note || '').trim();
             if (!t) return;
             handleAddComment(t, {
-              type: "file",
+              type: 'file',
               filePath: previewData.filePath || null,
-              quote: location?.selectedText || "",
+              quote: location?.selectedText || '',
               label: location?.label || null,
               line: location?.line ?? null,
             });
@@ -1308,18 +1267,10 @@ export default function App() {
           onDeleteComment={handleDeleteComment}
           fileComments={
             previewData.filePath
-              ? comments.filter(
-                  (c) =>
-                    c.anchor?.type === "file" &&
-                    c.anchor.filePath === previewData.filePath
-                )
+              ? comments.filter((c) => c.anchor?.type === 'file' && c.anchor.filePath === previewData.filePath)
               : []
           }
-          responses={
-            drawerOpenedAt != null
-              ? messages.slice(drawerOpenedAt).filter((m) => m.role === "assistant")
-              : []
-          }
+          responses={drawerOpenedAt != null ? messages.slice(drawerOpenedAt).filter((m) => m.role === 'assistant') : []}
         />
       )}
     </div>

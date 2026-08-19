@@ -45,7 +45,7 @@ export function updateAttention({ prev, current, sessions, activeSessionId, isVi
     const prevStatus = prev?.get(s.id);
     // 初回（前回の記録に無い）は接続直後の全件反映なので遷移扱いしない
     if (prevStatus === undefined) continue;
-    const becameNonBusy = prevStatus === "busy" && s.status !== "busy";
+    const becameNonBusy = prevStatus === 'busy' && s.status !== 'busy';
     if (!becameNonBusy) continue;
     // 今まさに見ているアクティブタブなら「未確認」にはしない
     if (s.id === activeSessionId && isViewingActive) continue;

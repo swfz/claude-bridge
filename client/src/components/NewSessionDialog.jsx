@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import "./NewSessionDialog.css";
+import { useState, useEffect } from 'react';
+import './NewSessionDialog.css';
 
 export default function NewSessionDialog({
   onClose,
@@ -12,16 +12,16 @@ export default function NewSessionDialog({
   claudeSessions,
   tmuxPanes,
 }) {
-  const [tab, setTab] = useState("new"); // "new" | "resume" | "tmux"
-  const [name, setName] = useState("");
-  const [cwd, setCwd] = useState("");
-  const [filter, setFilter] = useState("");
+  const [tab, setTab] = useState('new'); // "new" | "resume" | "tmux"
+  const [name, setName] = useState('');
+  const [cwd, setCwd] = useState('');
+  const [filter, setFilter] = useState('');
 
   useEffect(() => {
-    if (tab === "resume" && onRequestClaudeSessions) {
+    if (tab === 'resume' && onRequestClaudeSessions) {
       onRequestClaudeSessions();
     }
-    if (tab === "tmux" && onRequestTmuxPanes) {
+    if (tab === 'tmux' && onRequestTmuxPanes) {
       onRequestTmuxPanes();
     }
   }, [tab, onRequestClaudeSessions, onRequestTmuxPanes]);
@@ -29,7 +29,7 @@ export default function NewSessionDialog({
   const handleSubmit = (e) => {
     e.preventDefault();
     onCreate({
-      name: name.trim() || "New Session",
+      name: name.trim() || 'New Session',
       cwd: cwd.trim() || undefined,
     });
   };
@@ -46,46 +46,32 @@ export default function NewSessionDialog({
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
-      <div
-        className="dialog dialog-wide"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="dialog dialog-wide" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-tabs">
-          <button
-            className={`dialog-tab ${tab === "new" ? "active" : ""}`}
-            onClick={() => setTab("new")}
-          >
+          <button className={`dialog-tab ${tab === 'new' ? 'active' : ''}`} onClick={() => setTab('new')}>
             新規作成
           </button>
-          <button
-            className={`dialog-tab ${tab === "resume" ? "active" : ""}`}
-            onClick={() => setTab("resume")}
-          >
+          <button className={`dialog-tab ${tab === 'resume' ? 'active' : ''}`} onClick={() => setTab('resume')}>
             既存セッションを再開
           </button>
-          <button
-            className={`dialog-tab ${tab === "tmux" ? "active" : ""}`}
-            onClick={() => setTab("tmux")}
-          >
+          <button className={`dialog-tab ${tab === 'tmux' ? 'active' : ''}`} onClick={() => setTab('tmux')}>
             tmux ペイン
           </button>
         </div>
 
-        {tab === "tmux" ? (
+        {tab === 'tmux' ? (
           <div className="resume-panel">
             <div className="session-list">
               {!tmuxPanes ? (
                 <p className="session-list-empty">読み込み中...</p>
               ) : tmuxPanes.length === 0 ? (
-                <p className="session-list-empty">
-                  Claude を実行中の tmux ペインが見つかりません
-                </p>
+                <p className="session-list-empty">Claude を実行中の tmux ペインが見つかりません</p>
               ) : (
                 tmuxPanes.map((p) => {
                   const label = p.sessionName || p.slug || `tmux: ${p.target}`;
-                  const cwdParts = p.cwd.split("/");
+                  const cwdParts = p.cwd.split('/');
                   const cwdBase = cwdParts.pop();
-                  const cwdParent = cwdParts.join("/");
+                  const cwdParent = cwdParts.join('/');
                   return (
                     <div
                       key={p.paneId}
@@ -104,16 +90,9 @@ export default function NewSessionDialog({
                     >
                       <div className="session-item-main">
                         <span className="session-item-name">
-                          {p.status && (
-                            <span
-                              className={`pane-status pane-status-${p.status}`}
-                              title={p.status}
-                            />
-                          )}
+                          {p.status && <span className={`pane-status pane-status-${p.status}`} title={p.status} />}
                           {label}
-                          {!p.sessionName && (
-                            <span className="pane-unrenamed">未rename</span>
-                          )}
+                          {!p.sessionName && <span className="pane-unrenamed">未rename</span>}
                         </span>
                         <span className="session-item-time">{p.target}</span>
                       </div>
@@ -135,7 +114,7 @@ export default function NewSessionDialog({
               </button>
             </div>
           </div>
-        ) : tab === "new" ? (
+        ) : tab === 'new' ? (
           <form onSubmit={handleSubmit}>
             <div className="dialog-field">
               <label>セッション名</label>
@@ -157,11 +136,7 @@ export default function NewSessionDialog({
               />
             </div>
             <div className="dialog-actions">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={onClose}
-              >
+              <button type="button" className="btn btn-ghost" onClick={onClose}>
                 キャンセル
               </button>
               <button type="submit" className="btn btn-primary">
@@ -183,15 +158,11 @@ export default function NewSessionDialog({
             <div className="session-list">
               {filteredSessions.length === 0 ? (
                 <p className="session-list-empty">
-                  {claudeSessions === null
-                    ? "読み込み中..."
-                    : "セッションが見つかりません"}
+                  {claudeSessions === null ? '読み込み中...' : 'セッションが見つかりません'}
                 </p>
               ) : (
                 filteredSessions.map((s) => {
-                  const name = s.firstUserMessage
-                    ? s.firstUserMessage.slice(0, 40)
-                    : s.sessionId.slice(0, 8);
+                  const name = s.firstUserMessage ? s.firstUserMessage.slice(0, 40) : s.sessionId.slice(0, 8);
                   const payload = {
                     claudeSessionId: s.sessionId,
                     name,
@@ -199,19 +170,12 @@ export default function NewSessionDialog({
                     projectDir: s.projectDir,
                   };
                   return (
-                    <div
-                      key={s.sessionId}
-                      className="session-list-item session-list-item-static"
-                    >
+                    <div key={s.sessionId} className="session-list-item session-list-item-static">
                       <div className="session-item-main">
                         <span className="session-item-cwd">{s.cwd}</span>
-                        <span className="session-item-time">
-                          {new Date(s.updatedAt).toLocaleString("ja-JP")}
-                        </span>
+                        <span className="session-item-time">{new Date(s.updatedAt).toLocaleString('ja-JP')}</span>
                       </div>
-                      <div className="session-item-message">
-                        {s.firstUserMessage || "(メッセージなし)"}
-                      </div>
+                      <div className="session-item-message">{s.firstUserMessage || '(メッセージなし)'}</div>
                       <div className="session-item-id">{s.sessionId}</div>
                       <div className="session-item-actions">
                         <button
