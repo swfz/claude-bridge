@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   annotateRunningSessions,
   annotateRecentSessions,
@@ -7,7 +8,15 @@ import {
 } from "../utils/runningSessions.js";
 import { isStarred, sortStarredFirst } from "../utils/starredSessions.js";
 import { parseCwd } from "../utils/cwdLabel.js";
+import {
+  filterBySearch,
+  collectProjects,
+  filterByProject,
+} from "../utils/sessionSearch.js";
 import "./HomeView.css";
+
+// 「その他の開いているタブ」は name/cwd しか持たないので検索対象をこの2つに絞る
+const OTHER_TAB_SEARCH_FIELDS = ["name", "cwd"];
 
 // 「直近のセッション」の期間プリセット
 const DAY_PRESETS = [1, 3, 7, 30];
@@ -89,6 +98,9 @@ export default function HomeView({
   onResumeInTmux,
   onNew,
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");
+
   // Star を付けたものは「続きをやる」印なので、それぞれの一覧で先頭に寄せる
   const annotated = sortStarredFirst(
     annotateRunningSessions(runningSessions, sessions),
@@ -98,10 +110,32 @@ export default function HomeView({
     annotateRecentSessions(recentSessions, runningSessions, sessions),
     starred
   );
-  const otherTabs = findUnmatchedTabs(runningSessions, sessions, recentSessions);
+  const otherTabsAll = findUnmatchedTabs(runningSessions, sessions, recentSessions);
   const starredCount = [...annotated, ...recent].filter((s) =>
     isStarred(starred, s.sessionId)
   ).length;
+
+  // プロジェクトチップの選択肢（起動中・直近の両方から集める）
+  const projects = collectProjects(annotated, recent);
+
+  // プロジェクト絞り込み → テキスト検索の順で AND 適用
+  const filteredAnnotated = filterBySearch(
+    filterByProject(annotated, selectedProject),
+    searchQuery
+  );
+  const filteredRecent = filterBySearch(
+    filterByProject(recent, selectedProject),
+    searchQuery
+  );
+  const otherTabs = filterBySearch(
+    filterByProject(otherTabsAll, selectedProject),
+    searchQuery,
+    OTHER_TAB_SEARCH_FIELDS
+  );
+
+  const isFiltering = searchQuery.trim().length > 0 || !!selectedProject;
+  const emptyMessageFor = (defaultText) =>
+    isFiltering ? "条件に一致するセッションはありません" : defaultText;
 
   // タブの識別名はカードに出しているサマリー（AI タイトル）を優先する。
   // r.name は自動生成スラッグで中身が分からないことが多い。
@@ -158,12 +192,34 @@ export default function HomeView({
       <div className="home-header">
         <h2 className="home-title">起動中の Claude セッション</h2>
         <div className="home-header-actions">
+          <div className="home-search-box">
+            <input
+              type="search"
+              className="home-search"
+              placeholder="検索（タイトル・依頼・パス・ブランチ）"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                className="home-search-clear"
+                onClick={() => setSearchQuery("")}
+                title="検索をクリア"
+              >
+                ×
+              </button>
+            )}
+          </div>
           {starredCount > 0 && (
             <span className="home-count starred-count" title="Star を付けたセッション">
               ★ {starredCount}
             </span>
           )}
-          <span className="home-count">{annotated.length} 件</span>
+          <span className="home-count">
+            {isFiltering
+              ? `${filteredAnnotated.length} / ${annotated.length} 件`
+              : `${annotated.length} 件`}
+          </span>
           <button className="btn btn-ghost" onClick={onRefresh} title="一覧を更新">
             更新
           </button>
@@ -172,6 +228,30 @@ export default function HomeView({
           </button>
         </div>
       </div>
+
+      {projects.length > 1 && (
+        <div className="home-projects">
+          <button
+            className={`home-project-chip ${selectedProject ? "" : "active"}`}
+            onClick={() => setSelectedProject("")}
+          >
+            すべて
+          </button>
+          {projects.map((project) => (
+            <button
+              key={project}
+              className={`home-project-chip ${
+                selectedProject === project ? "active" : ""
+              }`}
+              onClick={() =>
+                setSelectedProject((prev) => (prev === project ? "" : project))
+              }
+            >
+              {project}
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="home-error">
@@ -182,15 +262,17 @@ export default function HomeView({
         </div>
       )}
 
-      {annotated.length === 0 ? (
+      {filteredAnnotated.length === 0 ? (
         <p className="home-empty">
           {loading
             ? "読み込み中..."
-            : "起動中の Claude セッションはありません（tmux やターミナルで claude を起動すると表示されます）"}
+            : emptyMessageFor(
+                "起動中の Claude セッションはありません（tmux やターミナルで claude を起動すると表示されます）"
+              )}
         </p>
       ) : (
         <div className="home-grid">
-          {annotated.map((r) => {
+          {filteredAnnotated.map((r) => {
             // タブとして開いていればその表示名をそのまま使い、カードとタブの見出しを一致させる
             const label = r.openTab?.name || tabName(r);
             const starredNow = isStarred(starred, r.sessionId);
@@ -289,19 +371,25 @@ export default function HomeView({
                 </button>
               ))}
             </div>
-            <span className="home-count">{recent.length} 件</span>
+            <span className="home-count">
+              {isFiltering
+                ? `${filteredRecent.length} / ${recent.length} 件`
+                : `${recent.length} 件`}
+            </span>
           </div>
         </div>
 
-        {recent.length === 0 ? (
+        {filteredRecent.length === 0 ? (
           <p className="home-empty">
             {recentLoading
               ? "読み込み中..."
-              : `直近 ${recentDays} 日に動いていたセッションはありません`}
+              : emptyMessageFor(
+                  `直近 ${recentDays} 日に動いていたセッションはありません`
+                )}
           </p>
         ) : (
           <div className="home-grid">
-            {recent.map((s) => {
+            {filteredRecent.map((s) => {
               const label = s.openTab?.name || tabName(s);
               const starredNow = isStarred(starred, s.sessionId);
               return (

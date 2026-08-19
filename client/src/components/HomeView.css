@@ -394,3 +394,77 @@
   font-size: 11px;
   color: var(--text-secondary);
 }
+
+/* ホーム検索ボックス（タイトル・依頼・パス・ブランチを横断で絞り込む） */
+.home-search-box {
+  position: relative;
+  width: 220px;
+}
+
+.home-search {
+  width: 100%;
+  font-size: 12px;
+  padding: 6px 24px 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.home-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ネイティブのクリアボタンは独自の ×（.home-search-clear）に任せる */
+.home-search::-webkit-search-cancel-button {
+  display: none;
+}
+
+.home-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.home-search-clear:hover {
+  color: var(--text-primary);
+}
+
+/* プロジェクトフィルタのチップ列。期間プリセット（.home-day）と同じトーン */
+.home-projects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.home-project-chip {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 5px;
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.home-project-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.home-project-chip.active {
+  background: var(--accent-secondary);
+  border-color: var(--accent-secondary);
+  color: #fff;
+}
