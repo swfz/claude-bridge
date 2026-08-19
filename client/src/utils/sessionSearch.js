@@ -1,18 +1,18 @@
 // ホーム画面のセッション検索（純粋関数のみ）。
 // タイトル・依頼内容・パス・ブランチなど複数フィールドを横断してテキスト絞り込みする。
 
-import { parseCwd } from "./cwdLabel.js";
+import { parseCwd } from './cwdLabel.js';
 
 // 絞り込み対象の既定フィールド
 const DEFAULT_FIELDS = [
-  "title",
-  "name",
-  "cwd",
-  "gitBranch",
-  "firstUserMessage",
-  "lastUserMessage",
-  "lastAssistantMessage",
-  "sessionId",
+  'title',
+  'name',
+  'cwd',
+  'gitBranch',
+  'firstUserMessage',
+  'lastUserMessage',
+  'lastAssistantMessage',
+  'sessionId',
 ];
 
 // 検索語の分解: 小文字化し、半角/全角スペースで分割。空なら []
@@ -20,7 +20,7 @@ export function parseSearchQuery(query) {
   if (!query) return [];
   return query
     .toLowerCase()
-    .split(/[\s　]+/)
+    .split(/[\s\u3000]+/)
     .filter((term) => term.length > 0);
 }
 
@@ -32,7 +32,7 @@ export function matchesSearch(session, terms, fields = DEFAULT_FIELDS) {
 
   const haystacks = fields
     .map((field) => session[field])
-    .filter((value) => typeof value === "string")
+    .filter((value) => typeof value === 'string')
     .map((value) => value.toLowerCase());
 
   // term 自体も小文字化する（parseSearchQuery を経由しない直接呼び出しでも大文字小文字を無視するため）

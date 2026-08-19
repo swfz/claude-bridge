@@ -1,12 +1,8 @@
-import { createReadStream } from "fs";
-import { stat } from "fs/promises";
-import { createInterface } from "readline";
-import { join } from "path";
-import {
-  CLAUDE_PROJECTS_DIR,
-  cwdToProjectDir,
-  extractTextContent,
-} from "./jsonl-utils.js";
+import { createReadStream } from 'fs';
+import { stat } from 'fs/promises';
+import { createInterface } from 'readline';
+import { join } from 'path';
+import { CLAUDE_PROJECTS_DIR, cwdToProjectDir, extractTextContent } from './jsonl-utils.js';
 
 // カードに出す「どんなセッションか」の情報を JSONL から取り出す。
 // 全文は読まず、先頭数十行（タイトル・冒頭の依頼）と末尾数十KB（直近のやりとり）だけ見る。
@@ -24,15 +20,15 @@ export function readFirstLines(filePath, maxLines) {
   return new Promise((resolve) => {
     const lines = [];
     const rl = createInterface({
-      input: createReadStream(filePath, { encoding: "utf-8" }),
+      input: createReadStream(filePath, { encoding: 'utf-8' }),
       crlfDelay: Infinity,
     });
-    rl.on("line", (line) => {
+    rl.on('line', (line) => {
       lines.push(line);
       if (lines.length >= maxLines) rl.close();
     });
-    rl.on("close", () => resolve(lines));
-    rl.on("error", () => resolve(lines));
+    rl.on('close', () => resolve(lines));
+    rl.on('error', () => resolve(lines));
   });
 }
 
@@ -42,13 +38,13 @@ export function readLastLines(filePath, size, maxBytes = TAIL_BYTES) {
   return new Promise((resolve) => {
     const start = Math.max(0, size - maxBytes);
     const chunks = [];
-    const stream = createReadStream(filePath, { encoding: "utf-8", start });
-    stream.on("data", (c) => chunks.push(c));
-    stream.on("end", () => {
-      const lines = chunks.join("").split("\n").filter(Boolean);
+    const stream = createReadStream(filePath, { encoding: 'utf-8', start });
+    stream.on('data', (c) => chunks.push(c));
+    stream.on('end', () => {
+      const lines = chunks.join('').split('\n').filter(Boolean);
       resolve(start > 0 ? lines.slice(1) : lines);
     });
-    stream.on("error", () => resolve([]));
+    stream.on('error', () => resolve([]));
   });
 }
 
@@ -69,39 +65,39 @@ function parseLines(lines) {
 // 属性が長く中身が読めなくなるので落とす。
 export function snippetText(text) {
   return text
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 // ユーザーが実際に打った指示か（tool_result やスラッシュコマンドの展開は除く）
 function userPrompt(record) {
-  if (record.type !== "user" || record.isMeta) return "";
+  if (record.type !== 'user' || record.isMeta) return '';
   const raw = extractTextContent(record.message, 0).trim();
-  if (!raw || raw.startsWith("<")) return "";
+  if (!raw || raw.startsWith('<')) return '';
   return snippetText(raw);
 }
 
 // 先頭行群から: タイトル / 冒頭のユーザー依頼 / git ブランチ
 export function summarizeHead(lines) {
   const records = parseLines(lines);
-  let aiTitle = "";
-  let lastPrompt = "";
-  let firstUserMessage = "";
-  let gitBranch = "";
-  let cwd = "";
+  let aiTitle = '';
+  let lastPrompt = '';
+  let firstUserMessage = '';
+  let gitBranch = '';
+  let cwd = '';
   for (const record of records) {
-    if (!aiTitle && record.type === "ai-title" && record.aiTitle) {
+    if (!aiTitle && record.type === 'ai-title' && record.aiTitle) {
       aiTitle = record.aiTitle;
     }
-    if (!lastPrompt && record.type === "last-prompt" && record.lastPrompt) {
+    if (!lastPrompt && record.type === 'last-prompt' && record.lastPrompt) {
       lastPrompt = record.lastPrompt;
     }
     if (!firstUserMessage) firstUserMessage = userPrompt(record);
     if (!gitBranch && record.gitBranch) gitBranch = record.gitBranch;
     // projectDir 名からの復元ではディレクトリ名のハイフンを区別できないので、
     // JSONL に書かれている cwd をそのまま使う（resume の起動先になる）
-    if (!cwd && typeof record.cwd === "string") cwd = record.cwd;
+    if (!cwd && typeof record.cwd === 'string') cwd = record.cwd;
   }
   const first = firstUserMessage || snippetText(lastPrompt);
   return {
@@ -115,13 +111,13 @@ export function summarizeHead(lines) {
 // 末尾行群から: 直近のユーザー指示 / 直近のアシスタント発話 / 最終更新時刻
 export function summarizeTail(lines) {
   const records = parseLines(lines);
-  let lastUserMessage = "";
-  let lastAssistantMessage = "";
-  let lastTimestamp = "";
+  let lastUserMessage = '';
+  let lastAssistantMessage = '';
+  let lastTimestamp = '';
   for (let i = records.length - 1; i >= 0; i--) {
     const record = records[i];
     if (!lastTimestamp && record.timestamp) lastTimestamp = record.timestamp;
-    if (!lastAssistantMessage && record.type === "assistant") {
+    if (!lastAssistantMessage && record.type === 'assistant') {
       lastAssistantMessage = snippetText(extractTextContent(record.message, 0));
     }
     if (!lastUserMessage) lastUserMessage = userPrompt(record);
@@ -135,13 +131,13 @@ export function summarizeTail(lines) {
 }
 
 const EMPTY_SUMMARY = {
-  title: "",
-  firstUserMessage: "",
-  gitBranch: "",
-  cwd: "",
-  lastUserMessage: "",
-  lastAssistantMessage: "",
-  lastTimestamp: "",
+  title: '',
+  firstUserMessage: '',
+  gitBranch: '',
+  cwd: '',
+  lastUserMessage: '',
+  lastAssistantMessage: '',
+  lastTimestamp: '',
 };
 
 // セッション JSONL 1 本のサマリ。mtime が変わっていなければキャッシュを返す。
@@ -166,8 +162,7 @@ export async function readSessionSummary(filePath) {
   const summary = {
     ...head,
     ...tail,
-    lastUserMessage:
-      tail.lastUserMessage === head.firstUserMessage ? "" : tail.lastUserMessage,
+    lastUserMessage: tail.lastUserMessage === head.firstUserMessage ? '' : tail.lastUserMessage,
     title: head.title || tail.lastUserMessage.slice(0, TITLE_MAX),
   };
 
@@ -177,13 +172,7 @@ export async function readSessionSummary(filePath) {
 }
 
 // cwd + sessionId から JSONL のパスを解決してサマリを読む
-export async function readSessionSummaryFor(
-  cwd,
-  sessionId,
-  projectsDir = CLAUDE_PROJECTS_DIR
-) {
+export async function readSessionSummaryFor(cwd, sessionId, projectsDir = CLAUDE_PROJECTS_DIR) {
   if (!cwd || !sessionId) return { ...EMPTY_SUMMARY };
-  return readSessionSummary(
-    join(projectsDir, cwdToProjectDir(cwd), `${sessionId}.jsonl`)
-  );
+  return readSessionSummary(join(projectsDir, cwdToProjectDir(cwd), `${sessionId}.jsonl`));
 }

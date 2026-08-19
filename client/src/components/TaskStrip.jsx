@@ -1,5 +1,5 @@
-import { useState } from "react";
-import "./TaskStrip.css";
+import { useState } from 'react';
+import './TaskStrip.css';
 
 // 完了タスクをそのまま出し続けると邪魔なので、この件数を超えたら折りたたむ
 const COMPLETED_VISIBLE = 3;
@@ -15,11 +15,9 @@ export default function TaskStrip({ tasks, onOpenTask }) {
 
   if (!tasks || tasks.length === 0) return null;
 
-  const running = tasks.filter((t) => t.status === "running");
-  const completed = tasks.filter((t) => t.status !== "running");
-  const visibleCompleted = showAllCompleted
-    ? completed
-    : completed.slice(0, COMPLETED_VISIBLE);
+  const running = tasks.filter((t) => t.status === 'running');
+  const completed = tasks.filter((t) => t.status !== 'running');
+  const visibleCompleted = showAllCompleted ? completed : completed.slice(0, COMPLETED_VISIBLE);
   const hiddenCount = completed.length - visibleCompleted.length;
 
   return (
@@ -30,7 +28,7 @@ export default function TaskStrip({ tasks, onOpenTask }) {
           key={task.agentId}
           className="task-chip task-chip-running"
           onClick={() => onOpenTask(task)}
-          title={`${task.agentType || "agent"} — 実行中`}
+          title={`${task.agentType || 'agent'} — 実行中`}
         >
           <span className="task-chip-icon">⚙</span>
           <span className="task-chip-text">{taskLabel(task)}</span>
@@ -41,7 +39,7 @@ export default function TaskStrip({ tasks, onOpenTask }) {
           key={task.agentId}
           className="task-chip task-chip-done"
           onClick={() => onOpenTask(task)}
-          title={`${task.agentType || "agent"} — 完了`}
+          title={`${task.agentType || 'agent'} — 完了`}
         >
           <span className="task-chip-icon">✓</span>
           <span className="task-chip-text">{taskLabel(task)}</span>

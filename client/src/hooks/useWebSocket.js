@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState } from 'react';
 
 export function useWebSocket() {
   const wsRef = useRef(null);
@@ -10,7 +10,7 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (unmounted.current) return;
 
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${location.host}/ws`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

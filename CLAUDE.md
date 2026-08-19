@@ -13,6 +13,7 @@ npm run dev          # ビルド + サーバー起動 (http://localhost:3000)
 npm start            # サーバーのみ起動（ビルド済み前提）
 npm run build        # クライアントビルド
 npm test             # テスト実行
+npm run test:e2e     # Playwright による E2E スモークテスト（ビルド→fixture サーバーで実行）
 npm run install:all  # 全依存インストール
 npm run setup:hooks       # agent view 連携フックを ~/.claude/settings.json に登録
 npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.claude/settings.json に登録
@@ -154,6 +155,7 @@ npm test
 テストファイルは `test/` 配下。tmux コマンドのモックには `mock.module()` (experimental) を使用。
 
 テスト追加時:
+
 - ユニットテストは純粋関数から。外部依存は `mock.module` でモック
 - ファイル監視のテストは `tmpdir` + 実ファイル書き込みで
 - WebSocket テストは `ws` ライブラリで軽量サーバーを立てて結合テスト
