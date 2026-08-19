@@ -9,14 +9,27 @@
     "build": "npm --prefix client run build",
     "start": "node server/index.js",
     "test": "node --experimental-test-module-mocks --test 'test/**/*.test.js'",
+    "test:e2e": "npm run build && playwright test",
     "install:all": "npm install && npm --prefix client install",
     "setup:hooks": "node scripts/setup-hooks.js",
-    "setup:statusline": "node scripts/setup-statusline.js"
+    "setup:statusline": "node scripts/setup-statusline.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@xterm/headless": "^6.0.0",
     "express": "^4.22.2",
     "node-pty": "^1.0.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.10.0",
+    "prettier": "^3.9.6"
   }
 }
