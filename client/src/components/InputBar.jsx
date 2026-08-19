@@ -1,15 +1,32 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import "./InputBar.css";
 
-export default function InputBar({ onSubmit, disabled, placeholder }) {
-  const [text, setText] = useState("");
+// タブ（セッション）ごとの書きかけテキスト。InputBar は key={draftKey} で
+// タブ切替のたびに remount されるため、state ではなくモジュールレベルで保持する
+const drafts = new Map();
+
+export default function InputBar({ onSubmit, disabled, placeholder, draftKey }) {
+  const [text, setText] = useState(() => (draftKey && drafts.get(draftKey)) || "");
   const textareaRef = useRef(null);
+
+  const adjustHeight = (el) => {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  };
+
+  // 下書き復元時（remount 直後）に textarea の高さを内容に合わせる
+  useEffect(() => {
+    if (textareaRef.current && textareaRef.current.value) {
+      adjustHeight(textareaRef.current);
+    }
+  }, []);
 
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
     onSubmit(trimmed);
     setText("");
+    if (draftKey) drafts.delete(draftKey);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -24,8 +41,8 @@ export default function InputBar({ onSubmit, disabled, placeholder }) {
 
   const handleInput = (e) => {
     setText(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = Math.min(e.target.scrollHeight, 200) + "px";
+    if (draftKey) drafts.set(draftKey, e.target.value);
+    adjustHeight(e.target);
   };
 
   return (

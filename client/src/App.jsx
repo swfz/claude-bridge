@@ -1140,12 +1140,19 @@ export default function App() {
 
           {showHome ? null : isReadonly ? (
             <InputBar
+              key={activeSessionId}
+              draftKey={activeSessionId}
               onSubmit={handleSendToReadonly}
               disabled={!activeSession?.claudeSessionId}
               placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
             />
           ) : (
-            <InputBar onSubmit={handleInput} disabled={!activeSessionId} />
+            <InputBar
+              key={activeSessionId}
+              draftKey={activeSessionId}
+              onSubmit={handleInput}
+              disabled={!activeSessionId}
+            />
           )}
         </div>
       </div>
