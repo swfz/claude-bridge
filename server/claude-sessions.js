@@ -1,26 +1,22 @@
-import { readdirSync, statSync } from "fs";
-import { readFile } from "fs/promises";
-import { join } from "path";
-import {
-  CLAUDE_PROJECTS_DIR,
-  extractTextContent,
-  extractToolUses,
-} from "./jsonl-utils.js";
-import { readFirstLines, readSessionSummary } from "./session-summary.js";
+import { readdirSync, statSync } from 'fs';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { CLAUDE_PROJECTS_DIR, extractTextContent, extractToolUses } from './jsonl-utils.js';
+import { readFirstLines, readSessionSummary } from './session-summary.js';
 
 // セッション JSONL から最初のユーザーメッセージを抽出
 function extractFirstUserMessage(lines) {
   for (const line of lines) {
     try {
       const record = JSON.parse(line);
-      if (record.type === "user") {
+      if (record.type === 'user') {
         return extractTextContent(record.message, 100);
       }
     } catch {
       continue;
     }
   }
-  return "";
+  return '';
 }
 
 // ~/.claude/projects/ 以下の JSONL をファイル情報だけ集める（中身は読まない）。
@@ -42,11 +38,11 @@ function collectSessionFiles(dir) {
       continue;
     }
 
-    const cwd = projectDir.replace(/^-/, "/").replace(/-/g, "/");
+    const cwd = projectDir.replace(/^-/, '/').replace(/-/g, '/');
 
     let files;
     try {
-      files = readdirSync(projectPath).filter((f) => f.endsWith(".jsonl"));
+      files = readdirSync(projectPath).filter((f) => f.endsWith('.jsonl'));
     } catch {
       continue;
     }
@@ -56,7 +52,7 @@ function collectSessionFiles(dir) {
       try {
         const fileStat = statSync(filePath);
         candidates.push({
-          sessionId: file.replace(".jsonl", ""),
+          sessionId: file.replace('.jsonl', ''),
           projectDir,
           cwd,
           filePath,
@@ -90,9 +86,7 @@ export async function listRecentSessions({
   const files = collectSessionFiles(dir);
   const top = [
     ...files.filter((c) => pinned.has(c.sessionId)),
-    ...files
-      .filter((c) => !pinned.has(c.sessionId) && c.mtimeMs >= since)
-      .slice(0, limit),
+    ...files.filter((c) => !pinned.has(c.sessionId) && c.mtimeMs >= since).slice(0, limit),
   ].sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   return Promise.all(
@@ -109,7 +103,7 @@ export async function listRecentSessions({
         // JSONL に書かれた cwd を優先する（再開時の起動先になる）
         cwd: summary.cwd || c.cwd,
       };
-    })
+    }),
   );
 }
 
@@ -129,7 +123,7 @@ export async function listClaudeSessions({ limit = 30 } = {}) {
         updatedAt: c.updatedAt,
         size: c.size,
       };
-    })
+    }),
   );
 
   return sessions;
@@ -139,38 +133,38 @@ export async function listClaudeSessions({ limit = 30 } = {}) {
 // セッション本体とサブエージェントのトランスクリプトは同じ形式なので両方から使う。
 export function parseHistoryLines(content) {
   const messages = [];
-  for (const line of content.split("\n")) {
+  for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
       const record = JSON.parse(line);
-      if (record.type === "user") {
+      if (record.type === 'user') {
         const text = extractTextContent(record.message, 0);
         if (text) {
           messages.push({
-            role: "human",
+            role: 'human',
             content: text,
             // 安定アンカー用に JSONL の uuid を持たせる
             uuid: record.uuid,
-            timestamp: record.timestamp || record.updatedAt || "",
+            timestamp: record.timestamp || record.updatedAt || '',
           });
         }
-      } else if (record.type === "queue-operation" && record.operation === "enqueue" && record.content) {
+      } else if (record.type === 'queue-operation' && record.operation === 'enqueue' && record.content) {
         messages.push({
-          role: "human",
+          role: 'human',
           content: record.content,
           uuid: record.uuid,
-          timestamp: record.timestamp || "",
+          timestamp: record.timestamp || '',
         });
-      } else if (record.type === "assistant") {
+      } else if (record.type === 'assistant') {
         const text = extractTextContent(record.message, 0);
         const toolUses = extractToolUses(record.message);
         if (text || toolUses.length > 0) {
           messages.push({
-            role: "assistant",
+            role: 'assistant',
             content: text,
             toolUses: toolUses.length > 0 ? toolUses : undefined,
             uuid: record.uuid,
-            timestamp: record.timestamp || record.updatedAt || "",
+            timestamp: record.timestamp || record.updatedAt || '',
           });
         }
       }
@@ -187,7 +181,7 @@ export async function loadSessionHistory(sessionId, projectDir) {
   const filePath = join(CLAUDE_PROJECTS_DIR, projectDir, `${sessionId}.jsonl`);
   let content;
   try {
-    content = await readFile(filePath, "utf-8");
+    content = await readFile(filePath, 'utf-8');
   } catch {
     return [];
   }

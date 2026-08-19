@@ -8,13 +8,11 @@
 
 // getComputedStyle が返す "rgb(...)" / "rgba(...)" をパースする
 export function parseCssColor(str) {
-  const m = /rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*(?:[,/]\s*([\d.]+%?))?\s*\)/.exec(
-    str || ""
-  );
+  const m = /rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*(?:[,/]\s*([\d.]+%?))?\s*\)/.exec(str || '');
   if (!m) return null;
   let a = 1;
   if (m[4] !== undefined) {
-    a = m[4].endsWith("%") ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
+    a = m[4].endsWith('%') ? parseFloat(m[4]) / 100 : parseFloat(m[4]);
   }
   return { r: +m[1], g: +m[2], b: +m[3], a };
 }
@@ -38,8 +36,8 @@ export function effectiveBackground(bodyBg, htmlBg) {
 // - ownInjected: 過去に自分が注入した値（data 属性）。再判定を許すため
 // - previewScheme: プレビュー側の明暗 ("light" | "dark")
 export function resolveInjectedScheme({ declared, ownInjected, bodyBg, htmlBg, previewScheme }) {
-  if (declared && declared !== "normal" && !ownInjected) return null;
+  if (declared && declared !== 'normal' && !ownInjected) return null;
   const bg = effectiveBackground(bodyBg, htmlBg);
-  if (bg) return isDarkColor(bg) ? "dark" : "light";
-  return previewScheme === "light" ? "light" : "dark";
+  if (bg) return isDarkColor(bg) ? 'dark' : 'light';
+  return previewScheme === 'light' ? 'light' : 'dark';
 }

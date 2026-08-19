@@ -1,14 +1,9 @@
-import pty from "node-pty";
-import { randomUUID } from "crypto";
+import pty from 'node-pty';
+import { randomUUID } from 'crypto';
 // @xterm/headless は CJS なので named import できない
-import xtermHeadless from "@xterm/headless";
-import { readStatusByPid } from "./claude-session-meta.js";
-import {
-  assertValidChoiceKeys,
-  sanitizeChoiceText,
-  toPtySequence,
-  CHOICE_KEY_DELAY_MS,
-} from "./choice-keys.js";
+import xtermHeadless from '@xterm/headless';
+import { readStatusByPid } from './claude-session-meta.js';
+import { assertValidChoiceKeys, sanitizeChoiceText, toPtySequence, CHOICE_KEY_DELAY_MS } from './choice-keys.js';
 
 const { Terminal } = xtermHeadless;
 
@@ -44,12 +39,12 @@ export class Session {
   }
 
   start() {
-    this._process = pty.spawn("claude", this.args, {
-      name: "xterm-256color",
+    this._process = pty.spawn('claude', this.args, {
+      name: 'xterm-256color',
       cols: DEFAULT_COLS,
       rows: DEFAULT_ROWS,
       cwd: this.cwd,
-      env: { ...process.env, TERM: "xterm-256color" },
+      env: { ...process.env, TERM: 'xterm-256color' },
     });
 
     this._process.onData((data) => {
@@ -77,7 +72,7 @@ export class Session {
   write(text) {
     if (!this._process) return;
     // \n → \r に変換して PTY に送る
-    const body = text.replace(/\n/g, "\r");
+    const body = text.replace(/\n/g, '\r');
     const m = /^([\s\S]*?)(\r+)$/.exec(body);
     if (!m) {
       this._process.write(body);
@@ -86,7 +81,7 @@ export class Session {
     // 本文と末尾の改行を一度に書くと Claude Code の TUI が「複数行入力の改行」と扱って
     // 送信されないため、確定用の Enter だけ少し遅らせて送る（tmux 側も send-keys を分けている）
     this._process.write(m[1]);
-    setTimeout(() => this._process?.write("\r"), ENTER_DELAY_MS);
+    setTimeout(() => this._process?.write('\r'), ENTER_DELAY_MS);
   }
 
   // 選択肢プロンプトの操作。write と違い改行を足さないので数字キー1つを送れる
@@ -108,16 +103,16 @@ export class Session {
 
   // ヘッドレス端末で再現した「今の画面」を返す（選択肢プロンプトのパース用）
   async getScreenText() {
-    if (!this._term) return "";
+    if (!this._term) return '';
     // write は非同期に処理されるので、空 write のコールバックで反映を待つ
-    await new Promise((resolve) => this._term.write("", resolve));
+    await new Promise((resolve) => this._term.write('', resolve));
     const buf = this._term.buffer.active;
     const lines = [];
     for (let y = buf.baseY; y < buf.baseY + this._term.rows; y++) {
       const line = buf.getLine(y);
-      lines.push(line ? line.translateToString(true) : "");
+      lines.push(line ? line.translateToString(true) : '');
     }
-    return lines.join("\n");
+    return lines.join('\n');
   }
 
   get claudePid() {
@@ -143,7 +138,7 @@ export class Session {
   }
 
   getOutputBuffer() {
-    return this._outputBuffer.join("");
+    return this._outputBuffer.join('');
   }
 
   onOutput(cb) {
@@ -215,16 +210,12 @@ export class SessionManager {
   restartSession(pastSessionId) {
     const past = this.pastSessions.find((p) => p.id === pastSessionId);
     if (!past) return null;
-    this.pastSessions = this.pastSessions.filter(
-      (p) => p.id !== pastSessionId
-    );
+    this.pastSessions = this.pastSessions.filter((p) => p.id !== pastSessionId);
     return this.createSession({ name: past.name, cwd: past.cwd });
   }
 
   removePastSession(pastSessionId) {
-    this.pastSessions = this.pastSessions.filter(
-      (p) => p.id !== pastSessionId
-    );
+    this.pastSessions = this.pastSessions.filter((p) => p.id !== pastSessionId);
     this._persist();
   }
 
@@ -272,7 +263,7 @@ export class ReadonlySession {
     this.claudeSessionId = claudeSessionId;
     this.projectDir = projectDir;
     this.createdAt = new Date().toISOString();
-    this.type = "readonly";
+    this.type = 'readonly';
   }
 
   // 閲覧専用: Claude へは送信しない
@@ -280,7 +271,7 @@ export class ReadonlySession {
   resize() {}
   kill() {}
   getOutputBuffer() {
-    return "";
+    return '';
   }
   onOutput() {}
   onExit() {}
@@ -294,7 +285,7 @@ export class ReadonlySession {
       projectDir: this.projectDir,
       createdAt: this.createdAt,
       alive: true,
-      type: "readonly",
+      type: 'readonly',
     };
   }
 }

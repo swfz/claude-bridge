@@ -34,7 +34,7 @@ export function offsetToLineCol(text, offset) {
   if (offset < 0) return { line: 1, column: 1 };
   const clamped = Math.min(offset, text.length);
   const upto = text.slice(0, clamped);
-  const idx = upto.lastIndexOf("\n");
+  const idx = upto.lastIndexOf('\n');
   const line = (upto.match(/\n/g) || []).length + 1;
   const column = idx === -1 ? clamped + 1 : clamped - idx;
   return { line, column };
@@ -44,7 +44,7 @@ export function offsetToLineCol(text, offset) {
 export function getContext(text, startOffset, endOffset, span = 30) {
   const beforeStart = Math.max(0, startOffset - span);
   const afterEnd = Math.min(text.length, endOffset + span);
-  const squash = (s) => s.replace(/\s+/g, " ").trim();
+  const squash = (s) => s.replace(/\s+/g, ' ').trim();
   return {
     before: squash(text.slice(beforeStart, startOffset)),
     after: squash(text.slice(endOffset, afterEnd)),
@@ -89,7 +89,7 @@ export function findOccurrenceOffset(sourceText, needle, targetIndex) {
 // Markdown プレビューで「どのセクションの選択か」を補足するのに使う。
 export function findNearestHeading(node, rootEl) {
   if (!rootEl || !node || !rootEl.contains(node)) return null;
-  const headings = rootEl.querySelectorAll("h1, h2, h3, h4, h5, h6");
+  const headings = rootEl.querySelectorAll('h1, h2, h3, h4, h5, h6');
   let last = null;
   for (const h of headings) {
     const pos = h.compareDocumentPosition(node);
@@ -115,7 +115,7 @@ export function findNearestHeading(node, rootEl) {
 // 前後コンテキストを構築する。
 // kind: "code" | "markdown" | "text" | "html"
 export function buildLocationInfo({ kind, sourceText, selectedText, sourceStart, sourceEnd, heading }) {
-  const info = { contextBefore: "", contextAfter: "", label: "" };
+  const info = { contextBefore: '', contextAfter: '', label: '' };
   if (sourceText && sourceStart >= 0 && sourceEnd >= sourceStart) {
     const ctx = getContext(sourceText, sourceStart, sourceEnd);
     info.contextBefore = ctx.before;
@@ -123,14 +123,14 @@ export function buildLocationInfo({ kind, sourceText, selectedText, sourceStart,
   }
   const occ = sourceText ? getOccurrenceIndex(sourceText, selectedText, sourceStart) : { index: 0, total: 0 };
 
-  if ((kind === "code" || kind === "text" || kind === "html") && sourceText && sourceStart >= 0) {
+  if ((kind === 'code' || kind === 'text' || kind === 'html') && sourceText && sourceStart >= 0) {
     const { line, column } = offsetToLineCol(sourceText, sourceStart);
     info.label = occ.total > 1 ? `L${line}:C${column}, ${occ.index}/${occ.total}箇所目` : `L${line}:C${column}`;
-  } else if (kind === "markdown") {
+  } else if (kind === 'markdown') {
     const parts = [];
     if (heading) parts.push(`「${heading.text}」セクション`);
     if (occ.total > 1) parts.push(`${occ.index}/${occ.total}箇所目`);
-    info.label = parts.join(", ");
+    info.label = parts.join(', ');
   }
   return info;
 }

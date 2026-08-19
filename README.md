@@ -41,16 +41,16 @@ npm start
 
 ## スクリプト一覧
 
-| スクリプト | 説明 |
-|---|---|
-| `npm run dev` | クライアントビルド後にサーバー起動 |
-| `npm start` | サーバーのみ起動（`client/dist` 配信） |
-| `npm run build` | クライアントのプロダクションビルド |
-| `npm run dev:client` | Vite dev server（ホットリロード開発用） |
-| `npm test` | テスト実行 |
-| `npm run install:all` | ルート + クライアントの依存インストール |
-| `npm run setup:hooks` | agent 連携フック（レビュー送信の受信側）を `~/.claude/settings.json` に登録 |
-| `npm run setup:statusline` | レート制限表示用の statusLine tee を `~/.claude/settings.json` に登録 |
+| スクリプト                 | 説明                                                                        |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `npm run dev`              | クライアントビルド後にサーバー起動                                          |
+| `npm start`                | サーバーのみ起動（`client/dist` 配信）                                      |
+| `npm run build`            | クライアントのプロダクションビルド                                          |
+| `npm run dev:client`       | Vite dev server（ホットリロード開発用）                                     |
+| `npm test`                 | テスト実行                                                                  |
+| `npm run install:all`      | ルート + クライアントの依存インストール                                     |
+| `npm run setup:hooks`      | agent 連携フック（レビュー送信の受信側）を `~/.claude/settings.json` に登録 |
+| `npm run setup:statusline` | レート制限表示用の statusLine tee を `~/.claude/settings.json` に登録       |
 
 ## agent 連携（レビュー送信 / コメント）
 
@@ -126,29 +126,29 @@ test/                  node:test によるユニット・統合テスト
 
 ### クライアント → サーバー
 
-| type | 説明 |
-|---|---|
-| `new_session` | 新規セッション作成 |
-| `input` | セッションにテキスト送信 |
-| `resize` | ターミナルリサイズ |
-| `kill_session` | セッション終了 |
-| `restart_session` | 過去セッションを再起動 |
-| `resume_session` | Claude セッションを `--resume` で再開 |
-| `attach_tmux_pane` | tmux ペインに接続 |
-| `detach_tmux_pane` | tmux ペインから切断 |
-| `list_tmux_panes` | Claude 実行中の tmux ペイン一覧 |
-| `get_buffer` | ターミナル出力バッファ取得 |
+| type               | 説明                                  |
+| ------------------ | ------------------------------------- |
+| `new_session`      | 新規セッション作成                    |
+| `input`            | セッションにテキスト送信              |
+| `resize`           | ターミナルリサイズ                    |
+| `kill_session`     | セッション終了                        |
+| `restart_session`  | 過去セッションを再起動                |
+| `resume_session`   | Claude セッションを `--resume` で再開 |
+| `attach_tmux_pane` | tmux ペインに接続                     |
+| `detach_tmux_pane` | tmux ペインから切断                   |
+| `list_tmux_panes`  | Claude 実行中の tmux ペイン一覧       |
+| `get_buffer`       | ターミナル出力バッファ取得            |
 
 ### サーバー → クライアント
 
-| type | 説明 |
-|---|---|
-| `session_list` | セッション一覧（接続時 + 変更時に送信） |
-| `output` | ターミナル出力 |
-| `chat_message` | JSONL から読み取ったチャットメッセージ |
-| `session_history` | セッション履歴（resume/tmux 接続時） |
-| `output_buffer` | ターミナル出力バッファ |
-| `tmux_panes` | tmux ペイン一覧 |
+| type              | 説明                                    |
+| ----------------- | --------------------------------------- |
+| `session_list`    | セッション一覧（接続時 + 変更時に送信） |
+| `output`          | ターミナル出力                          |
+| `chat_message`    | JSONL から読み取ったチャットメッセージ  |
+| `session_history` | セッション履歴（resume/tmux 接続時）    |
+| `output_buffer`   | ターミナル出力バッファ                  |
+| `tmux_panes`      | tmux ペイン一覧                         |
 
 ## テスト
 

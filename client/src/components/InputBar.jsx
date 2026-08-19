@@ -1,17 +1,17 @@
-import { useState, useRef, useEffect } from "react";
-import "./InputBar.css";
+import { useState, useRef, useEffect } from 'react';
+import './InputBar.css';
 
 // タブ（セッション）ごとの書きかけテキスト。InputBar は key={draftKey} で
 // タブ切替のたびに remount されるため、state ではなくモジュールレベルで保持する
 const drafts = new Map();
 
 export default function InputBar({ onSubmit, disabled, placeholder, draftKey }) {
-  const [text, setText] = useState(() => (draftKey && drafts.get(draftKey)) || "");
+  const [text, setText] = useState(() => (draftKey && drafts.get(draftKey)) || '');
   const textareaRef = useRef(null);
 
   const adjustHeight = (el) => {
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   };
 
   // 下書き復元時（remount 直後）に textarea の高さを内容に合わせる
@@ -25,15 +25,15 @@ export default function InputBar({ onSubmit, disabled, placeholder, draftKey }) 
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
     onSubmit(trimmed);
-    setText("");
+    setText('');
     if (draftKey) drafts.delete(draftKey);
     if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = 'auto';
     }
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
     }
@@ -55,18 +55,12 @@ export default function InputBar({ onSubmit, disabled, placeholder, draftKey }) 
         onKeyDown={handleKeyDown}
         placeholder={
           placeholder ||
-          (disabled
-            ? "セッションを作成してください"
-            : "メッセージを入力... (Enter で送信、Shift+Enter で改行)")
+          (disabled ? 'セッションを作成してください' : 'メッセージを入力... (Enter で送信、Shift+Enter で改行)')
         }
         disabled={disabled}
         rows={1}
       />
-      <button
-        className="btn btn-primary input-send"
-        onClick={handleSubmit}
-        disabled={disabled || !text.trim()}
-      >
+      <button className="btn btn-primary input-send" onClick={handleSubmit} disabled={disabled || !text.trim()}>
         送信
       </button>
     </div>
