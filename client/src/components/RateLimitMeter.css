@@ -40,3 +40,11 @@
   min-width: 30px;
   text-align: right;
 }
+
+/* リセット時刻・残り時間の補足テキスト（5h: "14:30 (2h13m)" / 7d: "残3d"） */
+.rate-limit-detail {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.85;
+  white-space: nowrap;
+}
