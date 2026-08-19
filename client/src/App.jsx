@@ -22,6 +22,7 @@ import {
   toggleStarred,
 } from "./utils/starredSessions.js";
 import { statusMapOf, updateAttention } from "./utils/attention.js";
+import { pickNotifyTargets } from "./utils/notifications.js";
 import "./App.css";
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
@@ -42,6 +43,10 @@ export default function App() {
   // activeSessionId は保持したまま切り替える（Home ⇄ 作業中タブを行き来できる）。
   const [showHome, setShowHome] = useState(
     () => localStorage.getItem("showHome") !== "false"
+  );
+  // ターン完了時のデスクトップ通知（Notification API）の ON/OFF。localStorage で記憶。
+  const [notifyEnabled, setNotifyEnabled] = useState(
+    () => localStorage.getItem("desktopNotify") === "true"
   );
   // サーバーが返す「今このマシンで起動中の Claude セッション」。null = 未取得
   const [runningSessions, setRunningSessions] = useState(null);
@@ -98,6 +103,11 @@ export default function App() {
   useEffect(() => {
     showHomeRef.current = showHome;
   }, [showHome]);
+  // session_list ハンドラの effect は [on] 依存のみで stale closure になるため
+  const notifyEnabledRef = useRef(notifyEnabled);
+  useEffect(() => {
+    notifyEnabledRef.current = notifyEnabled;
+  }, [notifyEnabled]);
   // 指定セッションのメッセージだけを更新する（active かどうかは見ない）。
   // updater は配列、または (prev[]) => next[] の関数。
   const updateSessionMessages = useCallback((sessionId, updater) => {
@@ -155,6 +165,28 @@ export default function App() {
           isViewingActive: !showHomeRef.current && !document.hidden,
         })
       );
+      // デスクトップ通知: タブが見えていないときだけ（見えていればタブ装飾で分かる）
+      if (
+        notifyEnabledRef.current &&
+        typeof Notification !== "undefined" &&
+        Notification.permission === "granted" &&
+        document.hidden
+      ) {
+        for (const s of pickNotifyTargets({
+          prev: prevStatuses,
+          sessions: msg.sessions,
+        })) {
+          const n = new Notification(s.name || "Claude Bridge", {
+            body: "ターンが完了しました",
+            tag: `bridge-attention-${s.id}`, // 同一セッションの通知は上書きして溜めない
+          });
+          n.onclick = () => {
+            window.focus();
+            handleSwitchSessionRef.current?.(s.id);
+            n.close();
+          };
+        }
+      }
       const aliveSessions = msg.sessions.filter((s) => s.alive);
       if (aliveSessions.length === 0) return;
       // 「開いたセッションを active にする」のは session_opened が担う（末尾推定はしない）。
@@ -415,6 +447,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("showHome", String(showHome));
   }, [showHome]);
+
+  useEffect(() => {
+    localStorage.setItem("desktopNotify", String(notifyEnabled));
+  }, [notifyEnabled]);
 
   useEffect(() => {
     return on("session_history", (msg) => {
@@ -733,6 +769,34 @@ export default function App() {
     [clearAttention]
   );
 
+  // 通知クリック時に最新の handleSwitchSession を呼ぶため（session_list ハンドラの
+  // effect は [on] 依存のみで stale closure になる）
+  const handleSwitchSessionRef = useRef(handleSwitchSession);
+  useEffect(() => {
+    handleSwitchSessionRef.current = handleSwitchSession;
+  }, [handleSwitchSession]);
+
+  const handleToggleNotify = useCallback(async () => {
+    if (notifyEnabled) {
+      setNotifyEnabled(false);
+      return;
+    }
+    if (Notification.permission === "granted") {
+      setNotifyEnabled(true);
+      return;
+    }
+    if (Notification.permission === "denied") {
+      alert(
+        "ブラウザの通知権限がブロックされています。サイト設定から許可してください。"
+      );
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      setNotifyEnabled(true);
+    }
+  }, [notifyEnabled]);
+
   // 別タブ／別ウィンドウから戻ってきたときに、今見ているアクティブタブの「未確認」を解除する
   // （busy -> idle の遷移が起きても、そのとき見ていなければ点いたままにしたいので session_list 側では消さない）
   useEffect(() => {
@@ -977,6 +1041,15 @@ export default function App() {
           >
             {appTheme === "light" ? "Dark" : "Light"}
           </button>
+          {"Notification" in window && (
+            <button
+              className={`toggle-btn thread-toggle ${notifyEnabled ? "active" : ""}`}
+              onClick={handleToggleNotify}
+              title="ターン完了時のデスクトップ通知を ON/OFF"
+            >
+              {notifyEnabled ? "🔔" : "🔕"}
+            </button>
+          )}
           <RateLimitMeter rateLimits={rateLimits} />
           <div className="connection-status">
             <span
