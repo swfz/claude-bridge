@@ -28,6 +28,8 @@ html, body, #root {
   --input-bg: #16213e;
   --success: #4caf50;
   --warning: #ff9800;
+  /* レート制限バーの空き部分。--border だとヘッダー背景と同化して見えない */
+  --meter-track: #454b78;
 }
 
 /* アプリ全体のライトテーマ。body.light-mode が付くと配下の var() 参照を
@@ -49,6 +51,7 @@ body.light-mode {
   --input-bg: #ffffff;
   --success: #1a7f37;
   --warning: #9a6700;
+  --meter-track: #d1d9e0;
 }
 
 /* mermaid 図 — 本文の明暗に関わらず白地カードで表示する */
