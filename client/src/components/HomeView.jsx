@@ -6,6 +6,7 @@ import {
   formatElapsed,
 } from "../utils/runningSessions.js";
 import { isStarred, sortStarredFirst } from "../utils/starredSessions.js";
+import { parseCwd } from "../utils/cwdLabel.js";
 import "./HomeView.css";
 
 // 「直近のセッション」の期間プリセット
@@ -39,6 +40,18 @@ function StarButton({ on, onToggle }) {
     >
       {on ? "★" : "☆"}
     </button>
+  );
+}
+
+// タイトル行に出すプロジェクト名（worktree があれば併記）。タブの下段と同じ parseCwd を使う。
+function ProjectChip({ cwd }) {
+  const { project, worktree } = parseCwd(cwd);
+  if (!project) return null;
+  return (
+    <span className="home-card-project" title={cwd}>
+      {project}
+      {worktree && <span className="home-card-worktree">⎇ {worktree}</span>}
+    </span>
   );
 }
 
@@ -178,7 +191,8 @@ export default function HomeView({
       ) : (
         <div className="home-grid">
           {annotated.map((r) => {
-            const label = r.name || r.title || r.sessionId.slice(0, 8);
+            // タブとして開いていればその表示名をそのまま使い、カードとタブの見出しを一致させる
+            const label = r.openTab?.name || tabName(r);
             const starredNow = isStarred(starred, r.sessionId);
             return (
               <div
@@ -193,6 +207,7 @@ export default function HomeView({
                     className={`home-status home-status-${statusClass(r.status)}`}
                     title={r.status || "unknown"}
                   />
+                  <ProjectChip cwd={r.cwd} />
                   <span className="home-card-name">{label}</span>
                   {r.kind && <span className="home-badge kind">{r.kind}</span>}
                   {r.openTab ? (
@@ -213,10 +228,11 @@ export default function HomeView({
                   />
                 </div>
 
-                {/* /rename した名前がある場合は AI タイトルも併記する */}
-                {r.title && r.title !== label && (
-                  <div className="home-card-title">{r.title}</div>
-                )}
+                {/* 見出しに使わなかった側の名前（AI タイトル / スラッグ）も併記する */}
+                {(() => {
+                  const sub = [r.title, r.name].find((t) => t && t !== label);
+                  return sub ? <div className="home-card-title">{sub}</div> : null;
+                })()}
 
                 <Cwd cwd={r.cwd} branch={r.gitBranch} />
 
@@ -286,6 +302,7 @@ export default function HomeView({
         ) : (
           <div className="home-grid">
             {recent.map((s) => {
+              const label = s.openTab?.name || tabName(s);
               const starredNow = isStarred(starred, s.sessionId);
               return (
                 <div
@@ -298,9 +315,8 @@ export default function HomeView({
                   }
                 >
                   <div className="home-card-top">
-                    <span className="home-card-name">
-                      {s.title || s.sessionId.slice(0, 8)}
-                    </span>
+                    <ProjectChip cwd={s.cwd} />
+                    <span className="home-card-name">{label}</span>
                     {s.openTab && (
                       <span className="home-badge open-badge">タブで表示中</span>
                     )}
