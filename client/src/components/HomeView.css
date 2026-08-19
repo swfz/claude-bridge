@@ -118,6 +118,28 @@
   color: var(--text-primary);
 }
 
+/* タイトル行のプロジェクト名（タブ下段の cwd 表示と同じ parseCwd 由来） */
+.home-card-project {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-card-worktree {
+  margin-left: 4px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
 .home-status {
   width: 8px;
   height: 8px;
