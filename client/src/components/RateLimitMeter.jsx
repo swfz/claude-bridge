@@ -27,6 +27,26 @@ export function formatRemaining(iso, now = new Date()) {
   return hours > 0 ? `${hours}h${minutes}m` : `${minutes}m`;
 }
 
+// resetsAt の時刻を "14:30" 形式で返す
+export function formatResetClock(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// resetsAt までの残りを日単位の粗い粒度で返す（7d 用）。1日未満は時間、1時間未満は分
+export function formatRemainingCoarse(iso, now = new Date()) {
+  if (!iso) return null;
+  const diffMs = new Date(iso).getTime() - now.getTime();
+  if (!Number.isFinite(diffMs)) return null;
+  if (diffMs <= 0) return "now";
+  const days = Math.floor(diffMs / 86_400_000);
+  if (days > 0) return `${days}d`;
+  const hours = Math.floor(diffMs / 3_600_000);
+  return hours > 0 ? `${hours}h` : `${Math.max(1, Math.floor(diffMs / 60_000))}m`;
+}
+
 function windowLine(label, window, now) {
   if (!window || window.utilization === null) return null;
   const remaining = formatRemaining(window.resetsAt, now);
@@ -54,7 +74,7 @@ function buildTooltip(usage, fetchedAt, isStale) {
   return lines.join("\n");
 }
 
-function Meter({ label, window }) {
+function Meter({ label, window, detail }) {
   if (!window || window.utilization === null) return null;
   const pct = Math.min(100, Math.max(0, window.utilization));
   return (
@@ -67,8 +87,24 @@ function Meter({ label, window }) {
         />
       </span>
       <span className="rate-limit-value">{Math.round(window.utilization)}%</span>
+      {detail && <span className="rate-limit-detail">{detail}</span>}
     </div>
   );
+}
+
+// 5h: 「14:30 (2h13m)」= リセット時刻＋残り時間
+function fiveHourDetail(window, now) {
+  if (!window?.resetsAt) return null;
+  const clock = formatResetClock(window.resetsAt);
+  const remaining = formatRemaining(window.resetsAt, now);
+  if (!clock) return null;
+  return remaining ? `${clock} (${remaining})` : clock;
+}
+
+// 7d: 「残3d」= 残り日数
+function sevenDayDetail(window, now) {
+  const remaining = formatRemainingCoarse(window?.resetsAt, now);
+  return remaining ? `残${remaining}` : null;
 }
 
 export default function RateLimitMeter({ rateLimits }) {
@@ -84,14 +120,15 @@ export default function RateLimitMeter({ rateLimits }) {
   if (!rateLimits?.usage) return null;
   const { usage, fetchedAt } = rateLimits;
   const isStale = !!fetchedAt && Date.now() - fetchedAt > STALE_MS;
+  const now = new Date();
 
   return (
     <div
       className={`rate-limit-group${isStale ? " stale" : ""}`}
       title={buildTooltip(usage, fetchedAt, isStale)}
     >
-      <Meter label="5h" window={usage.fiveHour} />
-      <Meter label="7d" window={usage.sevenDay} />
+      <Meter label="5h" window={usage.fiveHour} detail={fiveHourDetail(usage.fiveHour, now)} />
+      <Meter label="7d" window={usage.sevenDay} detail={sevenDayDetail(usage.sevenDay, now)} />
     </div>
   );
 }
