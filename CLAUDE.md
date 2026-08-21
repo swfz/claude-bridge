@@ -41,6 +41,7 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - `claude-agents.js` -- `claude agents --json` から agent view のセッション一覧を取得
 - `running-sessions.js` -- ホーム画面用。`~/.claude/sessions/*.json`（pid/sessionId/cwd/name/status/tmux）を読み、`ps` の生存 PID で絞って「今起動中の Claude セッション」を返す。`tmux` フィールドの paneId は `%<数字>` 形式のみ採用
 - `thread-store.js` -- スレッド CRUD
+- `slash-commands.js` -- 入力欄のスラッシュコマンド補完の候補を集める `listSlashCommands({cwd, claudeDir})`。プロセス起動はせず、スキル/コマンドのファイルを走査するだけ（`<claudeDir>/skills/*/SKILL.md`、`<claudeDir>/commands/**/*.md`、`cwd` 側の `.claude/` 配下、`plugins/installed_plugins.json` の `installPath` 配下、組み込みコマンドの静的配列）。スキルのディレクトリはシンボリックリンクが多いので `lstat` ではなく `stat` で追従する。**本体同梱スキル（`/code-review` `/simplify` `/loop` 等）は単一 ELF バイナリに埋め込まれていて走査も列挙サブコマンドも無いため、`BUNDLED_SKILLS` の静的リストで持つ既知の妥協**（本体更新で増減し得る）。description は frontmatter の `description:`（無ければ本文の最初の非空行）を 120 文字に切る。name の重複は project > user > plugin > bundled > builtin で先勝ち。走査が重いので `cwd`+`claudeDir` 単位で 30 秒キャッシュ（`clearSlashCommandsCache()` で破棄）。**`BUILTIN_COMMANDS` は「ブラウザから使える」と実測できた 4 件だけ**（`clear` / `compact` / `context` / `init`）。TUI 内にモーダルを開くもの（`/model` 等）は見えず操作もできないので出さない（詳細は「スラッシュコマンド補完」の節）
 - `rate-limits.js` -- Claude のレート制限（5h/7d ウィンドウの使用率）取得。**credentials・外部通信は使わない**。Claude Code が statusLine コマンドの stdin に渡す `rate_limits`（`used_percentage` / epoch 秒の `resets_at`）を `scripts/statusline/bridge-statusline-tee.js` がファイル（`<dataDir>/rate-limits.json`）に横流しし、`readRateLimits()` はそれを読むだけ。ローカルファイル読みなので `index.js` は 15 秒間隔でポーリングし、内容が変わったときだけ `rate_limits {usage, fetchedAt}` をブロードキャスト（`fetchedAt` は tee が書いた取得時刻で、statusline 連携が止まっていれば古いまま＝クライアント側の stale 判定に使われる）。statusline 未連携（ファイル無し）は `no-file` として一度だけ案内ログを出す
 
 ### statusLine tee（レート制限表示のデータ源）
@@ -54,6 +55,7 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - `ThreadPanel.jsx` -- リサイズハンドルは `widthRef` で useCallback の依存を空に
 - `HomeView.jsx` -- ホーム画面（起動中セッション＋直近セッション）。`utils/runningSessions.js` の純粋関数で突合・整形
 - `RateLimitMeter.jsx` -- ヘッダー右側の 5h/7d レート制限メーター。`rate_limits` メッセージを表示するだけの純表示コンポーネント（データが無ければ非表示）。バー色は使用率で `--success` / `--warning` / `--accent`、ツールチップにリセット時刻・残り時間・モデル別 weekly・取得時刻。`fetchedAt` が 10 分より古い（statusline 連携が止まっている＝セッション非稼働の疑い）と `stale` クラスで薄く表示し、ツールチップにも注記する（60 秒間隔の内部 tick で再判定するだけで、データ自体はサーバー push 任せ）
+- `InputBar.jsx` -- 送信欄。書きかけは `key={draftKey}` の remount をまたぐようモジュールレベルの `drafts` Map に置く。**スラッシュコマンド補完**は `slashCommands` prop の候補を入力欄の直上にドロップダウンで出す。表示条件は `text` が `/^\/[A-Za-z0-9_:-]*$/`（先頭 `/` の 1 トークン目を打っている間）で、前方一致が 0 件なら部分一致にフォールバックし 50 件で打ち切る。表示中は ArrowUp/Down で選択、Tab/Enter で `/name ` に確定（**Enter は送信しない**）、Escape で畳む（次の入力で復帰）。`onSendEscape` が渡されたときだけ送信ボタンの左に `Esc` ボタンを出す（TUI で開いてしまったモーダルを閉じる用。**補完を畳む Escape キー操作とは別物**）
 - `ChoicePrompt.jsx` -- 選択肢プロンプトのカード（入力欄の直上）。選択肢ボタン＝キー送信で、状態は毎回サーバーが読み直した画面から来る（クライアントは選択状態を持たない）
 - `TaskStrip.jsx` -- サブエージェントタスクのチップ列（入力欄の直上、選択肢カードの上）。実行中は `⚙`、完了は `✓`。完了は 3 件を超えたら「✓ 他 N 件」に畳む
 - `SubagentDrawer.jsx` -- サブエージェントの会話を見せる右サイドドロワー。本文は `ChatView.jsx` の `ChatMessage`（export 済み）を `readonly` で再利用する
@@ -66,6 +68,16 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - **完了判定は親 JSONL の tool_result**。サブエージェントが終わると親（`<claudeSessionId>.jsonl`）に meta の `toolUseId` を `tool_use_id` として持つ tool_result が書かれる。あれば `completed`、無ければ `running`。親 JSONL は数十 MB になり得るので `Map<jsonlPath, {offset, ids}>` に溜め、**追記分（前回オフセット以降）だけ読み足す**（末尾の書きかけ行は最後の改行までで打ち切る）。`toolUseId` を持たない古い meta は判定できないので completed 扱い
 - WS メッセージ: `list_subagent_tasks {sessionId}` → `subagent_tasks {tasks}` / `get_subagent_transcript {sessionId, agentId}` → `subagent_transcript {agentId, status, messages}`。読み先（`projectDir` / `claudeSessionId`）は `resolveClaudeTarget()` が readonly セッション自身か `jsonlWatcher.getSessionMeta()` から解決する（解決できなければ `tasks: []`）
 - 一覧は作業中タブを見ている間だけ 5 秒間隔でポーリング（ホーム表示中は止める）。ドロワーは開いている agent が `running` の間だけ 4 秒間隔で会話を取り直し、タブ切替・ホーム表示で閉じる
+
+### スラッシュコマンド補完
+
+TUI の補完はブラウザからは使えないので、入力欄でスキル名・コマンド名の候補をブリッジ自身が出す。
+
+- 候補は `server/slash-commands.js` の `listSlashCommands()` がファイル走査で作る（`claude` コマンドは起動しない）。ユーザー/プロジェクト/プラグインのスキル・コマンドに、走査できない本体同梱スキル（`bundled`）と組み込みコマンド（`builtin`）の静的リストを混ぜ、`{name, description, source}` の name 昇順で返す
+- WS メッセージ: `list_slash_commands {sessionId}` → `slash_commands {sessionId, commands}`。**cwd はクライアントから受け取らず** `findSession()` で解決したセッションの `cwd` だけを使う（任意パスを走査させないため）。セッションが見つからなくてもユーザー側の候補は返し、失敗時は `commands: []`
+- 候補は cwd に依存するのでタブごとに 1 度だけ取る（`slashRequestedRef` で取得済みを覚える。サーバー側の 30 秒キャッシュがあるのでポーリングはしない）。PTY・tmux・readonly の全種別の `InputBar` に渡す
+- **コマンドは 3 種類に分かれ、ブラウザから使えるのは 2 種類だけ**（Claude Code v2.1.238 の実測）。スキル系（`/commit` などプロンプトに展開されるもの）と、`/context` のように結果が会話に描画されるインライン実行型は普通に動く。一方 `/model` `/help` `/usage`（`/cost`）などの**モーダル型は TUI 内にパネルが開くだけで、`waitingFor` が立たないため選択肢カードも出ず、Raw ビューも出力専用でキーを送れない**＝ブラウザからは見えず操作もできない。よって `BUILTIN_COMMANDS` はモーダル型を外し `clear` / `compact` / `context` / `init` の 4 件だけにしてある（`todos` / `doctor` は組み込みコマンドとして実在しない）
+- 手で打てばモーダル型も実行されてしまうので、復帰用に**入力欄の `Esc` ボタン**を置く（`InputBar` の `onSendEscape`。PTY のある側にだけ渡す）。新しい WS メッセージは作らず、`waitingFor` を要求しない `answer_choice_prompt` に `keys: ['Escape']` を流すだけ
 
 ### ホーム画面（起動中セッション＋直近セッション）
 

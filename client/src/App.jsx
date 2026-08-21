@@ -51,6 +51,9 @@ export default function App() {
   const [choiceError, setChoiceError] = useState(null);
   // セッションが起動したサブエージェントのタスク一覧（bridgeSessionId -> tasks）
   const [subagentTasks, setSubagentTasks] = useState({});
+  // 入力欄のスラッシュコマンド補完の候補（bridgeSessionId -> commands）。
+  // セッションの cwd に依存するのでタブごとに 1 度だけ取る
+  const [slashCommands, setSlashCommands] = useState({});
   // トランスクリプトを表示中のサブエージェント（null なら閉じている）
   const [subagentDrawer, setSubagentDrawer] = useState(null);
   // 「未解決／続きをやる」印を付けた claudeSessionId（localStorage のみ）
@@ -244,6 +247,13 @@ export default function App() {
     });
   }, [on]);
 
+  // 入力欄の補完候補（スキル・コマンド・組み込み）
+  useEffect(() => {
+    return on('slash_commands', (msg) => {
+      setSlashCommands((prev) => ({ ...prev, [msg.sessionId]: msg.commands || [] }));
+    });
+  }, [on]);
+
   // ドロワーで開いているサブエージェントの会話。別の agent のものは捨てる
   useEffect(() => {
     return on('subagent_transcript', (msg) => {
@@ -366,6 +376,20 @@ export default function App() {
     request();
     const timer = setInterval(request, SUBAGENT_POLL_INTERVAL);
     return () => clearInterval(timer);
+  }, [showHome, activeSessionId, connected, send]);
+
+  // 補完候補はセッションごとに 1 度だけ取る（サーバー側で 30 秒キャッシュされる）。
+  // 取得済みかは ref で見て、候補の到着で effect が回らないようにする
+  const slashRequestedRef = useRef(new Set());
+  // 切断時に取得済みの印を捨てる（応答が届く前に切れたセッションを取り直すため）
+  useEffect(() => {
+    if (!connected) slashRequestedRef.current.clear();
+  }, [connected]);
+  useEffect(() => {
+    if (showHome || !activeSessionId || !connected) return;
+    if (slashRequestedRef.current.has(activeSessionId)) return;
+    slashRequestedRef.current.add(activeSessionId);
+    send({ type: 'list_slash_commands', sessionId: activeSessionId });
   }, [showHome, activeSessionId, connected, send]);
 
   // 別セッションのタスクを見せ続けないよう、タブ切替・ホーム表示でドロワーを閉じる
@@ -725,6 +749,14 @@ export default function App() {
     },
     [send, activeSessionId],
   );
+
+  // TUI 内でモーダル（/model のピッカー等）を開いてしまったときの復帰手段。
+  // モーダルは waitingFor が立たないので選択肢カードが出ず、ブラウザからは見えない。
+  // answer_choice_prompt は waitingFor を要求せずキーを送るだけなので Escape をそのまま流す
+  const handleSendEscape = useCallback(() => {
+    if (!activeSessionId) return;
+    send({ type: 'answer_choice_prompt', sessionId: activeSessionId, keys: ['Escape'] });
+  }, [send, activeSessionId]);
 
   const handleRefreshChoice = useCallback(() => {
     if (!activeSessionId) return;
@@ -1197,6 +1229,7 @@ export default function App() {
               onSubmit={handleSendToReadonly}
               disabled={!activeSession?.claudeSessionId}
               placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
+              slashCommands={slashCommands[activeSessionId] || []}
             />
           ) : (
             <InputBar
@@ -1204,6 +1237,8 @@ export default function App() {
               draftKey={activeSessionId}
               onSubmit={handleInput}
               disabled={!activeSessionId}
+              slashCommands={slashCommands[activeSessionId] || []}
+              onSendEscape={handleSendEscape}
             />
           )}
         </div>
