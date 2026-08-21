@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ChatMessage } from './ChatView.jsx';
+import { useStickToBottom } from '../hooks/useStickToBottom.js';
 import './SubagentDrawer.css';
 
 // 実行中のサブエージェントの会話を取り直す間隔
@@ -17,7 +18,8 @@ export default function SubagentDrawer({
   onOpenPreview,
   onClose,
 }) {
-  const bodyRef = useRef(null);
+  // 最下部にいる間だけ新着に追従する（上を読んでいる最中に引き戻さない）
+  const { scrollRef: bodyRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(messages, agentId);
 
   // 開いた直後は即取得し、実行中の間だけポーリングで追いかける
   useEffect(() => {
@@ -27,13 +29,6 @@ export default function SubagentDrawer({
     const timer = setInterval(() => onRequestTranscript(agentId), TRANSCRIPT_POLL_INTERVAL);
     return () => clearInterval(timer);
   }, [agentId, status, onRequestTranscript]);
-
-  // 新着で末尾へ
-  useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
-  }, [messages]);
 
   // ChatMessage は id を key に使うので、クライアント側で採番する
   const items = useMemo(
@@ -63,7 +58,7 @@ export default function SubagentDrawer({
           </button>
         </div>
 
-        <div className="subagent-drawer-body" ref={bodyRef}>
+        <div className="subagent-drawer-body" ref={bodyRef} onScroll={onScroll}>
           {items.length === 0 ? (
             <div className="subagent-drawer-empty">
               {status === 'running' ? 'サブエージェントの応答を待っています...' : '会話がありません'}
@@ -72,6 +67,12 @@ export default function SubagentDrawer({
             items.map((m) => (
               <ChatMessage key={m.id} message={m} threads={[]} comments={[]} onOpenPreview={onOpenPreview} readonly />
             ))
+          )}
+
+          {hasNew && (
+            <button className="scroll-to-latest" onClick={scrollToBottom}>
+              ↓ 新しいメッセージ
+            </button>
           )}
         </div>
       </div>

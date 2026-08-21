@@ -17,6 +17,7 @@ import { listRunningSessions } from './running-sessions.js';
 import { parseChoicePrompt } from './choice-prompt.js';
 import { listSubagentTasks, readSubagentTranscript } from './subagent-tasks.js';
 import { readRateLimits } from './rate-limits.js';
+import { listSlashCommands } from './slash-commands.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -1178,6 +1179,21 @@ wss.on('connection', (ws) => {
             messages: [],
             error: `サブエージェントの会話を読み込めませんでした: ${e.message}`,
           });
+        }
+        break;
+      }
+
+      // 入力欄のスラッシュコマンド補完の候補。cwd はクライアントからは受け取らず、
+      // セッションが持っているものだけを使う（任意パスを走査させないため）。
+      // セッションが見つからなくてもユーザー側（~/.claude）の候補は返す。
+      case 'list_slash_commands': {
+        try {
+          const session = findSession(msg.sessionId);
+          const commands = await listSlashCommands({ cwd: session?.cwd });
+          sendTo(ws, { type: 'slash_commands', sessionId: msg.sessionId, commands });
+        } catch (e) {
+          console.error('list_slash_commands failed:', e.message);
+          sendTo(ws, { type: 'slash_commands', sessionId: msg.sessionId, commands: [] });
         }
         break;
       }
