@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useWebSocket } from './hooks/useWebSocket.js';
 import SessionTabs from './components/SessionTabs.jsx';
 import TerminalView from './components/TerminalView.jsx';
@@ -17,6 +17,13 @@ import AgentSidePanel from './components/AgentSidePanel.jsx';
 import HomeView from './components/HomeView.jsx';
 import RateLimitMeter from './components/RateLimitMeter.jsx';
 import { loadStarred, saveStarred, toggleStarred } from './utils/starredSessions.js';
+import {
+  loadSensitive,
+  saveSensitive,
+  toggleSensitive,
+  loadShareMode,
+  saveShareMode,
+} from './utils/sensitiveSessions.js';
 import { statusMapOf, updateAttention } from './utils/attention.js';
 import { pickNotifyTargets } from './utils/notifications.js';
 import './App.css';
@@ -61,6 +68,12 @@ export default function App() {
   // 一覧取得時に添えるだけなので、star の変更で再取得は走らせない（JSONL 走査を避ける）
   const starredRef = useRef(starredSessions);
   starredRef.current = starredSessions;
+  // 「画面共有中は見せない」印を付けた claudeSessionId（localStorage のみ）
+  const [sensitiveSessions, setSensitiveSessions] = useState(loadSensitive);
+  // 共有モード。ON の間だけセンシティブ指定を隠す（指定自体は残す）
+  const [shareMode, setShareMode] = useState(loadShareMode);
+  // タブ側は「隠すかどうか」の判定だけなので Set にして毎タブの includes を避ける
+  const sensitiveIds = useMemo(() => new Set(sensitiveSessions), [sensitiveSessions]);
   // 「ターン完了（未確認）」印を付けたタブの id（tmux のベル通知相当）。サーバーには持たせない。
   const [attentionIds, setAttentionIds] = useState(() => new Set());
   // 直近の session_list の status スナップショット（busy -> 非busy の遷移検出に使う）
@@ -437,6 +450,18 @@ export default function App() {
 
   const handleToggleStar = useCallback((sessionId) => {
     setStarredSessions((prev) => toggleStarred(prev, sessionId));
+  }, []);
+
+  useEffect(() => {
+    saveSensitive(sensitiveSessions);
+  }, [sensitiveSessions]);
+
+  useEffect(() => {
+    saveShareMode(shareMode);
+  }, [shareMode]);
+
+  const handleToggleSensitive = useCallback((sessionId) => {
+    setSensitiveSessions((prev) => toggleSensitive(prev, sessionId));
   }, []);
 
   useEffect(() => {
@@ -1050,6 +1075,13 @@ export default function App() {
             Agents
           </button>
           <button
+            className={`toggle-btn thread-toggle share-toggle ${shareMode ? 'active' : ''}`}
+            onClick={() => setShareMode((on) => !on)}
+            title="共有モード: センシティブ指定したセッションを隠す"
+          >
+            {shareMode ? '🙈' : '👁'} 共有
+          </button>
+          <button
             className="toggle-btn thread-toggle"
             onClick={() => setAppTheme((t) => (t === 'light' ? 'dark' : 'light'))}
             title="アプリ全体のテーマを切り替え（ライト/ダーク）"
@@ -1079,6 +1111,8 @@ export default function App() {
           activeSessionId={showHome ? null : activeSessionId}
           homeActive={showHome}
           attentionIds={attentionIds}
+          sensitiveIds={sensitiveIds}
+          shareMode={shareMode}
           onHome={() => setShowHome(true)}
           onSelect={handleSwitchSession}
           onKill={handleKillSession}
@@ -1109,6 +1143,9 @@ export default function App() {
                   onChangeRecentDays={setRecentDays}
                   starred={starredSessions}
                   onToggleStar={handleToggleStar}
+                  sensitive={sensitiveSessions}
+                  shareMode={shareMode}
+                  onToggleSensitive={handleToggleSensitive}
                   sessions={sessions}
                   activeSessionId={activeSessionId}
                   loading={runningSessions === null}
