@@ -644,15 +644,34 @@ export default function App() {
   );
 
   // readonly セッション（メインタブ）から、その claudeSessionId へフックベース送信
+  // 切断中の送信は届かないので、送れたように見せず false を返す
+  // （InputBar が入力欄のテキストを保持し、チャットに system メッセージを出す）
+  const notifySendFailure = useCallback(() => {
+    updateSessionMessages(activeSessionIdRef.current, (prev) => [
+      ...prev,
+      {
+        id: `senderror-${Date.now()}`,
+        role: 'system',
+        content: 'サーバーと切断中のため送信できませんでした。接続表示（ヘッダの●）が戻ってから再送してください。',
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+  }, [updateSessionMessages]);
+
   const handleSendToReadonly = useCallback(
     (text) => {
       const t = (text || '').trim();
       const s = sessionsRef.current.find((x) => x.id === activeSessionId);
       const sid = s?.claudeSessionId;
-      if (!t || !sid) return;
-      send({ type: 'send_to_agent', claudeSessionId: sid, comments: [t] });
+      if (!t || !sid) return false;
+      const sent = send({ type: 'send_to_agent', claudeSessionId: sid, comments: [t] });
+      if (!sent) {
+        notifySendFailure();
+        return false;
+      }
+      return true;
     },
-    [send, activeSessionId],
+    [send, activeSessionId, notifySendFailure],
   );
 
   // コメント送信（inbox 書き込み）の結果
@@ -685,12 +704,16 @@ export default function App() {
 
   const handleInput = useCallback(
     (text) => {
-      if (activeSessionId) {
-        addUserMessage(text);
-        send({ type: 'input', sessionId: activeSessionId, text: text + '\r' });
+      if (!activeSessionId) return false;
+      const sent = send({ type: 'input', sessionId: activeSessionId, text: text + '\r' });
+      if (!sent) {
+        notifySendFailure();
+        return false;
       }
+      addUserMessage(text);
+      return true;
     },
-    [send, activeSessionId, addUserMessage],
+    [send, activeSessionId, addUserMessage, notifySendFailure],
   );
 
   // 選択肢プロンプトへの回答。keys は数字キー（選択/トグル）や Tab / Escape。

@@ -87,7 +87,8 @@ describe('resumeInTmuxWindow', () => {
     });
 
     const newWindow = execCalls.find((c) => c.includes('new-window'));
-    assert.ok(newWindow.includes('-t main-sess'));
+    // 末尾 `:` でセッション指定に固定する（数字だけの名前が window index と解釈されないように）
+    assert.ok(newWindow.includes("-t 'main-sess:'"));
     assert.ok(newWindow.includes("-n 'claude-abc-123'"));
     // cwd はシングルクォートでエスケープされる（空白を含んでも壊れない）
     assert.ok(newWindow.includes("-c '/home/user/my project'"));
@@ -95,6 +96,21 @@ describe('resumeInTmuxWindow', () => {
     const sendKeys = execCalls.find((c) => c.includes('send-keys'));
     assert.ok(sendKeys.includes('claude --resume abc-123'));
     assert.ok(sendKeys.includes('send-keys -t %7 Enter'));
+  });
+
+  it('targets a purely numeric session name as a session, not a window index', async () => {
+    // セッション名が「0」のような数字だけの場合、`-t 0` は window index 0 と
+    // 解釈され "index 0 in use" で失敗する（実際に起きた回帰）
+    responses = {
+      'list-sessions': '900\t0\n',
+      'new-window': '%3\t0:2.0\n',
+    };
+
+    const pane = await resumeInTmuxWindow({ claudeSessionId: 'abc-123', cwd: '/tmp/work' });
+
+    const newWindow = execCalls.find((c) => c.includes('new-window'));
+    assert.ok(newWindow.includes("-t '0:'"));
+    assert.equal(pane.sessionName, '0');
   });
 
   it('creates a fallback session when no tmux server is running', async () => {
