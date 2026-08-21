@@ -17,6 +17,8 @@ export default function SessionTabs({
   activeSessionId,
   homeActive,
   attentionIds,
+  sensitiveIds,
+  shareMode,
   onHome,
   onSelect,
   onKill,
@@ -74,6 +76,9 @@ export default function SessionTabs({
         {sessions.map((session) => {
           const { project, worktree } = parseCwd(session.cwd);
           const hasAttention = session.alive && attentionIds?.has(session.id);
+          // 共有モード中のセンシティブ指定は名前・パスを伏せる（title 属性からも漏らさない）。
+          // ステータスやバッジは操作の手がかりなので残す。
+          const masked = shareMode && session.claudeSessionId && sensitiveIds?.has(session.claudeSessionId);
           return (
             <div
               key={session.id}
@@ -96,8 +101,8 @@ export default function SessionTabs({
                     {session.waitingFor === 'permission prompt' ? '許可待ち' : '回答待ち'}
                   </span>
                 )}
-                <span className="tab-name" title={session.name}>
-                  {session.name}
+                <span className="tab-name" title={masked ? '非表示（共有モード）' : session.name}>
+                  {masked ? '🔒 ●●●' : session.name}
                 </span>
                 {session.alive ? (
                   <button
@@ -141,9 +146,12 @@ export default function SessionTabs({
                   </span>
                 )}
               </div>
-              <span className={`tab-cwd ${session.type === 'tmux' ? 'tab-cwd-strong' : ''}`} title={session.cwd}>
-                <span className="tab-cwd-project">{project}</span>
-                {worktree && <span className="tab-cwd-worktree">⎇ {worktree}</span>}
+              <span
+                className={`tab-cwd ${session.type === 'tmux' ? 'tab-cwd-strong' : ''}`}
+                title={masked ? '非表示（共有モード）' : session.cwd}
+              >
+                <span className="tab-cwd-project">{masked ? '●●●' : project}</span>
+                {!masked && worktree && <span className="tab-cwd-worktree">⎇ {worktree}</span>}
               </span>
             </div>
           );

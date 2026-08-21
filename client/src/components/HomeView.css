@@ -242,6 +242,39 @@
   color: #f0ad4e;
 }
 
+/* センシティブ指定（共有モードで隠す印）。Star の隣に並べるので margin-left は持たせない */
+.home-sensitive {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+.home-sensitive:hover,
+.home-sensitive.on {
+  opacity: 1;
+}
+
+/* 共有モードで隠した件数の注記（中身は出さないので件数だけ） */
+.home-hidden-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+/* 「その他の開いているタブ」はボタンの入れ子を避けるため行ごとに包む */
+.home-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 /* /rename 済みの名前に加えて出す AI タイトル */
 .home-card-title {
   font-size: 12px;

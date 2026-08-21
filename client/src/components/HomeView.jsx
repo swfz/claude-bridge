@@ -7,6 +7,7 @@ import {
   formatElapsed,
 } from '../utils/runningSessions.js';
 import { isStarred, sortStarredFirst } from '../utils/starredSessions.js';
+import { isSensitive, splitSensitive } from '../utils/sensitiveSessions.js';
 import { parseCwd } from '../utils/cwdLabel.js';
 import { filterBySearch, collectProjects, filterByProject } from '../utils/sessionSearch.js';
 import './HomeView.css';
@@ -48,6 +49,28 @@ function StarButton({ on, onToggle }) {
   );
 }
 
+// 画面共有で見せたくないセッションの印。Star と同じくカードのクリックとは分ける。
+function SensitiveButton({ on, onToggle }) {
+  return (
+    <button
+      className={`home-sensitive ${on ? 'on' : ''}`}
+      title={on ? 'センシティブ指定を外す' : 'センシティブ指定（共有モードで隠す）'}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+    >
+      {on ? '🔒' : '🔓'}
+    </button>
+  );
+}
+
+// 共有モードで隠した件数の注記（何件か分かれば十分なので中身は出さない）
+function HiddenNote({ count }) {
+  if (!count) return null;
+  return <div className="home-hidden-note">🔒 {count} 件を非表示中（共有モード）</div>;
+}
+
 // タイトル行に出すプロジェクト名（worktree があれば併記）。タブの下段と同じ parseCwd を使う。
 function ProjectChip({ cwd }) {
   const { project, worktree } = parseCwd(cwd);
@@ -80,6 +103,9 @@ export default function HomeView({
   onChangeRecentDays,
   starred,
   onToggleStar,
+  sensitive,
+  shareMode,
+  onToggleSensitive,
   sessions,
   activeSessionId,
   loading,
@@ -98,9 +124,18 @@ export default function HomeView({
   const [selectedProject, setSelectedProject] = useState('');
 
   // Star を付けたものは「続きをやる」印なので、それぞれの一覧で先頭に寄せる
-  const annotated = sortStarredFirst(annotateRunningSessions(runningSessions, sessions), starred);
-  const recent = sortStarredFirst(annotateRecentSessions(recentSessions, runningSessions, sessions), starred);
+  const annotatedAll = sortStarredFirst(annotateRunningSessions(runningSessions, sessions), starred);
+  const recentAll = sortStarredFirst(annotateRecentSessions(recentSessions, runningSessions, sessions), starred);
   const otherTabsAll = findUnmatchedTabs(runningSessions, sessions, recentSessions);
+
+  // 共有モードのときはここでセンシティブ指定を落とし、以降の集計（プロジェクトチップ・
+  // 件数・検索）は残った側だけで行う。集計に混ぜるとチップや件数からパスが漏れる。
+  const split = (items, keyOf) =>
+    shareMode ? splitSensitive(items, sensitive, keyOf) : { visible: items, hidden: [] };
+  const { visible: annotated, hidden: hiddenRunning } = split(annotatedAll);
+  const { visible: recent, hidden: hiddenRecent } = split(recentAll);
+  const { visible: otherTabsVisible, hidden: hiddenOtherTabs } = split(otherTabsAll, (t) => t.claudeSessionId);
+
   const starredCount = [...annotated, ...recent].filter((s) => isStarred(starred, s.sessionId)).length;
 
   // プロジェクトチップの選択肢（起動中・直近の両方から集める）
@@ -110,7 +145,7 @@ export default function HomeView({
   const filteredAnnotated = filterBySearch(filterByProject(annotated, selectedProject), searchQuery);
   const filteredRecent = filterBySearch(filterByProject(recent, selectedProject), searchQuery);
   const otherTabs = filterBySearch(
-    filterByProject(otherTabsAll, selectedProject),
+    filterByProject(otherTabsVisible, selectedProject),
     searchQuery,
     OTHER_TAB_SEARCH_FIELDS,
   );
@@ -269,6 +304,10 @@ export default function HomeView({
                     <span className="home-badge closed-badge">未オープン</span>
                   )}
                   <StarButton on={starredNow} onToggle={() => onToggleStar(r.sessionId)} />
+                  <SensitiveButton
+                    on={isSensitive(sensitive, r.sessionId)}
+                    onToggle={() => onToggleSensitive(r.sessionId)}
+                  />
                 </div>
 
                 {/* 見出しに使わなかった側の名前（AI タイトル / スラッグ）も併記する */}
@@ -313,6 +352,7 @@ export default function HomeView({
           })}
         </div>
       )}
+      <HiddenNote count={hiddenRunning.length} />
 
       <div className="home-section">
         <div className="home-header">
@@ -359,6 +399,10 @@ export default function HomeView({
                     <span className="home-card-name">{label}</span>
                     {s.openTab && <span className="home-badge open-badge">タブで表示中</span>}
                     <StarButton on={starredNow} onToggle={() => onToggleStar(s.sessionId)} />
+                    <SensitiveButton
+                      on={isSensitive(sensitive, s.sessionId)}
+                      onToggle={() => onToggleSensitive(s.sessionId)}
+                    />
                   </div>
 
                   <Cwd cwd={s.cwd} branch={s.gitBranch} />
@@ -403,28 +447,39 @@ export default function HomeView({
             })}
           </div>
         )}
+        <HiddenNote count={hiddenRecent.length} />
       </div>
 
-      {otherTabs.length > 0 && (
+      {(otherTabs.length > 0 || hiddenOtherTabs.length > 0) && (
         <div className="home-section">
           <h3 className="home-subtitle">その他の開いているタブ（一覧に紐づかないもの）</h3>
           <div className="home-tab-list">
             {otherTabs.map((s) => (
-              <button
-                key={s.id}
-                className={`home-tab-item ${s.id === activeSessionId ? 'active' : ''} ${s.alive ? '' : 'dead'}`}
-                onClick={() => s.alive && onSelectTab(s.id)}
-                disabled={!s.alive}
-              >
-                <span className="home-tab-name">{s.name}</span>
-                <span className="home-tab-cwd" title={s.cwd}>
-                  {(s.cwd || '').split('/').pop()}
-                </span>
-                {s.type && s.type !== 'pty' && <span className="home-badge kind">{s.type}</span>}
-                {!s.alive && <span className="home-badge closed-badge">終了</span>}
-              </button>
+              // ボタンの入れ子を避けるため、センシティブ指定のトグルはタブ本体の隣に並べる
+              <div key={s.id} className="home-tab-row">
+                <button
+                  className={`home-tab-item ${s.id === activeSessionId ? 'active' : ''} ${s.alive ? '' : 'dead'}`}
+                  onClick={() => s.alive && onSelectTab(s.id)}
+                  disabled={!s.alive}
+                >
+                  <span className="home-tab-name">{s.name}</span>
+                  <span className="home-tab-cwd" title={s.cwd}>
+                    {(s.cwd || '').split('/').pop()}
+                  </span>
+                  {s.type && s.type !== 'pty' && <span className="home-badge kind">{s.type}</span>}
+                  {!s.alive && <span className="home-badge closed-badge">終了</span>}
+                </button>
+                {/* 印は claudeSessionId に付けるので、未解決のタブには出さない */}
+                {s.claudeSessionId && (
+                  <SensitiveButton
+                    on={isSensitive(sensitive, s.claudeSessionId)}
+                    onToggle={() => onToggleSensitive(s.claudeSessionId)}
+                  />
+                )}
+              </div>
             ))}
           </div>
+          <HiddenNote count={hiddenOtherTabs.length} />
         </div>
       )}
     </div>
