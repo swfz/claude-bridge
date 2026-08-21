@@ -149,8 +149,10 @@ export async function resumeInTmuxWindow({ claudeSessionId, cwd }) {
     sessionName = null;
   }
 
+  // 末尾の `:` でセッション指定に固定する。素の `-t 0` のような数字だけの
+  // セッション名は window index と解釈され「index 0 in use」で失敗する
   const command = sessionName
-    ? `tmux new-window -t ${sessionName} -n ${escapeForShell(windowName)}${cwdArg} ${format}`
+    ? `tmux new-window -t ${escapeForShell(`${sessionName}:`)} -n ${escapeForShell(windowName)}${cwdArg} ${format}`
     : `tmux new-session -d -s ${FALLBACK_TMUX_SESSION} -n ${escapeForShell(windowName)}${cwdArg} ${format}`;
 
   let stdout;
