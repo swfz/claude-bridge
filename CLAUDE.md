@@ -51,14 +51,14 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 ### クライアントのコンポーネント構成
 
 - `App.jsx` -- 状態管理の中心。`sessionsRef` で sessions の最新値を参照（stale closure 対策）
-- `ChatView.jsx` -- highlight.js は静的 import で13言語を登録。`EditDiff` は全文ハイライト後に行分割
+- `ChatView.jsx` -- highlight.js は静的 import で13言語を登録。`EditDiff` は全文ハイライト後に行分割。**新着への自動スクロールは「最下部付近にいる間だけ」**（`hooks/useStickToBottom.js`）。上にスクロールして過去を読んでいる最中は位置を動かさず、代わりに `.scroll-to-latest`（「↓ 新しいメッセージ」）を sticky で出して押されたら末尾へ戻す。追従の再開判定は `utils/scroll.js` の `isScrolledToBottom()`（余白 80px）。タブ切替（`sessionId` = resetKey の変化）では追従状態に戻す
 - `ThreadPanel.jsx` -- リサイズハンドルは `widthRef` で useCallback の依存を空に
 - `HomeView.jsx` -- ホーム画面（起動中セッション＋直近セッション）。`utils/runningSessions.js` の純粋関数で突合・整形
 - `RateLimitMeter.jsx` -- ヘッダー右側の 5h/7d レート制限メーター。`rate_limits` メッセージを表示するだけの純表示コンポーネント（データが無ければ非表示）。バー色は使用率で `--success` / `--warning` / `--accent`、ツールチップにリセット時刻・残り時間・モデル別 weekly・取得時刻。`fetchedAt` が 10 分より古い（statusline 連携が止まっている＝セッション非稼働の疑い）と `stale` クラスで薄く表示し、ツールチップにも注記する（60 秒間隔の内部 tick で再判定するだけで、データ自体はサーバー push 任せ）
 - `InputBar.jsx` -- 送信欄。書きかけは `key={draftKey}` の remount をまたぐようモジュールレベルの `drafts` Map に置く。**スラッシュコマンド補完**は `slashCommands` prop の候補を入力欄の直上にドロップダウンで出す。表示条件は `text` が `/^\/[A-Za-z0-9_:-]*$/`（先頭 `/` の 1 トークン目を打っている間）で、前方一致が 0 件なら部分一致にフォールバックし 50 件で打ち切る。表示中は ArrowUp/Down で選択、Tab/Enter で `/name ` に確定（**Enter は送信しない**）、Escape で畳む（次の入力で復帰）。`onSendEscape` が渡されたときだけ送信ボタンの左に `Esc` ボタンを出す（TUI で開いてしまったモーダルを閉じる用。**補完を畳む Escape キー操作とは別物**）
 - `ChoicePrompt.jsx` -- 選択肢プロンプトのカード（入力欄の直上）。選択肢ボタン＝キー送信で、状態は毎回サーバーが読み直した画面から来る（クライアントは選択状態を持たない）
 - `TaskStrip.jsx` -- サブエージェントタスクのチップ列（入力欄の直上、選択肢カードの上）。実行中は `⚙`、完了は `✓`。完了は 3 件を超えたら「✓ 他 N 件」に畳む
-- `SubagentDrawer.jsx` -- サブエージェントの会話を見せる右サイドドロワー。本文は `ChatView.jsx` の `ChatMessage`（export 済み）を `readonly` で再利用する
+- `SubagentDrawer.jsx` -- サブエージェントの会話を見せる右サイドドロワー。本文は `ChatView.jsx` の `ChatMessage`（export 済み）を `readonly` で再利用する。スクロール追従も `useStickToBottom`（resetKey は `agentId`）で ChatView と同じ挙動
 
 ### サブエージェントタスクの一覧とトランスクリプト
 

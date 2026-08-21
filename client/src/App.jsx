@@ -1159,6 +1159,7 @@ export default function App() {
                       setDrawerOpenedAt(messages.length);
                     }}
                     readonly={isReadonly}
+                    sessionId={activeSessionId}
                   />
                 )
               ) : (

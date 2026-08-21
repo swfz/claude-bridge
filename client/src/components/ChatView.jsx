@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
 import { EXT_TO_LANG, highlightLines } from '../highlight.js';
 import { PREVIEWABLE_EXTS, getExt } from '../utils/previewExts.js';
+import { useStickToBottom } from '../hooks/useStickToBottom.js';
 import FilePreview from './FilePreview.jsx';
 import CodeBlock from './CodeBlock.jsx';
 import './ChatView.css';
@@ -500,14 +501,10 @@ export default function ChatView({
   onPreviewMarkdown,
   onOpenFileReview,
   readonly,
+  sessionId,
 }) {
-  const scrollRef = useRef(null);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+  // 最下部にいる間だけ新着に追従する（上を読んでいる最中に引き戻さない）
+  const { scrollRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(messages, sessionId);
 
   // コメント一覧から指定の messageUuid へスクロール（ベストエフォート）
   useEffect(() => {
@@ -522,7 +519,7 @@ export default function ChatView({
   }, [jumpToUuid, onJumpDone]);
 
   return (
-    <div className="chat-view" ref={scrollRef}>
+    <div className="chat-view" ref={scrollRef} onScroll={onScroll}>
       {messages.length === 0 ? (
         <div className="chat-empty">Chat モード — Claude の出力がここに表示されます</div>
       ) : (
@@ -548,6 +545,12 @@ export default function ChatView({
             </div>
           );
         })
+      )}
+
+      {hasNew && (
+        <button className="scroll-to-latest" onClick={scrollToBottom}>
+          ↓ 新しいメッセージ
+        </button>
       )}
     </div>
   );
