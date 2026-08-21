@@ -534,6 +534,8 @@ wss.on('connection', (ws) => {
       case 'input': {
         const session = findSession(msg.sessionId);
         if (session) {
+          // 「届かない」調査用に到達だけ記録する（本文は残さない）
+          console.log(`input -> ${String(msg.sessionId).slice(0, 8)} (${(msg.text || '').length} chars)`);
           session.write(msg.text);
         } else {
           console.warn(`input: session ${msg.sessionId} not found or dead`);

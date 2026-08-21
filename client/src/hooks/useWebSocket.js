@@ -50,11 +50,15 @@ export function useWebSocket() {
     };
   }, [connect]);
 
+  // 送れたかどうかを返す。切断中（CONNECTING / CLOSED）は捨てるしかないので、
+  // 呼び出し側が「送れたように見せない」判断をできるようにする
   const send = useCallback((msg) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(msg));
+      return true;
     }
+    return false;
   }, []);
 
   const on = useCallback((type, callback) => {

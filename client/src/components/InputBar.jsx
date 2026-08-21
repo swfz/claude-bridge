@@ -24,7 +24,8 @@ export default function InputBar({ onSubmit, disabled, placeholder, draftKey }) 
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
-    onSubmit(trimmed);
+    // 明示的に false が返ったら送信失敗（WS 切断中など）。書きかけを消さない
+    if (onSubmit(trimmed) === false) return;
     setText('');
     if (draftKey) drafts.delete(draftKey);
     if (textareaRef.current) {
