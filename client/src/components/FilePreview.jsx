@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
-import { PREVIEWABLE_EXTS, getExt } from "../utils/previewExts.js";
-import "./FilePreview.css";
+import { useEffect, useState } from 'react';
+import { PREVIEWABLE_EXTS, getExt } from '../utils/previewExts.js';
+import './FilePreview.css';
 
 export function extractLocalPath(url) {
-  if (url.startsWith("file://wsl.localhost/")) {
-    return url.replace(/^file:\/\/wsl\.localhost\/[^/]+/, "");
+  if (url.startsWith('file://wsl.localhost/')) {
+    return url.replace(/^file:\/\/wsl\.localhost\/[^/]+/, '');
   }
-  if (url.startsWith("file:///")) {
+  if (url.startsWith('file:///')) {
     return url.slice(7);
   }
-  if (url.startsWith("file://")) {
+  if (url.startsWith('file://')) {
     return url.slice(7);
   }
   return url;
@@ -32,7 +32,7 @@ function checkFileExists(path) {
 
 export default function FilePreview({ href, onOpenPreview, onOpenFileReview }) {
   const localPath = extractLocalPath(href);
-  const fileName = localPath.split("/").pop();
+  const fileName = localPath.split('/').pop();
   const ext = getExt(localPath);
   const canPreview = PREVIEWABLE_EXTS.includes(ext);
   const [exists, setExists] = useState(null);
@@ -55,29 +55,17 @@ export default function FilePreview({ href, onOpenPreview, onOpenFileReview }) {
   return (
     <span className="file-preview-inline">
       <span className="file-link-group">
-        <span className="file-icon">
-          {ext === ".md" ? "M" : ext === ".html" ? "H" : "F"}
-        </span>
-        <button
-          className="file-link"
-          onClick={() => canPreview && onOpenPreview(localPath)}
-          title={localPath}
-        >
+        <span className="file-icon">{ext === '.md' ? 'M' : ext === '.html' ? 'H' : 'F'}</span>
+        <button className="file-link" onClick={() => canPreview && onOpenPreview?.(localPath)} title={localPath}>
           {fileName}
         </button>
         {canPreview && (
           <>
-            <button
-              className="file-btn file-btn-preview"
-              onClick={() => onOpenPreview(localPath)}
-            >
+            <button className="file-btn file-btn-preview" onClick={() => onOpenPreview?.(localPath)}>
               プレビュー
             </button>
             {onOpenFileReview && (
-              <button
-                className="file-btn file-btn-review"
-                onClick={() => onOpenFileReview(localPath)}
-              >
+              <button className="file-btn file-btn-review" onClick={() => onOpenFileReview(localPath)}>
                 レビュー
               </button>
             )}

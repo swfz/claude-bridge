@@ -1,10 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
+import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
-const DATA_DIR = process.env.CLAUDE_BRIDGE_DIR || join(homedir(), ".claude-bridge");
-const SESSIONS_FILE = join(DATA_DIR, "sessions.json");
-const INBOX_DIR = join(DATA_DIR, "inbox");
+const DATA_DIR = process.env.CLAUDE_BRIDGE_DIR || join(homedir(), '.claude-bridge');
+const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
+const INBOX_DIR = join(DATA_DIR, 'inbox');
 
 export class Storage {
   constructor() {
@@ -17,7 +17,7 @@ export class Storage {
 
   loadSessions() {
     try {
-      return JSON.parse(readFileSync(SESSIONS_FILE, "utf-8"));
+      return JSON.parse(readFileSync(SESSIONS_FILE, 'utf-8'));
     } catch {
       return [];
     }
@@ -31,7 +31,7 @@ export class Storage {
   loadThreads(sessionId) {
     try {
       const file = join(DATA_DIR, `threads-${sessionId}.json`);
-      return JSON.parse(readFileSync(file, "utf-8"));
+      return JSON.parse(readFileSync(file, 'utf-8'));
     } catch {
       return [];
     }
@@ -45,7 +45,7 @@ export class Storage {
   loadComments(sessionId) {
     try {
       const file = join(DATA_DIR, `comments-${sessionId}.json`);
-      return JSON.parse(readFileSync(file, "utf-8"));
+      return JSON.parse(readFileSync(file, 'utf-8'));
     } catch {
       return [];
     }
@@ -61,7 +61,7 @@ export class Storage {
   loadReviewDraft(sessionId) {
     try {
       const file = join(DATA_DIR, `review-${sessionId}.json`);
-      const draft = JSON.parse(readFileSync(file, "utf-8"));
+      const draft = JSON.parse(readFileSync(file, 'utf-8'));
       return Array.isArray(draft?.items) ? draft : { items: [] };
     } catch {
       return { items: [] };
@@ -71,7 +71,7 @@ export class Storage {
   // フックベース送信: 対象セッションの inbox に1行追記する（agent 側のフックが取り込む）。
   // sessionId はファイルパスに使うためトラバーサル対策で形式を検証する。
   appendInbox(sessionId, message) {
-    if (!/^[\w-]+$/.test(sessionId || "")) {
+    if (!/^[\w-]+$/.test(sessionId || '')) {
       throw new Error(`invalid sessionId for inbox: ${sessionId}`);
     }
     mkdirSync(INBOX_DIR, { recursive: true });
@@ -79,9 +79,9 @@ export class Storage {
     const line =
       JSON.stringify({
         id: message.id || `msg-${Date.now()}`,
-        text: message.text || "",
+        text: message.text || '',
         ts: message.ts || new Date().toISOString(),
-      }) + "\n";
+      }) + '\n';
     appendFileSync(file, line, { mode: 0o600 });
   }
 }
