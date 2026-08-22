@@ -1,0 +1,177 @@
+/* TUI に出ている選択肢プロンプトを入力欄の上に置くカード。
+   AskUserQuestion / ツール許可 / trust 確認で共通に使う。 */
+.choice-prompt {
+  border-top: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  background: var(--bg-secondary);
+  padding: 10px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.choice-prompt-permission {
+  border-left-color: var(--accent);
+}
+
+.choice-prompt-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.choice-prompt-badge {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--bg-primary);
+  background: var(--warning);
+  border-radius: 10px;
+  padding: 2px 10px;
+}
+
+.choice-prompt-permission .choice-prompt-badge {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.choice-prompt-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.choice-prompt-question {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.choice-prompt-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.choice-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.choice-option:hover {
+  border-color: var(--accent);
+}
+
+/* TUI 側のカーソル位置（Enter を押したときに選ばれるもの） */
+.choice-option-cursor {
+  border-color: var(--accent-secondary);
+}
+
+.choice-option-checked {
+  background: var(--bg-surface);
+}
+
+.choice-option-key {
+  flex-shrink: 0;
+  min-width: 18px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.choice-option-checked .choice-option-key {
+  color: var(--success);
+}
+
+.choice-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.choice-option-label {
+  font-weight: 500;
+}
+
+.choice-option-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.choice-prompt-freetext {
+  display: flex;
+  gap: 8px;
+}
+
+.choice-freetext-input {
+  flex: 1;
+  background: var(--input-bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 8px 12px;
+}
+
+.choice-freetext-input:focus {
+  outline: none;
+}
+
+.choice-prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.choice-btn-send {
+  padding: 6px 16px;
+  font-size: 13px;
+}
+
+.choice-btn-plain {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.choice-btn-plain:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.choice-prompt-footer {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.choice-prompt-error {
+  font-size: 12px;
+  color: var(--warning);
+}
+
+.choice-prompt-unknown {
+  border-left-color: var(--text-secondary);
+}

@@ -3,3 +3,6 @@ client/dist/
 *.log
 .DS_Store
 .playwright-mcp/
+test-results/
+playwright-report/
+e2e/.tmp/
