@@ -1,0 +1,50 @@
+.rate-limit-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* fetchedAt が古い（statusline 更新が止まっている＝セッション非稼働の疑い）ときの見た目 */
+.rate-limit-group.stale {
+  opacity: 0.55;
+}
+
+.rate-limit-meter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rate-limit-label {
+  min-width: 18px;
+}
+
+.rate-limit-bar {
+  display: inline-block;
+  width: 48px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--meter-track);
+  overflow: hidden;
+}
+
+.rate-limit-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.rate-limit-value {
+  min-width: 30px;
+  text-align: right;
+}
+
+/* リセット時刻・残り時間の補足テキスト（5h: "14:30 (2h13m)" / 7d: "残3d"） */
+.rate-limit-detail {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.85;
+  white-space: nowrap;
+}

@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { FileIcon, FolderIcon } from "./fileIcons.jsx";
-import { getExt, isPreviewable } from "../utils/previewExts.js";
-import "./FileExplorer.css";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { FileIcon, FolderIcon } from './fileIcons.jsx';
+import { getExt, isPreviewable } from '../utils/previewExts.js';
+import './FileExplorer.css';
 
 function joinPath(parent, name) {
-  return parent.endsWith("/") ? `${parent}${name}` : `${parent}/${name}`;
+  return parent.endsWith('/') ? `${parent}${name}` : `${parent}/${name}`;
 }
 
 // cwd からの相対ディレクトリ部分（検索結果で「どこにあるか」を示す）。直下なら ""。
 function relativeDir(cwd, full) {
   let rel = full.startsWith(cwd) ? full.slice(cwd.length) : full;
-  rel = rel.replace(/^\/+/, "");
-  const idx = rel.lastIndexOf("/");
-  return idx >= 0 ? rel.slice(0, idx + 1) : "";
+  rel = rel.replace(/^\/+/, '');
+  const idx = rel.lastIndexOf('/');
+  return idx >= 0 ? rel.slice(0, idx + 1) : '';
 }
 
 function DirNode({ path, name, depth, initiallyOpen, onOpenPreview }) {
@@ -34,7 +34,7 @@ function DirNode({ path, name, depth, initiallyOpen, onOpenPreview }) {
       .catch((e) => {
         if (!cancelled) {
           setEntries([]);
-          setError(e.message || "読み込みに失敗しました");
+          setError(e.message || '読み込みに失敗しました');
         }
       });
     return () => {
@@ -51,7 +51,7 @@ function DirNode({ path, name, depth, initiallyOpen, onOpenPreview }) {
         onClick={() => setExpanded((v) => !v)}
         title={path}
       >
-        <span className="explorer-caret">{expanded ? "▾" : "▸"}</span>
+        <span className="explorer-caret">{expanded ? '▾' : '▸'}</span>
         <span className="explorer-icon">
           <FolderIcon open={expanded} />
         </span>
@@ -70,7 +70,7 @@ function DirNode({ path, name, depth, initiallyOpen, onOpenPreview }) {
             </div>
           )}
           {entries.map((e) =>
-            e.type === "dir" ? (
+            e.type === 'dir' ? (
               <DirNode
                 key={e.name}
                 path={joinPath(path, e.name)}
@@ -86,7 +86,7 @@ function DirNode({ path, name, depth, initiallyOpen, onOpenPreview }) {
                 depth={depth + 1}
                 onOpenPreview={onOpenPreview}
               />
-            )
+            ),
           )}
         </>
       )}
@@ -100,7 +100,7 @@ function FileNode({ path, name, depth, onOpenPreview, subPath }) {
   return (
     <button
       type="button"
-      className={`explorer-node file ${canPreview ? "" : "disabled"}`}
+      className={`explorer-node file ${canPreview ? '' : 'disabled'}`}
       style={{ paddingLeft: 4 + depth * 12 }}
       onClick={() => canPreview && onOpenPreview(path)}
       disabled={!canPreview}
@@ -137,15 +137,15 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
     };
     const onUp = () => {
       dragging.current = false;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
     };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }, []);
 
   // ファイル名検索（cwd 配下を再帰検索。空のときはツリー表示）
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [search, setSearch] = useState({ matches: [], truncated: false, loading: false });
 
   useEffect(() => {
@@ -158,9 +158,7 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
     let cancelled = false;
     const id = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/search?path=${encodeURIComponent(cwd)}&q=${encodeURIComponent(q)}`
-        );
+        const res = await fetch(`/search?path=${encodeURIComponent(cwd)}&q=${encodeURIComponent(q)}`);
         const data = res.ok ? await res.json() : { matches: [], truncated: false };
         if (!cancelled) setSearch({ matches: data.matches || [], truncated: !!data.truncated, loading: false });
       } catch {
@@ -184,7 +182,7 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
     );
   }
 
-  const rootName = cwd.split("/").filter(Boolean).pop() || cwd;
+  const rootName = cwd.split('/').filter(Boolean).pop() || cwd;
 
   const searching = query.trim().length > 0;
 
@@ -197,18 +195,9 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
         <span className="explorer-header-name">{rootName}</span>
       </div>
       <div className="file-explorer-search">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="ファイル名で検索..."
-        />
+        <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ファイル名で検索..." />
         {searching && (
-          <button
-            className="explorer-search-clear"
-            onClick={() => setQuery("")}
-            title="クリア"
-          >
+          <button className="explorer-search-clear" onClick={() => setQuery('')} title="クリア">
             x
           </button>
         )}
@@ -231,20 +220,11 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
                   subPath={relativeDir(cwd, m.path)}
                 />
               ))}
-              {search.truncated && (
-                <p className="explorer-empty-state">（結果が多いため一部のみ表示）</p>
-              )}
+              {search.truncated && <p className="explorer-empty-state">（結果が多いため一部のみ表示）</p>}
             </>
           )
         ) : (
-          <DirNode
-            key={cwd}
-            path={cwd}
-            name={rootName}
-            depth={0}
-            initiallyOpen
-            onOpenPreview={onOpenPreview}
-          />
+          <DirNode key={cwd} path={cwd} name={rootName} depth={0} initiallyOpen onOpenPreview={onOpenPreview} />
         )}
       </div>
       <div className="file-explorer-resize-handle" onMouseDown={onDragStart} />

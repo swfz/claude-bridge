@@ -1,0 +1,5 @@
+{"type":"user","message":{"role":"user","content":"claude-bridge の E2E テスト用 fixture です。ヘルスチェックを実装してください"},"cwd":"/home/e2e/fixture-project","gitBranch":"main","timestamp":"2026-08-10T09:00:00.000Z","uuid":"e2e-uuid-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"了解しました。ヘルスチェックのエンドポイントを追加します。"}]},"cwd":"/home/e2e/fixture-project","timestamp":"2026-08-10T09:00:05.000Z","uuid":"e2e-uuid-2"}
+{"type":"user","message":{"role":"user","content":"ついでにテストも書いてください"},"cwd":"/home/e2e/fixture-project","timestamp":"2026-08-10T09:05:00.000Z","uuid":"e2e-uuid-3"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"テストを追加しました。CI でも動作確認済みです。"}]},"cwd":"/home/e2e/fixture-project","timestamp":"2026-08-10T09:05:10.000Z","uuid":"e2e-uuid-4"}
+{"type":"ai-title","aiTitle":"E2Eフィクスチャ: ヘルスチェック追加","cwd":"/home/e2e/fixture-project","timestamp":"2026-08-10T09:05:11.000Z"}

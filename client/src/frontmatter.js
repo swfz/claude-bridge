@@ -3,9 +3,10 @@
 // 表示前に分離してテーブル化できるようにする。
 // 簡易パーサのため、ネストや複数行値は文字列としてそのまま扱う。
 export function splitFrontmatter(md) {
-  if (typeof md !== "string") {
-    return { frontmatter: null, body: md || "" };
+  if (typeof md !== 'string') {
+    return { frontmatter: null, body: md || '' };
   }
+  // eslint-disable-next-line no-irregular-whitespace -- BOM (U+FEFF) を先頭から許容するため意図的
   const match = md.match(/^﻿?---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   if (!match) {
     return { frontmatter: null, body: md };
@@ -14,8 +15,8 @@ export function splitFrontmatter(md) {
   const data = {};
   for (const line of match[1].split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const idx = line.indexOf(":");
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const idx = line.indexOf(':');
     if (idx === -1) continue;
     const key = line.slice(0, idx).trim();
     if (!key) continue;
@@ -23,7 +24,7 @@ export function splitFrontmatter(md) {
     const value = line
       .slice(idx + 1)
       .trim()
-      .replace(/^["']|["']$/g, "");
+      .replace(/^["']|["']$/g, '');
     data[key] = value;
   }
 
