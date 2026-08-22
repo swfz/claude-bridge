@@ -80,7 +80,7 @@
 .file-path-display {
   font-size: 11px;
   color: var(--text-secondary);
-  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
   word-break: break-all;
   opacity: 0.7;
 }

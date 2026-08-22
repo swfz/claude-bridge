@@ -1,5 +1,5 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
@@ -8,7 +8,7 @@ const execFileAsync = promisify(execFile);
 // execFile（シェル非経由）+ timeout で安全に実行する。
 export async function listClaudeAgents() {
   try {
-    const { stdout } = await execFileAsync("claude", ["agents", "--json"], {
+    const { stdout } = await execFileAsync('claude', ['agents', '--json'], {
       timeout: 5000,
     });
     const arr = JSON.parse(stdout);
