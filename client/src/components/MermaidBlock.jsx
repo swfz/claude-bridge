@@ -1,16 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 // mermaid は重いので動的 import し、初回だけ読み込む
 let mermaidPromise = null;
 function loadMermaid() {
   if (!mermaidPromise) {
-    mermaidPromise = import("mermaid").then((mod) => {
+    mermaidPromise = import('mermaid').then((mod) => {
       const mermaid = mod.default;
       // 図は本文の明暗に関わらず白地カードに描くため default テーマで固定する
       mermaid.initialize({
         startOnLoad: false,
-        theme: "default",
-        securityLevel: "strict",
+        theme: 'default',
+        securityLevel: 'strict',
       });
       return mermaid;
     });
@@ -35,7 +35,7 @@ export default function MermaidBlock({ code }) {
         if (!cancelled) setSvg(svg);
       })
       .catch((e) => {
-        if (!cancelled) setError(e?.message || "図の描画に失敗しました");
+        if (!cancelled) setError(e?.message || '図の描画に失敗しました');
       });
     return () => {
       cancelled = true;
@@ -53,10 +53,5 @@ export default function MermaidBlock({ code }) {
   if (!svg) {
     return <div className="mermaid-loading">図を描画中...</div>;
   }
-  return (
-    <div
-      className="mermaid-block"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
-  );
+  return <div className="mermaid-block" dangerouslySetInnerHTML={{ __html: svg }} />;
 }

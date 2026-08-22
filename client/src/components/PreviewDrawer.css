@@ -9,8 +9,12 @@
 }
 
 @keyframes overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .drawer {
@@ -47,9 +51,25 @@
   max-width: 1400px;
 }
 
+/* HTML は iframe にページがそのまま描画されるので、既定幅を 200px 広く取る
+   （ドラッグでリサイズすると inline style が優先されるので、ここは初期値だけ） */
+.drawer-html {
+  width: 70%;
+  max-width: 1200px;
+}
+
+.drawer-html.drawer-with-review {
+  width: 90%;
+  max-width: 1600px;
+}
+
 @keyframes drawer-slide-in {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 .drawer-header {
@@ -82,7 +102,7 @@
 .drawer-path {
   font-size: 11px;
   color: var(--text-secondary);
-  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -304,13 +324,24 @@ tr.comment-anchored > th:first-child {
   width: 100%;
   height: 100%;
   border: none;
-  background: white;
+  /* iframe 要素の color-scheme は中のドキュメントの prefers-color-scheme として伝わる
+     （CSS Color Adjust）。プレビューの明暗トグル・アプリのライトテーマに合わせて切り替え、
+     テーマ対応 HTML がプレビューの明暗に追従するようにする。
+     背景はページのキャンバスが透過のときの下地（preview-light / light-mode では
+     --bg-primary が白に差し替わるので、ここは var のままでよい）。 */
+  color-scheme: dark;
+  background: var(--bg-primary);
+}
+
+body.light-mode .drawer-iframe,
+.drawer-body.preview-light .drawer-iframe {
+  color-scheme: light;
 }
 
 .drawer-text {
   margin: 0;
   padding: 16px;
-  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-primary);
@@ -344,22 +375,53 @@ tr.comment-anchored > th:first-child {
   color: var(--text-primary);
 }
 
-.drawer-markdown h1 { font-size: 24px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-.drawer-markdown h2 { font-size: 20px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
-.drawer-markdown h3 { font-size: 16px; }
+.drawer-markdown h1 {
+  font-size: 24px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.drawer-markdown h2 {
+  font-size: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.drawer-markdown h3 {
+  font-size: 16px;
+}
 
-.drawer-markdown p { margin: 8px 0; }
+.drawer-markdown p {
+  margin: 8px 0;
+}
 
 .drawer-markdown ul,
-.drawer-markdown ol { padding-left: 24px; margin: 8px 0; }
-.drawer-markdown li { margin: 4px 0; }
+.drawer-markdown ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+.drawer-markdown li {
+  margin: 4px 0;
+}
 
-.drawer-markdown table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.drawer-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+}
 .drawer-markdown th,
-.drawer-markdown td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
-.drawer-markdown thead { background: rgba(255, 255, 255, 0.06); }
-.drawer-markdown th { font-weight: 600; }
-.drawer-markdown tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+.drawer-markdown td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+.drawer-markdown thead {
+  background: rgba(255, 255, 255, 0.06);
+}
+.drawer-markdown th {
+  font-weight: 600;
+}
+.drawer-markdown tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
 
 /* 背景はインラインコードのみ。コードブロック内の code は枠と同じ背景にする */
 .drawer-markdown :not(pre) > code {
@@ -369,15 +431,29 @@ tr.comment-anchored > th:first-child {
 }
 
 .drawer-markdown code {
-  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 13px;
 }
 
 /* コードブロックは共通の .code-block-wrapper (CodeBlock) に一任する */
-.drawer-markdown blockquote { border-left: 3px solid var(--text-secondary); margin: 8px 0; padding: 4px 12px; color: var(--text-secondary); }
-.drawer-markdown a { color: var(--accent); }
-.drawer-markdown hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
-.drawer-markdown img { max-width: 100%; border-radius: 4px; }
+.drawer-markdown blockquote {
+  border-left: 3px solid var(--text-secondary);
+  margin: 8px 0;
+  padding: 4px 12px;
+  color: var(--text-secondary);
+}
+.drawer-markdown a {
+  color: var(--accent);
+}
+.drawer-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+.drawer-markdown img {
+  max-width: 100%;
+  border-radius: 4px;
+}
 
 /* frontmatter テーブル */
 .frontmatter-table {
@@ -404,7 +480,7 @@ tr.comment-anchored > th:first-child {
   font-weight: 600;
   color: var(--text-secondary);
   background: rgba(255, 255, 255, 0.04);
-  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
 }
 
 .drawer-body.preview-light .frontmatter-table th {
@@ -475,8 +551,14 @@ tr.comment-anchored > th:first-child {
 }
 
 @keyframes popup-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .selection-popup-btn {
@@ -565,8 +647,12 @@ tr.comment-anchored > th:first-child {
   padding: 0 3px;
 }
 
-.review-pane-resolve:hover { color: var(--success); }
-.review-pane-remove:hover { color: var(--accent); }
+.review-pane-resolve:hover {
+  color: var(--success);
+}
+.review-pane-remove:hover {
+  color: var(--accent);
+}
 
 .review-pane-selected {
   font-size: 12px;
@@ -706,8 +792,12 @@ tr.comment-anchored > th:first-child {
   color: var(--text-primary);
 }
 
-.review-pane-response-body p { margin: 4px 0; }
-.review-pane-response-body p:last-child { margin-bottom: 0; }
+.review-pane-response-body p {
+  margin: 4px 0;
+}
+.review-pane-response-body p:last-child {
+  margin-bottom: 0;
+}
 .review-pane-response-body code {
   background: rgba(255, 255, 255, 0.08);
   padding: 1px 4px;
@@ -715,7 +805,10 @@ tr.comment-anchored > th:first-child {
   font-size: 12px;
 }
 .review-pane-response-body ul,
-.review-pane-response-body ol { padding-left: 16px; margin: 4px 0; }
+.review-pane-response-body ol {
+  padding-left: 16px;
+  margin: 4px 0;
+}
 
 /* プレビューのファイル名横に出すコメント件数バッジ */
 .drawer-comment-count {

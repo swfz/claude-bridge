@@ -1,0 +1,512 @@
+/* ホーム画面。app-main が overflow:hidden なので自前でスクロールさせる */
+.home-view {
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px 24px 40px;
+}
+
+.home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.home-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.home-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.home-empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 24px 0;
+}
+
+/* ホームでの操作エラー（tmux 再開の失敗など）。チャット欄に出せないのでここで見せる */
+.home-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid #c05252;
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: rgba(192, 82, 82, 0.12);
+}
+
+.home-error-text {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.home-error-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.home-error-close:hover {
+  color: var(--text-primary);
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.home-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-card:hover {
+  border-color: var(--accent);
+}
+
+/* タブとして開いているセッションは左に色帯を出して一目で分かるようにする */
+.home-card.open {
+  border-left: 3px solid var(--accent-secondary);
+  background: var(--bg-surface);
+}
+
+.home-card.active {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+.home-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.home-card-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+/* タイトル行のプロジェクト名（タブ下段の cwd 表示と同じ parseCwd 由来） */
+.home-card-project {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-card-worktree {
+  margin-left: 4px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.home-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-secondary);
+}
+
+.home-status-busy {
+  background: #f0ad4e;
+  box-shadow: 0 0 4px #f0ad4e;
+  animation: home-status-pulse 1.2s ease-in-out infinite;
+}
+
+.home-status-idle {
+  background: var(--success);
+}
+
+@keyframes home-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.home-badge {
+  font-size: 9px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.home-badge.kind {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.home-badge.open-badge {
+  background: var(--accent-secondary);
+  color: #fff;
+}
+
+.home-badge.closed-badge {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px dashed var(--border);
+}
+
+.home-card-cwd {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.home-cwd-parent {
+  color: var(--text-secondary);
+}
+
+.home-cwd-base {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Star（未解決／続きをやる）。カードの右上に置き、付いているものは金色で塗る */
+.home-star {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+}
+
+.home-star:hover {
+  opacity: 1;
+  color: #f0ad4e;
+}
+
+.home-star.on {
+  opacity: 1;
+  color: #f0ad4e;
+}
+
+/* Star 付きカードは上辺に金色のラインを引く（open の左帯・active の枠色と衝突させない） */
+.home-card.starred {
+  box-shadow: inset 0 2px 0 0 #f0ad4e;
+}
+
+.home-count.starred-count {
+  color: #f0ad4e;
+}
+
+/* センシティブ指定（共有モードで隠す印）。Star の隣に並べるので margin-left は持たせない */
+.home-sensitive {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+.home-sensitive:hover,
+.home-sensitive.on {
+  opacity: 1;
+}
+
+/* 共有モードで隠した件数の注記（中身は出さないので件数だけ） */
+.home-hidden-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+/* 「その他の開いているタブ」はボタンの入れ子を避けるため行ごとに包む */
+.home-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* /rename 済みの名前に加えて出す AI タイトル */
+.home-card-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* git ブランチ（cwd の右） */
+.home-branch {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+/* 会話抜粋。2 行までに抑えてカードの高さを揃える */
+.home-snippet {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.home-snippet.assistant {
+  color: var(--text-secondary);
+}
+
+.home-snippet-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  height: fit-content;
+  margin-top: 2px;
+}
+
+.home-snippet-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+/* 期間プリセット（直近のセッション） */
+.home-days {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.home-day {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.home-day:hover {
+  color: var(--text-primary);
+}
+
+.home-day.active {
+  background: var(--accent-secondary);
+  color: #fff;
+}
+
+.home-sid {
+  font-family: var(--font-mono, monospace);
+}
+
+.home-card-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.home-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.home-action {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.home-action:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.home-action.primary {
+  border-color: var(--accent-secondary);
+  color: var(--text-primary);
+}
+
+.home-section {
+  margin-top: 28px;
+}
+
+.home-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.home-tab-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-tab-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.home-tab-item:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.home-tab-item.active {
+  border-color: var(--accent);
+}
+
+.home-tab-item.dead {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.home-tab-cwd {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ホーム検索ボックス（タイトル・依頼・パス・ブランチを横断で絞り込む） */
+.home-search-box {
+  position: relative;
+  width: 220px;
+}
+
+.home-search {
+  width: 100%;
+  font-size: 12px;
+  padding: 6px 24px 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.home-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ネイティブのクリアボタンは独自の ×（.home-search-clear）に任せる */
+.home-search::-webkit-search-cancel-button {
+  display: none;
+}
+
+.home-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.home-search-clear:hover {
+  color: var(--text-primary);
+}
+
+/* プロジェクトフィルタのチップ列。期間プリセット（.home-day）と同じトーン */
+.home-projects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.home-project-chip {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 5px;
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.home-project-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.home-project-chip.active {
+  background: var(--accent-secondary);
+  border-color: var(--accent-secondary);
+  color: #fff;
+}
