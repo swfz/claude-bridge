@@ -41,15 +41,16 @@ npm start
 
 ## スクリプト一覧
 
-| スクリプト | 説明 |
-|---|---|
-| `npm run dev` | クライアントビルド後にサーバー起動 |
-| `npm start` | サーバーのみ起動（`client/dist` 配信） |
-| `npm run build` | クライアントのプロダクションビルド |
-| `npm run dev:client` | Vite dev server（ホットリロード開発用） |
-| `npm test` | テスト実行 |
-| `npm run install:all` | ルート + クライアントの依存インストール |
-| `npm run setup:hooks` | agent 連携フック（レビュー送信の受信側）を `~/.claude/settings.json` に登録 |
+| スクリプト                 | 説明                                                                        |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `npm run dev`              | クライアントビルド後にサーバー起動                                          |
+| `npm start`                | サーバーのみ起動（`client/dist` 配信）                                      |
+| `npm run build`            | クライアントのプロダクションビルド                                          |
+| `npm run dev:client`       | Vite dev server（ホットリロード開発用）                                     |
+| `npm test`                 | テスト実行                                                                  |
+| `npm run install:all`      | ルート + クライアントの依存インストール                                     |
+| `npm run setup:hooks`      | agent 連携フック（レビュー送信の受信側）を `~/.claude/settings.json` に登録 |
+| `npm run setup:statusline` | レート制限表示用の statusLine tee を `~/.claude/settings.json` に登録       |
 
 ## agent 連携（レビュー送信 / コメント）
 
@@ -75,6 +76,19 @@ npm run setup:hooks
   - `bridge-session-start.js` / `bridge-watch.js` -- インタラクティブセッション向けのリアルタイム受信（Monitor）
 - サンドボックス有効時は `setup:hooks` が `~/.claude-bridge` への書き込み許可も追加する。
 - コメント（残す）だけを使う場合は `setup:hooks` は不要。
+
+## レート制限表示（ヘッダーの 5h/7d メーター）
+
+credentials・外部 API アクセスは一切使わず、Claude Code の statusLine 機構に相乗りしてローカルファイル経由でデータを取る。
+
+```bash
+npm run setup:statusline
+```
+
+- `~/.claude/settings.json` の `statusLine.command` に `scripts/statusline/bridge-statusline-tee.js` を割り込ませる。既存の statusLine コマンドは `<dataDir>/statusline-original.json` に退避され、tee は stdin の `rate_limits` だけを `<dataDir>/rate-limits.json` に書き出した後、元のコマンドへ stdin をそのまま引き継ぐ（表示は変わらない）。
+- **ブリッジサーバーを動かす環境ではなく、statusLine を表示させたい Claude セッションを動かす環境**で実行する。
+- 元に戻す場合: `node scripts/setup-statusline.js --uninstall`
+- statusLine 未連携（`npm run setup:statusline` 未実行）でもブリッジ自体は問題なく動作し、ヘッダーのメーターが表示されないだけ。
 
 ## アーキテクチャ
 
@@ -112,29 +126,29 @@ test/                  node:test によるユニット・統合テスト
 
 ### クライアント → サーバー
 
-| type | 説明 |
-|---|---|
-| `new_session` | 新規セッション作成 |
-| `input` | セッションにテキスト送信 |
-| `resize` | ターミナルリサイズ |
-| `kill_session` | セッション終了 |
-| `restart_session` | 過去セッションを再起動 |
-| `resume_session` | Claude セッションを `--resume` で再開 |
-| `attach_tmux_pane` | tmux ペインに接続 |
-| `detach_tmux_pane` | tmux ペインから切断 |
-| `list_tmux_panes` | Claude 実行中の tmux ペイン一覧 |
-| `get_buffer` | ターミナル出力バッファ取得 |
+| type               | 説明                                  |
+| ------------------ | ------------------------------------- |
+| `new_session`      | 新規セッション作成                    |
+| `input`            | セッションにテキスト送信              |
+| `resize`           | ターミナルリサイズ                    |
+| `kill_session`     | セッション終了                        |
+| `restart_session`  | 過去セッションを再起動                |
+| `resume_session`   | Claude セッションを `--resume` で再開 |
+| `attach_tmux_pane` | tmux ペインに接続                     |
+| `detach_tmux_pane` | tmux ペインから切断                   |
+| `list_tmux_panes`  | Claude 実行中の tmux ペイン一覧       |
+| `get_buffer`       | ターミナル出力バッファ取得            |
 
 ### サーバー → クライアント
 
-| type | 説明 |
-|---|---|
-| `session_list` | セッション一覧（接続時 + 変更時に送信） |
-| `output` | ターミナル出力 |
-| `chat_message` | JSONL から読み取ったチャットメッセージ |
-| `session_history` | セッション履歴（resume/tmux 接続時） |
-| `output_buffer` | ターミナル出力バッファ |
-| `tmux_panes` | tmux ペイン一覧 |
+| type              | 説明                                    |
+| ----------------- | --------------------------------------- |
+| `session_list`    | セッション一覧（接続時 + 変更時に送信） |
+| `output`          | ターミナル出力                          |
+| `chat_message`    | JSONL から読み取ったチャットメッセージ  |
+| `session_history` | セッション履歴（resume/tmux 接続時）    |
+| `output_buffer`   | ターミナル出力バッファ                  |
+| `tmux_panes`      | tmux ペイン一覧                         |
 
 ## テスト
 
