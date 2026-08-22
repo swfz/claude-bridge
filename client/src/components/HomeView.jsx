@@ -1,12 +1,19 @@
+import { useState } from 'react';
 import {
   annotateRunningSessions,
   annotateRecentSessions,
   findUnmatchedTabs,
   statusClass,
   formatElapsed,
-} from "../utils/runningSessions.js";
-import { isStarred, sortStarredFirst } from "../utils/starredSessions.js";
-import "./HomeView.css";
+} from '../utils/runningSessions.js';
+import { isStarred, sortStarredFirst } from '../utils/starredSessions.js';
+import { isSensitive, splitSensitive } from '../utils/sensitiveSessions.js';
+import { parseCwd } from '../utils/cwdLabel.js';
+import { filterBySearch, collectProjects, filterByProject } from '../utils/sessionSearch.js';
+import './HomeView.css';
+
+// 「その他の開いているタブ」は name/cwd しか持たないので検索対象をこの2つに絞る
+const OTHER_TAB_SEARCH_FIELDS = ['name', 'cwd'];
 
 // 「直近のセッション」の期間プリセット
 const DAY_PRESETS = [1, 3, 7, 30];
@@ -14,9 +21,9 @@ const DAY_PRESETS = [1, 3, 7, 30];
 // cwd を「親ディレクトリ + 末尾」に分けて表示（末尾を強調して識別しやすくする）
 function Cwd({ cwd, branch }) {
   if (!cwd) return null;
-  const parts = cwd.split("/");
+  const parts = cwd.split('/');
   const base = parts.pop();
-  const parent = parts.join("/");
+  const parent = parts.join('/');
   return (
     <div className="home-card-cwd" title={cwd}>
       {parent && <span className="home-cwd-parent">{parent}/</span>}
@@ -30,15 +37,49 @@ function Cwd({ cwd, branch }) {
 function StarButton({ on, onToggle }) {
   return (
     <button
-      className={`home-star ${on ? "on" : ""}`}
-      title={on ? "Star を外す" : "未解決（続きをやる）として Star を付ける"}
+      className={`home-star ${on ? 'on' : ''}`}
+      title={on ? 'Star を外す' : '未解決（続きをやる）として Star を付ける'}
       onClick={(e) => {
         e.stopPropagation();
         onToggle();
       }}
     >
-      {on ? "★" : "☆"}
+      {on ? '★' : '☆'}
     </button>
+  );
+}
+
+// 画面共有で見せたくないセッションの印。Star と同じくカードのクリックとは分ける。
+function SensitiveButton({ on, onToggle }) {
+  return (
+    <button
+      className={`home-sensitive ${on ? 'on' : ''}`}
+      title={on ? 'センシティブ指定を外す' : 'センシティブ指定（共有モードで隠す）'}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+    >
+      {on ? '🔒' : '🔓'}
+    </button>
+  );
+}
+
+// 共有モードで隠した件数の注記（何件か分かれば十分なので中身は出さない）
+function HiddenNote({ count }) {
+  if (!count) return null;
+  return <div className="home-hidden-note">🔒 {count} 件を非表示中（共有モード）</div>;
+}
+
+// タイトル行に出すプロジェクト名（worktree があれば併記）。タブの下段と同じ parseCwd を使う。
+function ProjectChip({ cwd }) {
+  const { project, worktree } = parseCwd(cwd);
+  if (!project) return null;
+  return (
+    <span className="home-card-project" title={cwd}>
+      {project}
+      {worktree && <span className="home-card-worktree">⎇ {worktree}</span>}
+    </span>
   );
 }
 
@@ -46,7 +87,7 @@ function StarButton({ on, onToggle }) {
 function Snippet({ label, text, role }) {
   if (!text) return null;
   return (
-    <div className={`home-snippet ${role || ""}`} title={text}>
+    <div className={`home-snippet ${role || ''}`} title={text}>
       <span className="home-snippet-label">{label}</span>
       <span className="home-snippet-text">{text}</span>
     </div>
@@ -62,6 +103,9 @@ export default function HomeView({
   onChangeRecentDays,
   starred,
   onToggleStar,
+  sensitive,
+  shareMode,
+  onToggleSensitive,
   sessions,
   activeSessionId,
   loading,
@@ -76,19 +120,38 @@ export default function HomeView({
   onResumeInTmux,
   onNew,
 }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProject, setSelectedProject] = useState('');
+
   // Star を付けたものは「続きをやる」印なので、それぞれの一覧で先頭に寄せる
-  const annotated = sortStarredFirst(
-    annotateRunningSessions(runningSessions, sessions),
-    starred
+  const annotatedAll = sortStarredFirst(annotateRunningSessions(runningSessions, sessions), starred);
+  const recentAll = sortStarredFirst(annotateRecentSessions(recentSessions, runningSessions, sessions), starred);
+  const otherTabsAll = findUnmatchedTabs(runningSessions, sessions, recentSessions);
+
+  // 共有モードのときはここでセンシティブ指定を落とし、以降の集計（プロジェクトチップ・
+  // 件数・検索）は残った側だけで行う。集計に混ぜるとチップや件数からパスが漏れる。
+  const split = (items, keyOf) =>
+    shareMode ? splitSensitive(items, sensitive, keyOf) : { visible: items, hidden: [] };
+  const { visible: annotated, hidden: hiddenRunning } = split(annotatedAll);
+  const { visible: recent, hidden: hiddenRecent } = split(recentAll);
+  const { visible: otherTabsVisible, hidden: hiddenOtherTabs } = split(otherTabsAll, (t) => t.claudeSessionId);
+
+  const starredCount = [...annotated, ...recent].filter((s) => isStarred(starred, s.sessionId)).length;
+
+  // プロジェクトチップの選択肢（起動中・直近の両方から集める）
+  const projects = collectProjects(annotated, recent);
+
+  // プロジェクト絞り込み → テキスト検索の順で AND 適用
+  const filteredAnnotated = filterBySearch(filterByProject(annotated, selectedProject), searchQuery);
+  const filteredRecent = filterBySearch(filterByProject(recent, selectedProject), searchQuery);
+  const otherTabs = filterBySearch(
+    filterByProject(otherTabsVisible, selectedProject),
+    searchQuery,
+    OTHER_TAB_SEARCH_FIELDS,
   );
-  const recent = sortStarredFirst(
-    annotateRecentSessions(recentSessions, runningSessions, sessions),
-    starred
-  );
-  const otherTabs = findUnmatchedTabs(runningSessions, sessions, recentSessions);
-  const starredCount = [...annotated, ...recent].filter((s) =>
-    isStarred(starred, s.sessionId)
-  ).length;
+
+  const isFiltering = searchQuery.trim().length > 0 || !!selectedProject;
+  const emptyMessageFor = (defaultText) => (isFiltering ? '条件に一致するセッションはありません' : defaultText);
 
   // タブの識別名はカードに出しているサマリー（AI タイトル）を優先する。
   // r.name は自動生成スラッグで中身が分からないことが多い。
@@ -145,12 +208,28 @@ export default function HomeView({
       <div className="home-header">
         <h2 className="home-title">起動中の Claude セッション</h2>
         <div className="home-header-actions">
+          <div className="home-search-box">
+            <input
+              type="search"
+              className="home-search"
+              placeholder="検索（タイトル・依頼・パス・ブランチ）"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="home-search-clear" onClick={() => setSearchQuery('')} title="検索をクリア">
+                ×
+              </button>
+            )}
+          </div>
           {starredCount > 0 && (
             <span className="home-count starred-count" title="Star を付けたセッション">
               ★ {starredCount}
             </span>
           )}
-          <span className="home-count">{annotated.length} 件</span>
+          <span className="home-count">
+            {isFiltering ? `${filteredAnnotated.length} / ${annotated.length} 件` : `${annotated.length} 件`}
+          </span>
           <button className="btn btn-ghost" onClick={onRefresh} title="一覧を更新">
             更新
           </button>
@@ -159,6 +238,26 @@ export default function HomeView({
           </button>
         </div>
       </div>
+
+      {projects.length > 1 && (
+        <div className="home-projects">
+          <button
+            className={`home-project-chip ${selectedProject ? '' : 'active'}`}
+            onClick={() => setSelectedProject('')}
+          >
+            すべて
+          </button>
+          {projects.map((project) => (
+            <button
+              key={project}
+              className={`home-project-chip ${selectedProject === project ? 'active' : ''}`}
+              onClick={() => setSelectedProject((prev) => (prev === project ? '' : project))}
+            >
+              {project}
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="home-error">
@@ -169,54 +268,53 @@ export default function HomeView({
         </div>
       )}
 
-      {annotated.length === 0 ? (
+      {filteredAnnotated.length === 0 ? (
         <p className="home-empty">
           {loading
-            ? "読み込み中..."
-            : "起動中の Claude セッションはありません（tmux やターミナルで claude を起動すると表示されます）"}
+            ? '読み込み中...'
+            : emptyMessageFor(
+                '起動中の Claude セッションはありません（tmux やターミナルで claude を起動すると表示されます）',
+              )}
         </p>
       ) : (
         <div className="home-grid">
-          {annotated.map((r) => {
-            const label = r.name || r.title || r.sessionId.slice(0, 8);
+          {filteredAnnotated.map((r) => {
+            // タブとして開いていればその表示名をそのまま使い、カードとタブの見出しを一致させる
+            const label = r.openTab?.name || tabName(r);
             const starredNow = isStarred(starred, r.sessionId);
             return (
               <div
                 key={r.sessionId}
-                className={`home-card ${r.openTab ? "open" : ""} ${
-                  r.openTab && r.openTab.id === activeSessionId ? "active" : ""
-                } ${starredNow ? "starred" : ""}`}
+                className={`home-card ${r.openTab ? 'open' : ''} ${
+                  r.openTab && r.openTab.id === activeSessionId ? 'active' : ''
+                } ${starredNow ? 'starred' : ''}`}
                 onClick={() => handleCardClick(r)}
               >
                 <div className="home-card-top">
-                  <span
-                    className={`home-status home-status-${statusClass(r.status)}`}
-                    title={r.status || "unknown"}
-                  />
+                  <span className={`home-status home-status-${statusClass(r.status)}`} title={r.status || 'unknown'} />
+                  <ProjectChip cwd={r.cwd} />
                   <span className="home-card-name">{label}</span>
                   {r.kind && <span className="home-badge kind">{r.kind}</span>}
                   {r.openTab ? (
                     <span className="home-badge open-badge">
                       タブで表示中
-                      {r.openTab.type === "readonly"
-                        ? "（閲覧）"
-                        : r.openTab.type === "tmux"
-                          ? "（tmux）"
-                          : ""}
+                      {r.openTab.type === 'readonly' ? '（閲覧）' : r.openTab.type === 'tmux' ? '（tmux）' : ''}
                     </span>
                   ) : (
                     <span className="home-badge closed-badge">未オープン</span>
                   )}
-                  <StarButton
-                    on={starredNow}
-                    onToggle={() => onToggleStar(r.sessionId)}
+                  <StarButton on={starredNow} onToggle={() => onToggleStar(r.sessionId)} />
+                  <SensitiveButton
+                    on={isSensitive(sensitive, r.sessionId)}
+                    onToggle={() => onToggleSensitive(r.sessionId)}
                   />
                 </div>
 
-                {/* /rename した名前がある場合は AI タイトルも併記する */}
-                {r.title && r.title !== label && (
-                  <div className="home-card-title">{r.title}</div>
-                )}
+                {/* 見出しに使わなかった側の名前（AI タイトル / スラッグ）も併記する */}
+                {(() => {
+                  const sub = [r.title, r.name].find((t) => t && t !== label);
+                  return sub ? <div className="home-card-title">{sub}</div> : null;
+                })()}
 
                 <Cwd cwd={r.cwd} branch={r.gitBranch} />
 
@@ -233,10 +331,7 @@ export default function HomeView({
 
                 <div className="home-card-actions" onClick={(e) => e.stopPropagation()}>
                   {r.openTab ? (
-                    <button
-                      className="home-action primary"
-                      onClick={() => onSelectTab(r.openTab.id)}
-                    >
+                    <button className="home-action primary" onClick={() => onSelectTab(r.openTab.id)}>
                       タブへ移動
                     </button>
                   ) : (
@@ -257,6 +352,7 @@ export default function HomeView({
           })}
         </div>
       )}
+      <HiddenNote count={hiddenRunning.length} />
 
       <div className="home-section">
         <div className="home-header">
@@ -266,47 +362,46 @@ export default function HomeView({
               {DAY_PRESETS.map((d) => (
                 <button
                   key={d}
-                  className={`home-day ${d === recentDays ? "active" : ""}`}
+                  className={`home-day ${d === recentDays ? 'active' : ''}`}
                   onClick={() => onChangeRecentDays(d)}
                 >
                   {d}日
                 </button>
               ))}
             </div>
-            <span className="home-count">{recent.length} 件</span>
+            <span className="home-count">
+              {isFiltering ? `${filteredRecent.length} / ${recent.length} 件` : `${recent.length} 件`}
+            </span>
           </div>
         </div>
 
-        {recent.length === 0 ? (
+        {filteredRecent.length === 0 ? (
           <p className="home-empty">
             {recentLoading
-              ? "読み込み中..."
-              : `直近 ${recentDays} 日に動いていたセッションはありません`}
+              ? '読み込み中...'
+              : emptyMessageFor(`直近 ${recentDays} 日に動いていたセッションはありません`)}
           </p>
         ) : (
           <div className="home-grid">
-            {recent.map((s) => {
+            {filteredRecent.map((s) => {
+              const label = s.openTab?.name || tabName(s);
               const starredNow = isStarred(starred, s.sessionId);
               return (
                 <div
                   key={s.sessionId}
-                  className={`home-card recent ${s.openTab ? "open" : ""} ${
-                    s.openTab && s.openTab.id === activeSessionId ? "active" : ""
-                  } ${starredNow ? "starred" : ""}`}
-                  onClick={() =>
-                    s.openTab ? onSelectTab(s.openTab.id) : openReadonly(s)
-                  }
+                  className={`home-card recent ${s.openTab ? 'open' : ''} ${
+                    s.openTab && s.openTab.id === activeSessionId ? 'active' : ''
+                  } ${starredNow ? 'starred' : ''}`}
+                  onClick={() => (s.openTab ? onSelectTab(s.openTab.id) : openReadonly(s))}
                 >
                   <div className="home-card-top">
-                    <span className="home-card-name">
-                      {s.title || s.sessionId.slice(0, 8)}
-                    </span>
-                    {s.openTab && (
-                      <span className="home-badge open-badge">タブで表示中</span>
-                    )}
-                    <StarButton
-                      on={starredNow}
-                      onToggle={() => onToggleStar(s.sessionId)}
+                    <ProjectChip cwd={s.cwd} />
+                    <span className="home-card-name">{label}</span>
+                    {s.openTab && <span className="home-badge open-badge">タブで表示中</span>}
+                    <StarButton on={starredNow} onToggle={() => onToggleStar(s.sessionId)} />
+                    <SensitiveButton
+                      on={isSensitive(sensitive, s.sessionId)}
+                      onToggle={() => onToggleSensitive(s.sessionId)}
                     />
                   </div>
 
@@ -314,11 +409,7 @@ export default function HomeView({
 
                   <Snippet label="冒頭" text={s.firstUserMessage} />
                   <Snippet label="直近" text={s.lastUserMessage} />
-                  <Snippet
-                    label="応答"
-                    text={s.lastAssistantMessage}
-                    role="assistant"
-                  />
+                  <Snippet label="応答" text={s.lastAssistantMessage} role="assistant" />
 
                   <div className="home-card-meta">
                     <span>{formatElapsed(s.updatedAt)}</span>
@@ -326,15 +417,9 @@ export default function HomeView({
                     <span className="home-sid">{s.sessionId.slice(0, 8)}</span>
                   </div>
 
-                  <div
-                    className="home-card-actions"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <div className="home-card-actions" onClick={(e) => e.stopPropagation()}>
                     {s.openTab ? (
-                      <button
-                        className="home-action"
-                        onClick={() => onSelectTab(s.openTab.id)}
-                      >
+                      <button className="home-action" onClick={() => onSelectTab(s.openTab.id)}>
                         タブへ移動
                       </button>
                     ) : (
@@ -362,34 +447,39 @@ export default function HomeView({
             })}
           </div>
         )}
+        <HiddenNote count={hiddenRecent.length} />
       </div>
 
-      {otherTabs.length > 0 && (
+      {(otherTabs.length > 0 || hiddenOtherTabs.length > 0) && (
         <div className="home-section">
-          <h3 className="home-subtitle">
-            その他の開いているタブ（一覧に紐づかないもの）
-          </h3>
+          <h3 className="home-subtitle">その他の開いているタブ（一覧に紐づかないもの）</h3>
           <div className="home-tab-list">
             {otherTabs.map((s) => (
-              <button
-                key={s.id}
-                className={`home-tab-item ${s.id === activeSessionId ? "active" : ""} ${
-                  s.alive ? "" : "dead"
-                }`}
-                onClick={() => s.alive && onSelectTab(s.id)}
-                disabled={!s.alive}
-              >
-                <span className="home-tab-name">{s.name}</span>
-                <span className="home-tab-cwd" title={s.cwd}>
-                  {(s.cwd || "").split("/").pop()}
-                </span>
-                {s.type && s.type !== "pty" && (
-                  <span className="home-badge kind">{s.type}</span>
+              // ボタンの入れ子を避けるため、センシティブ指定のトグルはタブ本体の隣に並べる
+              <div key={s.id} className="home-tab-row">
+                <button
+                  className={`home-tab-item ${s.id === activeSessionId ? 'active' : ''} ${s.alive ? '' : 'dead'}`}
+                  onClick={() => s.alive && onSelectTab(s.id)}
+                  disabled={!s.alive}
+                >
+                  <span className="home-tab-name">{s.name}</span>
+                  <span className="home-tab-cwd" title={s.cwd}>
+                    {(s.cwd || '').split('/').pop()}
+                  </span>
+                  {s.type && s.type !== 'pty' && <span className="home-badge kind">{s.type}</span>}
+                  {!s.alive && <span className="home-badge closed-badge">終了</span>}
+                </button>
+                {/* 印は claudeSessionId に付けるので、未解決のタブには出さない */}
+                {s.claudeSessionId && (
+                  <SensitiveButton
+                    on={isSensitive(sensitive, s.claudeSessionId)}
+                    onToggle={() => onToggleSensitive(s.claudeSessionId)}
+                  />
                 )}
-                {!s.alive && <span className="home-badge closed-badge">終了</span>}
-              </button>
+              </div>
             ))}
           </div>
+          <HiddenNote count={hiddenOtherTabs.length} />
         </div>
       )}
     </div>

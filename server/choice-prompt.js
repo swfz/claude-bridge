@@ -45,15 +45,15 @@ function parseTabLine(line) {
   const re = /([☐☒])\s*([^☐☒✔→←]*)/g;
   let m;
   while ((m = re.exec(text))) {
-    const label = m[2].trim().replace(/\s+$/, "");
-    if (label) items.push({ label, checked: m[1] === "☒" });
+    const label = m[2].trim().replace(/\s+$/, '');
+    if (label) items.push({ label, checked: m[1] === '☒' });
   }
   if (items.length === 0) return null;
   return {
     items,
     hasSubmit: /✔\s*Submit/.test(text),
-    canPrev: text.startsWith("←"),
-    canNext: text.endsWith("→"),
+    canPrev: text.startsWith('←'),
+    canNext: text.endsWith('→'),
   };
 }
 
@@ -94,11 +94,11 @@ function collectDescription(lines, from, to) {
     if (!text) continue;
     if (isRule(text)) continue;
     if (FOOTER_RE.test(text)) continue;
-    if (text === "Submit") continue; // multiSelect の Submit 行は説明ではない
+    if (text === 'Submit') continue; // multiSelect の Submit 行は説明ではない
     if (QUESTION_STOP_RE.test(text)) continue;
     parts.push(text);
   }
-  return parts.join(" ");
+  return parts.join(' ');
 }
 
 // 選択肢ブロックより上にある質問文（複数行ありうる）を遡って集める
@@ -117,7 +117,7 @@ function collectQuestion(lines, blockStart) {
     blanks = 0;
     collected.push(text);
   }
-  return collected.reverse().join("\n");
+  return collected.reverse().join('\n');
 }
 
 /**
@@ -134,8 +134,8 @@ function collectQuestion(lines, blockStart) {
  * }}
  */
 export function parseChoicePrompt(screen) {
-  if (!screen || typeof screen !== "string") return null;
-  const lines = screen.split("\n").map((l) => l.replace(/\s+$/, ""));
+  if (!screen || typeof screen !== 'string') return null;
+  const lines = screen.split('\n').map((l) => l.replace(/\s+$/, ''));
 
   const block = findOptionBlock(lines);
   if (!block || block.length < 2) return null;
@@ -161,18 +161,18 @@ export function parseChoicePrompt(screen) {
   const options = block.map((opt, i) => {
     const nextLine = i + 1 < block.length ? block[i + 1].line : blockEnd + 1;
     const cb = CHECKBOX_RE.exec(opt.text);
-    const label = (cb ? cb[2] : opt.text).replace(/\.$/, "").trim();
+    const label = (cb ? cb[2] : opt.text).replace(/\.$/, '').trim();
     return {
       index: opt.index,
       label,
       description: collectDescription(lines, opt.line + 1, nextLine),
-      checked: cb ? cb[1] !== " " : null,
+      checked: cb ? cb[1] !== ' ' : null,
       cursor: opt.cursor,
       freeText: FREE_TEXT_RE.test(label),
     };
   });
 
-  const footer = footerLine ? footerLine.trim() : "";
+  const footer = footerLine ? footerLine.trim() : '';
   const question = collectQuestion(lines, block[0].line);
   return {
     kind: detectKind({ question, tabs, footer }),
@@ -188,9 +188,9 @@ export function parseChoicePrompt(screen) {
 // 画面から待ちの種類を推定する。~/.claude/sessions の waitingFor とは独立に判定できるので、
 // UI のラベル（質問なのかツール許可なのか）はこちらを使える。
 function detectKind({ question, tabs, footer }) {
-  if (tabs) return "question";
+  if (tabs) return 'question';
   if (PERMISSION_QUESTION_RE.test(question) || /Tab to amend/.test(footer)) {
-    return "permission";
+    return 'permission';
   }
-  return "other";
+  return 'other';
 }

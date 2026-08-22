@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import "@xterm/xterm/css/xterm.css";
-import "./TerminalView.css";
+import { useEffect, useRef } from 'react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import '@xterm/xterm/css/xterm.css';
+import './TerminalView.css';
 
 export default function TerminalView({ sessionId, on, onResize, send }) {
   const containerRef = useRef(null);
@@ -16,10 +16,10 @@ export default function TerminalView({ sessionId, on, onResize, send }) {
       fontSize: 14,
       fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
       theme: {
-        background: "#1a1a2e",
-        foreground: "#e0e0e0",
-        cursor: "#e94560",
-        selectionBackground: "#0f346080",
+        background: '#1a1a2e',
+        foreground: '#e0e0e0',
+        cursor: '#e94560',
+        selectionBackground: '#0f346080',
       },
       scrollback: 10000,
       convertEol: true,
@@ -45,19 +45,19 @@ export default function TerminalView({ sessionId, on, onResize, send }) {
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(containerRef.current);
 
-    const unsubOutput = on("output", (msg) => {
+    const unsubOutput = on('output', (msg) => {
       if (msg.sessionId === sessionId) {
         term.write(msg.data);
       }
     });
 
-    const unsubBuffer = on("output_buffer", (msg) => {
+    const unsubBuffer = on('output_buffer', (msg) => {
       if (msg.sessionId === sessionId && msg.data) {
         term.write(msg.data);
       }
     });
 
-    send({ type: "get_buffer", sessionId });
+    send({ type: 'get_buffer', sessionId });
 
     return () => {
       unsubOutput();

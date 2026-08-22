@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState } from 'react';
 
 export function useWebSocket() {
   const wsRef = useRef(null);
@@ -10,7 +10,7 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (unmounted.current) return;
 
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${location.host}/ws`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -50,11 +50,15 @@ export function useWebSocket() {
     };
   }, [connect]);
 
+  // 送れたかどうかを返す。切断中（CONNECTING / CLOSED）は捨てるしかないので、
+  // 呼び出し側が「送れたように見せない」判断をできるようにする
   const send = useCallback((msg) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(msg));
+      return true;
     }
+    return false;
   }, []);
 
   const on = useCallback((type, callback) => {

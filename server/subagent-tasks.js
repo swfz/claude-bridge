@@ -1,8 +1,8 @@
-import { readdirSync, statSync } from "fs";
-import { open, readFile } from "fs/promises";
-import { join } from "path";
-import { CLAUDE_PROJECTS_DIR } from "./jsonl-utils.js";
-import { parseHistoryLines } from "./claude-sessions.js";
+import { readdirSync, statSync } from 'fs';
+import { open, readFile } from 'fs/promises';
+import { join } from 'path';
+import { CLAUDE_PROJECTS_DIR } from './jsonl-utils.js';
+import { parseHistoryLines } from './claude-sessions.js';
 
 // ファイルパスに使う ID なのでトラバーサル対策で文字種を絞る
 const AGENT_ID_RE = /^[A-Za-z0-9_-]+$/;
@@ -44,7 +44,7 @@ async function scanAppendedLines(jsonlPath, entry) {
   }
   if (fileStat.size === entry.offset) return;
 
-  const fh = await open(jsonlPath, "r");
+  const fh = await open(jsonlPath, 'r');
   try {
     const length = fileStat.size - entry.offset;
     const buf = Buffer.alloc(length);
@@ -52,7 +52,7 @@ async function scanAppendedLines(jsonlPath, entry) {
     // 末尾が書きかけの行だと ID が途中で切れるので、最後の改行までしか取り込まない
     const lastNewline = buf.subarray(0, bytesRead).lastIndexOf(0x0a);
     if (lastNewline >= 0) {
-      const text = buf.subarray(0, lastNewline + 1).toString("utf-8");
+      const text = buf.subarray(0, lastNewline + 1).toString('utf-8');
       for (const m of text.matchAll(/"tool_use_id"\s*:\s*"([^"]+)"/g)) {
         entry.ids.add(m[1]);
       }
@@ -65,54 +65,46 @@ async function scanAppendedLines(jsonlPath, entry) {
 
 // サブエージェントのトランスクリプトが置かれるディレクトリ
 function subagentsDir(projectsDir, projectDir, claudeSessionId) {
-  return join(projectsDir, projectDir, claudeSessionId, "subagents");
+  return join(projectsDir, projectDir, claudeSessionId, 'subagents');
 }
 
 function validTarget(projectDir, claudeSessionId) {
   return (
-    typeof projectDir === "string" &&
+    typeof projectDir === 'string' &&
     projectDir.length > 0 &&
-    typeof claudeSessionId === "string" &&
+    typeof claudeSessionId === 'string' &&
     SESSION_ID_RE.test(claudeSessionId)
   );
 }
 
 // セッションが起動したサブエージェント（Agent ツール）の一覧。
 // 情報源は ~/.claude/projects/<projectDir>/<claudeSessionId>/subagents/agent-*.meta.json
-export async function listSubagentTasks({
-  projectDir,
-  claudeSessionId,
-  projectsDir = CLAUDE_PROJECTS_DIR,
-} = {}) {
+export async function listSubagentTasks({ projectDir, claudeSessionId, projectsDir = CLAUDE_PROJECTS_DIR } = {}) {
   if (!validTarget(projectDir, claudeSessionId)) return [];
 
   const dir = subagentsDir(projectsDir, projectDir, claudeSessionId);
   let metaFiles;
   try {
-    metaFiles = readdirSync(dir).filter(
-      (f) => f.startsWith("agent-") && f.endsWith(".meta.json")
-    );
+    metaFiles = readdirSync(dir).filter((f) => f.startsWith('agent-') && f.endsWith('.meta.json'));
   } catch {
     // サブエージェントを起こしていないセッションではディレクトリ自体が無い
     return [];
   }
 
-  const doneIds = await collectToolResultIds(
-    join(projectsDir, projectDir, `${claudeSessionId}.jsonl`)
-  );
+  const doneIds = await collectToolResultIds(join(projectsDir, projectDir, `${claudeSessionId}.jsonl`));
 
   const tasks = [];
   for (const file of metaFiles) {
-    const agentId = file.slice("agent-".length, -".meta.json".length);
+    const agentId = file.slice('agent-'.length, -'.meta.json'.length);
     let meta;
     try {
-      meta = JSON.parse(await readFile(join(dir, file), "utf-8"));
+      meta = JSON.parse(await readFile(join(dir, file), 'utf-8'));
     } catch {
       continue;
     }
 
     // 更新時刻・サイズはトランスクリプト側を見る（無ければ meta の mtime）
-    let updatedAt = "";
+    let updatedAt;
     let size = 0;
     try {
       const st = statSync(join(dir, `agent-${agentId}.jsonl`));
@@ -122,16 +114,16 @@ export async function listSubagentTasks({
       try {
         updatedAt = statSync(join(dir, file)).mtime.toISOString();
       } catch {
-        updatedAt = "";
+        updatedAt = '';
       }
     }
 
     tasks.push({
       agentId,
-      agentType: meta.agentType || "",
-      description: meta.description || "",
+      agentType: meta.agentType || '',
+      description: meta.description || '',
       // toolUseId が無い古い形式は完了判定ができないので完了扱いにする
-      status: !meta.toolUseId || doneIds.has(meta.toolUseId) ? "completed" : "running",
+      status: !meta.toolUseId || doneIds.has(meta.toolUseId) ? 'completed' : 'running',
       updatedAt,
       size,
     });
@@ -139,7 +131,7 @@ export async function listSubagentTasks({
 
   // 実行中を先頭に、その中では更新の新しい順
   tasks.sort((a, b) => {
-    if (a.status !== b.status) return a.status === "running" ? -1 : 1;
+    if (a.status !== b.status) return a.status === 'running' ? -1 : 1;
     return b.updatedAt.localeCompare(a.updatedAt);
   });
   return tasks;
@@ -154,15 +146,12 @@ export async function readSubagentTranscript({
   projectsDir = CLAUDE_PROJECTS_DIR,
 } = {}) {
   if (!validTarget(projectDir, claudeSessionId)) return null;
-  if (typeof agentId !== "string" || !AGENT_ID_RE.test(agentId)) return null;
+  if (typeof agentId !== 'string' || !AGENT_ID_RE.test(agentId)) return null;
 
-  const filePath = join(
-    subagentsDir(projectsDir, projectDir, claudeSessionId),
-    `agent-${agentId}.jsonl`
-  );
+  const filePath = join(subagentsDir(projectsDir, projectDir, claudeSessionId), `agent-${agentId}.jsonl`);
   let content;
   try {
-    content = await readFile(filePath, "utf-8");
+    content = await readFile(filePath, 'utf-8');
   } catch {
     return null;
   }

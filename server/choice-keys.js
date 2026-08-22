@@ -6,19 +6,19 @@
 
 // 内蔵 PTY へ書き込むバイト列
 export const PTY_KEY_SEQUENCES = {
-  Enter: "\r",
-  Escape: "\x1b",
-  Tab: "\t",
-  BTab: "\x1b[Z",
-  Space: " ",
-  Up: "\x1b[A",
-  Down: "\x1b[B",
-  Right: "\x1b[C",
-  Left: "\x1b[D",
+  Enter: '\r',
+  Escape: '\x1b',
+  Tab: '\t',
+  BTab: '\x1b[Z',
+  Space: ' ',
+  Up: '\x1b[A',
+  Down: '\x1b[B',
+  Right: '\x1b[C',
+  Left: '\x1b[D',
 };
 
 export function isValidChoiceKey(key) {
-  if (typeof key !== "string") return false;
+  if (typeof key !== 'string') return false;
   return /^[0-9]$/.test(key) || Object.hasOwn(PTY_KEY_SEQUENCES, key);
 }
 
@@ -45,6 +45,6 @@ const MAX_CHOICE_TEXT_LEN = 2000;
 // 自由入力（"Type something"）のテキストを整える。
 // 改行はそのまま送ると Enter（＝確定）として解釈されるので空白に潰す。
 export function sanitizeChoiceText(text) {
-  if (typeof text !== "string") return "";
-  return text.replace(/[\r\n]+/g, " ").slice(0, MAX_CHOICE_TEXT_LEN);
+  if (typeof text !== 'string') return '';
+  return text.replace(/[\r\n]+/g, ' ').slice(0, MAX_CHOICE_TEXT_LEN);
 }

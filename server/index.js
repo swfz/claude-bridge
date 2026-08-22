@@ -1,76 +1,66 @@
-import express from "express";
-import { createServer } from "http";
-import { WebSocketServer } from "ws";
-import { existsSync, statSync, lstatSync, readdirSync } from "fs";
-import { extname, join, dirname, resolve } from "path";
-import { fileURLToPath } from "url";
-import { SessionManager, ReadonlySessionManager } from "./session.js";
-import { Storage } from "./storage.js";
-import { ThreadStore } from "./thread-store.js";
-import {
-  listClaudeSessions,
-  listRecentSessions,
-  loadSessionHistory,
-} from "./claude-sessions.js";
-import { JsonlWatcher } from "./jsonl-watcher.js";
-import { cwdToProjectDir } from "./jsonl-utils.js";
-import {
-  listClaudeTmuxPanes,
-  resolveTmuxJsonlTarget,
-  resumeInTmuxWindow,
-  TmuxSessionManager,
-} from "./tmux-session.js";
-import { listClaudeAgents } from "./claude-agents.js";
-import {
-  enrichPanesWithSessionMeta,
-  readStatusByPid,
-} from "./claude-session-meta.js";
-import { listRunningSessions } from "./running-sessions.js";
-import { parseChoicePrompt } from "./choice-prompt.js";
-import {
-  listSubagentTasks,
-  readSubagentTranscript,
-} from "./subagent-tasks.js";
-import { readRateLimits } from "./rate-limits.js";
+import express from 'express';
+import { createServer } from 'http';
+import { WebSocketServer } from 'ws';
+import { existsSync, lstatSync, readdirSync } from 'fs';
+import { extname, join, dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { SessionManager, ReadonlySessionManager } from './session.js';
+import { Storage } from './storage.js';
+import { ThreadStore } from './thread-store.js';
+import { listClaudeSessions, listRecentSessions, loadSessionHistory } from './claude-sessions.js';
+import { JsonlWatcher } from './jsonl-watcher.js';
+import { cwdToProjectDir } from './jsonl-utils.js';
+import { listClaudeTmuxPanes, resolveTmuxJsonlTarget, resumeInTmuxWindow, TmuxSessionManager } from './tmux-session.js';
+import { listClaudeAgents } from './claude-agents.js';
+import { enrichPanesWithSessionMeta, readStatusByPid } from './claude-session-meta.js';
+import { listRunningSessions } from './running-sessions.js';
+import { parseChoicePrompt } from './choice-prompt.js';
+import { listSubagentTasks, readSubagentTranscript } from './subagent-tasks.js';
+import { readRateLimits } from './rate-limits.js';
+import { listSlashCommands } from './slash-commands.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
 const server = createServer(app);
-const wss = new WebSocketServer({ server, path: "/ws" });
+const wss = new WebSocketServer({ server, path: '/ws' });
 
 // ローカルファイルプレビュー用エンドポイント
 // /preview?path=/home/user/file.html
 const MIME_MAP = {
-  ".html": "text/html",
-  ".htm": "text/html",
-  ".css": "text/css",
-  ".js": "application/javascript",
-  ".json": "application/json",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".svg": "image/svg+xml",
-  ".webp": "image/webp",
-  ".pdf": "application/pdf",
-  ".md": "text/markdown",
-  ".txt": "text/plain",
-  ".csv": "text/csv",
-  ".sql": "text/plain; charset=utf-8",
-  ".sqlx": "text/plain; charset=utf-8",
+  '.html': 'text/html',
+  '.htm': 'text/html',
+  '.css': 'text/css',
+  '.js': 'application/javascript',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
+  '.md': 'text/markdown',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+  '.sql': 'text/plain; charset=utf-8',
+  '.sqlx': 'text/plain; charset=utf-8',
 };
 
 // パスのサンドボックスチェック（home/tmp 配下のみ許可）
 function validateSafePath(filePath) {
-  if (!filePath) return { status: 400, error: "path parameter required" };
+  if (!filePath) return { status: 400, error: 'path parameter required' };
 
   // セキュリティ: パス正規化でトラバーサル攻撃を防止
   const canonical = resolve(filePath);
-  const home = resolve(process.env.HOME || "/home");
-  const tmp = resolve("/tmp");
-  if (!canonical.startsWith(home + "/") && canonical !== home &&
-      !canonical.startsWith(tmp + "/") && canonical !== tmp) {
-    return { status: 403, error: "Access denied: path must be under home or /tmp" };
+  const home = resolve(process.env.HOME || '/home');
+  const tmp = resolve('/tmp');
+  if (
+    !canonical.startsWith(home + '/') &&
+    canonical !== home &&
+    !canonical.startsWith(tmp + '/') &&
+    canonical !== tmp
+  ) {
+    return { status: 403, error: 'Access denied: path must be under home or /tmp' };
   }
   return { status: 200, canonical };
 }
@@ -84,48 +74,48 @@ function validatePreviewPath(filePath) {
     // シンボリックリンクを辿らず検査（リンク先への脱出を防止）
     const lstat = lstatSync(safe.canonical);
     if (lstat.isSymbolicLink()) {
-      return { status: 403, error: "Access denied: symlinks not allowed" };
+      return { status: 403, error: 'Access denied: symlinks not allowed' };
     }
     if (!lstat.isFile()) {
-      return { status: 400, error: "Not a file" };
+      return { status: 400, error: 'Not a file' };
     }
     // 100MB 上限
     if (lstat.size > 100 * 1024 * 1024) {
-      return { status: 413, error: "File too large" };
+      return { status: 413, error: 'File too large' };
     }
     return { status: 200, canonical: safe.canonical, lstat };
   } catch {
-    return { status: 404, error: "File not found" };
+    return { status: 404, error: 'File not found' };
   }
 }
 
 // ファイラで常に除外するディレクトリ名
-const EXCLUDED_DIRS = new Set(["node_modules"]);
+const EXCLUDED_DIRS = new Set(['node_modules']);
 
-app.get("/preview", (req, res) => {
+app.get('/preview', (req, res) => {
   const result = validatePreviewPath(req.query.path);
   if (result.error) {
     return res.status(result.status).send(result.error);
   }
 
   const ext = extname(result.canonical).toLowerCase();
-  const mime = MIME_MAP[ext] || "application/octet-stream";
-  res.setHeader("Content-Type", mime);
+  const mime = MIME_MAP[ext] || 'application/octet-stream';
+  res.setHeader('Content-Type', mime);
   res.sendFile(result.canonical);
 });
 
 // ファイル存在確認 (プレビューボタンを出すべきかの判定用)
 // プレビュー可能条件 (homeもしくは/tmp配下の実ファイル, 100MB以下, 非シンボリックリンク) を満たす場合のみ ok
-app.get("/file-exists", (req, res) => {
+app.get('/file-exists', (req, res) => {
   const result = validatePreviewPath(req.query.path);
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader('Cache-Control', 'no-cache');
   res.json({ exists: result.status === 200 });
 });
 
 // ファイラ用ディレクトリ一覧
 // /ls?path=/home/user/project
 // 隠しファイル・node_modules 等は除外する
-app.get("/ls", (req, res) => {
+app.get('/ls', (req, res) => {
   const safe = validateSafePath(req.query.path);
   if (safe.error) {
     return res.status(safe.status).send(safe.error);
@@ -134,13 +124,13 @@ app.get("/ls", (req, res) => {
   try {
     const lstat = lstatSync(safe.canonical);
     if (lstat.isSymbolicLink()) {
-      return res.status(403).send("Access denied: symlinks not allowed");
+      return res.status(403).send('Access denied: symlinks not allowed');
     }
     if (!lstat.isDirectory()) {
-      return res.status(400).send("Not a directory");
+      return res.status(400).send('Not a directory');
     }
   } catch {
-    return res.status(404).send("Directory not found");
+    return res.status(404).send('Directory not found');
   }
 
   let dirents;
@@ -152,20 +142,20 @@ app.get("/ls", (req, res) => {
 
   const entries = dirents
     // 隠しファイル・除外ディレクトリは表示しない
-    .filter((e) => !e.name.startsWith(".") && !EXCLUDED_DIRS.has(e.name))
+    .filter((e) => !e.name.startsWith('.') && !EXCLUDED_DIRS.has(e.name))
     // シンボリックリンク・特殊ファイルは除外（プレビュー方針と揃える）
     .filter((e) => e.isDirectory() || e.isFile())
     .map((e) => ({
       name: e.name,
-      type: e.isDirectory() ? "dir" : "file",
+      type: e.isDirectory() ? 'dir' : 'file',
     }))
     // ディレクトリを先頭にしてアルファベット順
     .sort((a, b) => {
-      if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+      if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
 
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader('Cache-Control', 'no-cache');
   res.json({ path: safe.canonical, entries });
 });
 
@@ -173,12 +163,14 @@ app.get("/ls", (req, res) => {
 // /search?path=<dir>&q=<term>
 // cwd 配下を walk し、ファイル名に q を含むものを返す。隠し/node_modules は除外、
 // シンボリックリンクは辿らない。暴走防止に件数・訪問数の上限を設ける。
-app.get("/search", (req, res) => {
+app.get('/search', (req, res) => {
   const safe = validateSafePath(req.query.path);
   if (safe.error) {
     return res.status(safe.status).send(safe.error);
   }
-  const q = String(req.query.q || "").trim().toLowerCase();
+  const q = String(req.query.q || '')
+    .trim()
+    .toLowerCase();
   if (!q) {
     return res.json({ matches: [], truncated: false });
   }
@@ -186,10 +178,10 @@ app.get("/search", (req, res) => {
   try {
     const st = lstatSync(safe.canonical);
     if (st.isSymbolicLink() || !st.isDirectory()) {
-      return res.status(400).send("Not a directory");
+      return res.status(400).send('Not a directory');
     }
   } catch {
-    return res.status(404).send("Directory not found");
+    return res.status(404).send('Directory not found');
   }
 
   const MAX_MATCHES = 300;
@@ -208,7 +200,7 @@ app.get("/search", (req, res) => {
     }
     for (const e of dirents) {
       if (matches.length >= MAX_MATCHES || visited >= MAX_VISIT) break;
-      if (e.name.startsWith(".") || EXCLUDED_DIRS.has(e.name)) continue;
+      if (e.name.startsWith('.') || EXCLUDED_DIRS.has(e.name)) continue;
       if (e.isSymbolicLink()) continue; // リンクは辿らない
       visited++;
       const full = join(dir, e.name);
@@ -221,29 +213,31 @@ app.get("/search", (req, res) => {
   }
 
   matches.sort((a, b) => a.name.localeCompare(b.name));
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader('Cache-Control', 'no-cache');
   res.json({ matches, truncated: matches.length >= MAX_MATCHES });
 });
 
 // クライアントのビルド成果物を配信
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const clientDist = join(__dirname, "..", "client", "dist");
+const clientDist = join(__dirname, '..', 'client', 'dist');
 // HTML はキャッシュ禁止、JS/CSS はハッシュ付きなので長期キャッシュOK
-app.use(express.static(clientDist, {
-  setHeaders: (res, path) => {
-    if (path.endsWith(".html")) {
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    }
-  },
-}));
+app.use(
+  express.static(clientDist, {
+    setHeaders: (res, path) => {
+      if (path.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      }
+    },
+  }),
+);
 // SPA フォールバック
-app.get("*", (req, res) => {
-  const indexPath = join(clientDist, "index.html");
+app.get('*', (req, res) => {
+  const indexPath = join(clientDist, 'index.html');
   if (existsSync(indexPath)) {
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(indexPath);
   } else {
-    res.status(404).send("Client not built. Run: cd client && npm run build");
+    res.status(404).send('Client not built. Run: cd client && npm run build');
   }
 });
 
@@ -258,9 +252,7 @@ const jsonlWatcher = new JsonlWatcher();
 // ファイル名の一部になるので inbox と同じ文字種に限り、件数も抑える。
 function sanitizeSessionIds(ids) {
   if (!Array.isArray(ids)) return [];
-  return ids
-    .filter((id) => typeof id === "string" && /^[\w-]+$/.test(id))
-    .slice(0, 200);
+  return ids.filter((id) => typeof id === 'string' && /^[\w-]+$/.test(id)).slice(0, 200);
 }
 
 // ホーム画面の「直近のセッション」の期間。クライアント指定を 1〜365 日に丸める
@@ -271,11 +263,7 @@ function clampDays(days) {
 }
 
 function findSession(id) {
-  return (
-    sessionManager.getSession(id) ||
-    tmuxSessionManager.getSession(id) ||
-    readonlySessionManager.getSession(id)
-  );
+  return sessionManager.getSession(id) || tmuxSessionManager.getSession(id) || readonlySessionManager.getSession(id);
 }
 
 function allSessions() {
@@ -293,7 +281,7 @@ function allSessions() {
 }
 
 function broadcastSessionList() {
-  broadcast({ type: "session_list", sessions: allSessions() });
+  broadcast({ type: 'session_list', sessions: allSessions() });
 }
 
 // 閉じた WebSocket への送信は 'error' を emit してプロセスを落とし得るので、
@@ -322,7 +310,7 @@ function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, cla
   if (resolved) {
     loadSessionHistory(resolved.sessionId, resolved.projectDir).then((history) => {
       sendTo(ws, {
-        type: "session_history",
+        type: 'session_history',
         bridgeSessionId: session.id,
         messages: history,
       });
@@ -338,7 +326,7 @@ function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, cla
     });
   }
 
-  sendTo(ws, { type: "session_opened", bridgeSessionId: session.id });
+  sendTo(ws, { type: 'session_opened', bridgeSessionId: session.id });
   broadcastSessionList();
   return session;
 }
@@ -361,7 +349,7 @@ function resolveClaudeTarget(session) {
 // ブリッジ sessionId にフォールバック。ファイル名に使うため形式を検証して不正なら null。
 // クライアントは sessionKey（旧 commentKey）で渡す。
 function sessionKeyOf(msg) {
-  const key = msg.sessionKey || msg.commentKey || msg.sessionId || "";
+  const key = msg.sessionKey || msg.commentKey || msg.sessionId || '';
   return /^[\w-]+$/.test(key) ? key : null;
 }
 
@@ -378,12 +366,12 @@ const pingInterval = setInterval(() => {
   }
 }, PING_INTERVAL);
 
-wss.on("close", () => clearInterval(pingInterval));
+wss.on('close', () => clearInterval(pingInterval));
 
 // 選択肢プロンプト（AskUserQuestion / ツール許可 / trust 確認）の現在の状態を画面から読む。
 // JSONL には回答後にしか書かれないので、待っている間の情報源は画面テキストだけ。
 async function readChoicePrompt(session) {
-  if (!session || typeof session.getScreenText !== "function") return null;
+  if (!session || typeof session.getScreenText !== 'function') return null;
   try {
     return parseChoicePrompt(await session.getScreenText());
   } catch (e) {
@@ -408,7 +396,7 @@ async function refreshSessionStatus(session) {
 
 function broadcastChoicePrompt(session, prompt) {
   const payload = {
-    type: "choice_prompt",
+    type: 'choice_prompt',
     sessionId: session.id,
     waitingFor: session.waitingFor ?? null,
     prompt,
@@ -421,10 +409,7 @@ function broadcastChoicePrompt(session, prompt) {
 
 // 選択肢待ちのセッションだけ画面を読む（待っていなければ prompt を消す通知だけ出す）
 async function pollChoicePrompts() {
-  const sessions = [
-    ...sessionManager.activeSessions(),
-    ...tmuxSessionManager.activeSessions(),
-  ];
+  const sessions = [...sessionManager.activeSessions(), ...tmuxSessionManager.activeSessions()];
   for (const session of sessions) {
     const prompt = session.waitingFor ? await readChoicePrompt(session) : null;
     broadcastChoicePrompt(session, prompt);
@@ -441,7 +426,7 @@ const statusInterval = setInterval(async () => {
   if (tmuxChanged || ptyChanged) broadcastSessionList();
   await pollChoicePrompts();
 }, STATUS_INTERVAL);
-wss.on("close", () => clearInterval(statusInterval));
+wss.on('close', () => clearInterval(statusInterval));
 
 // Claude のレート制限（5時間/7日ウィンドウの使用率）。bridge-statusline-tee.js が
 // 横流ししたファイルを読むだけ（外部通信なし）なのでローカルファイル読みとして短い間隔で回す。
@@ -461,15 +446,13 @@ async function pollRateLimits() {
     const json = JSON.stringify({ usage: result.usage, fetchedAt: result.fetchedAt });
     if (json === lastRateLimitsJson) return;
     lastRateLimitsJson = json;
-    broadcast({ type: "rate_limits", usage: result.usage, fetchedAt: result.fetchedAt });
+    broadcast({ type: 'rate_limits', usage: result.usage, fetchedAt: result.fetchedAt });
     return;
   }
   if (result.reason !== lastRateLimitFailureReason) {
     lastRateLimitFailureReason = result.reason;
-    if (result.reason === "no-file") {
-      console.log(
-        "rate limits: statusline 連携が未設定です（npm run setup:statusline で登録してください）"
-      );
+    if (result.reason === 'no-file') {
+      console.log('rate limits: statusline 連携が未設定です（npm run setup:statusline で登録してください）');
     } else {
       console.error(`rate limits: read failed (${result.reason})`);
     }
@@ -477,24 +460,26 @@ async function pollRateLimits() {
 }
 pollRateLimits();
 const rateLimitsInterval = setInterval(pollRateLimits, RATE_LIMITS_INTERVAL);
-wss.on("close", () => clearInterval(rateLimitsInterval));
+wss.on('close', () => clearInterval(rateLimitsInterval));
 
-wss.on("connection", (ws) => {
-  console.log("WebSocket client connected");
+wss.on('connection', (ws) => {
+  console.log('WebSocket client connected');
   ws.isAlive = true;
-  ws.on("pong", () => { ws.isAlive = true; });
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
 
   ws.send(
     JSON.stringify({
-      type: "session_list",
+      type: 'session_list',
       sessions: allSessions(),
-    })
+    }),
   );
 
   // 直近のレート制限情報があれば接続直後に送る（次のポーリングを待たせない）
   if (lastRateLimits) {
     sendTo(ws, {
-      type: "rate_limits",
+      type: 'rate_limits',
       usage: lastRateLimits.usage,
       fetchedAt: lastRateLimits.fetchedAt,
     });
@@ -502,7 +487,7 @@ wss.on("connection", (ws) => {
 
   // 選択肢プロンプトの読み取り/送信で await するため async。
   // 各 case は自分で try/catch する（このハンドラの外に例外を投げない）
-  ws.on("message", async (raw) => {
+  ws.on('message', async (raw) => {
     let msg;
     try {
       msg = JSON.parse(raw);
@@ -511,16 +496,16 @@ wss.on("connection", (ws) => {
     }
 
     switch (msg.type) {
-      case "new_session": {
+      case 'new_session': {
         const sessionCwd = msg.cwd || process.env.HOME;
         const session = sessionManager.createSession({
-          name: msg.name || "New Session",
+          name: msg.name || 'New Session',
           cwd: sessionCwd,
         });
 
         session.onOutput((data) => {
           broadcast({
-            type: "output",
+            type: 'output',
             sessionId: session.id,
             data,
           });
@@ -529,7 +514,7 @@ wss.on("connection", (ws) => {
         session.onExit((code) => {
           jsonlWatcher.stopWatching(session.id);
           broadcast({
-            type: "session_exited",
+            type: 'session_exited',
             sessionId: session.id,
             code,
           });
@@ -542,31 +527,31 @@ wss.on("connection", (ws) => {
           onMessage: (chatMsg) => broadcast(chatMsg),
         });
 
-        ws.send(
-          JSON.stringify({ type: "session_opened", bridgeSessionId: session.id })
-        );
+        ws.send(JSON.stringify({ type: 'session_opened', bridgeSessionId: session.id }));
         broadcastSessionList();
         break;
       }
 
-      case "input": {
+      case 'input': {
         const session = findSession(msg.sessionId);
         if (session) {
+          // 「届かない」調査用に到達だけ記録する（本文は残さない）
+          console.log(`input -> ${String(msg.sessionId).slice(0, 8)} (${(msg.text || '').length} chars)`);
           session.write(msg.text);
         } else {
           console.warn(`input: session ${msg.sessionId} not found or dead`);
           ws.send(
             JSON.stringify({
-              type: "error",
-              message: "セッションが見つかりません。新しいセッションを作成してください。",
+              type: 'error',
+              message: 'セッションが見つかりません。新しいセッションを作成してください。',
               sessionId: msg.sessionId,
-            })
+            }),
           );
         }
         break;
       }
 
-      case "resize": {
+      case 'resize': {
         const session = findSession(msg.sessionId);
         if (session) {
           session.resize(msg.cols, msg.rows);
@@ -575,7 +560,7 @@ wss.on("connection", (ws) => {
       }
 
       // いま画面に出ている選択肢プロンプトを読む（タブを開いた直後などの明示取得）
-      case "get_choice_prompt": {
+      case 'get_choice_prompt': {
         const session = findSession(msg.sessionId);
         if (!session) break;
         // 待ち状態のときだけ画面を読む（入力欄に番号付きリストを書いている最中などを
@@ -583,7 +568,7 @@ wss.on("connection", (ws) => {
         await refreshSessionStatus(session);
         const prompt = session.waitingFor ? await readChoicePrompt(session) : null;
         sendTo(ws, {
-          type: "choice_prompt",
+          type: 'choice_prompt',
           sessionId: session.id,
           waitingFor: session.waitingFor ?? null,
           prompt,
@@ -592,24 +577,24 @@ wss.on("connection", (ws) => {
         lastChoicePrompts.set(
           session.id,
           JSON.stringify({
-            type: "choice_prompt",
+            type: 'choice_prompt',
             sessionId: session.id,
             waitingFor: session.waitingFor ?? null,
             prompt,
-          })
+          }),
         );
         break;
       }
 
       // 選択肢プロンプトへの回答。keys は数字キー（選択/トグル）や Enter / Tab / Escape。
       // text があれば「番号キー → テキスト → Enter」の順で送る（"Type something" 用）。
-      case "answer_choice_prompt": {
+      case 'answer_choice_prompt': {
         const session = findSession(msg.sessionId);
-        if (!session || typeof session.sendChoiceKeys !== "function") {
+        if (!session || typeof session.sendChoiceKeys !== 'function') {
           sendTo(ws, {
-            type: "choice_prompt_error",
+            type: 'choice_prompt_error',
             sessionId: msg.sessionId,
-            message: "このセッションには選択肢を送れません（閲覧専用です）。",
+            message: 'このセッションには選択肢を送れません（閲覧専用です）。',
           });
           break;
         }
@@ -618,12 +603,12 @@ wss.on("connection", (ws) => {
           if (keys.length > 0) await session.sendChoiceKeys(keys);
           if (msg.text) {
             await session.sendChoiceText(msg.text);
-            await session.sendChoiceKeys(["Enter"]);
+            await session.sendChoiceKeys(['Enter']);
           }
         } catch (e) {
-          console.error("answer_choice_prompt failed:", e.message);
+          console.error('answer_choice_prompt failed:', e.message);
           sendTo(ws, {
-            type: "choice_prompt_error",
+            type: 'choice_prompt_error',
             sessionId: msg.sessionId,
             message: `選択の送信に失敗しました: ${e.message}`,
           });
@@ -632,15 +617,12 @@ wss.on("connection", (ws) => {
         // 送信後は次の質問やレビュー画面に進んでいることがあるので読み直して配る
         await new Promise((r) => setTimeout(r, SCREEN_SETTLE_MS));
         await refreshSessionStatus(session);
-        broadcastChoicePrompt(
-          session,
-          session.waitingFor ? await readChoicePrompt(session) : null
-        );
+        broadcastChoicePrompt(session, session.waitingFor ? await readChoicePrompt(session) : null);
         broadcastSessionList();
         break;
       }
 
-      case "kill_session": {
+      case 'kill_session': {
         jsonlWatcher.stopWatching(msg.sessionId);
         sessionManager.killSession(msg.sessionId);
         lastChoicePrompts.delete(msg.sessionId);
@@ -648,19 +630,19 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      case "restart_session": {
+      case 'restart_session': {
         const restarted = sessionManager.restartSession(msg.sessionId);
         if (restarted) {
           restarted.onOutput((data) => {
             broadcast({
-              type: "output",
+              type: 'output',
               sessionId: restarted.id,
               data,
             });
           });
           restarted.onExit((code) => {
             broadcast({
-              type: "session_exited",
+              type: 'session_exited',
               sessionId: restarted.id,
               code,
             });
@@ -670,34 +652,34 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      case "remove_past_session": {
+      case 'remove_past_session': {
         sessionManager.removePastSession(msg.sessionId);
         broadcastSessionList();
         break;
       }
 
-      case "new_thread": {
-        const thread = threadStore.createThread(msg.sessionId, {
+      case 'new_thread': {
+        threadStore.createThread(msg.sessionId, {
           messageId: msg.messageId,
           selectedText: msg.selectedText,
         });
         broadcast({
-          type: "thread_update",
+          type: 'thread_update',
           sessionId: msg.sessionId,
           threads: threadStore.getThreadsForSession(msg.sessionId),
         });
         break;
       }
 
-      case "thread_reply_batch": {
+      case 'thread_reply_batch': {
         // replies: Array<{ threadId, text }>
         const replies = Array.isArray(msg.replies) ? msg.replies : [];
         const accepted = [];
         for (const r of replies) {
-          const text = typeof r?.text === "string" ? r.text.trim() : "";
+          const text = typeof r?.text === 'string' ? r.text.trim() : '';
           if (!text || !r?.threadId) continue;
           const added = threadStore.addReply(msg.sessionId, r.threadId, {
-            role: "human",
+            role: 'human',
             text,
           });
           if (added) accepted.push({ threadId: r.threadId, text });
@@ -709,249 +691,237 @@ wss.on("connection", (ws) => {
             const allThreads = threadStore.getThreadsForSession(msg.sessionId);
             const sections = accepted.map(({ threadId, text }) => {
               const t = allThreads.find((x) => x.id === threadId);
-              const head = t ? t.selectedText : "(不明)";
+              const head = t ? t.selectedText : '(不明)';
               return `## "${head}" への返信\n${text}`;
             });
             const prompt =
               accepted.length === 1
                 ? `[スレッド: "${
-                    allThreads.find((x) => x.id === accepted[0].threadId)
-                      ?.selectedText ?? ""
+                    allThreads.find((x) => x.id === accepted[0].threadId)?.selectedText ?? ''
                   }" への返信]\n${accepted[0].text}`
-                : `[スレッド返信 ${accepted.length}件]\n\n${sections.join("\n\n")}`;
-            session.write(prompt + "\r");
+                : `[スレッド返信 ${accepted.length}件]\n\n${sections.join('\n\n')}`;
+            session.write(prompt + '\r');
           }
         }
 
         broadcast({
-          type: "thread_update",
+          type: 'thread_update',
           sessionId: msg.sessionId,
           threads: threadStore.getThreadsForSession(msg.sessionId),
         });
         break;
       }
 
-      case "resolve_thread": {
+      case 'resolve_thread': {
         threadStore.resolveThread(msg.sessionId, msg.threadId);
         broadcast({
-          type: "thread_update",
+          type: 'thread_update',
           sessionId: msg.sessionId,
           threads: threadStore.getThreadsForSession(msg.sessionId),
         });
         break;
       }
 
-      case "delete_thread": {
+      case 'delete_thread': {
         threadStore.deleteThread(msg.sessionId, msg.threadId);
         broadcast({
-          type: "thread_update",
+          type: 'thread_update',
           sessionId: msg.sessionId,
           threads: threadStore.getThreadsForSession(msg.sessionId),
         });
         break;
       }
 
-      case "get_threads": {
+      case 'get_threads': {
         ws.send(
           JSON.stringify({
-            type: "thread_update",
+            type: 'thread_update',
             sessionId: msg.sessionId,
             threads: threadStore.getThreadsForSession(msg.sessionId),
-          })
+          }),
         );
         break;
       }
 
-      case "save_comment": {
+      case 'save_comment': {
         // コメントは「送信しない・後で参照するだけ」で、セッションに対して残す。
         // 保存キーは claudeSessionId を優先し（new/resume/tmux/readonly いずれの
         // 見え方でも安定する ID）、再オープンをまたいで参照できるようにする。
         // ファイル名に使うためトラバーサル対策で形式を検証する。
         const key = sessionKeyOf(msg);
         if (!key) break;
-        const text = typeof msg.text === "string" ? msg.text.trim() : "";
+        const text = typeof msg.text === 'string' ? msg.text.trim() : '';
         if (!text) break;
         const comments = storage.loadComments(key);
         comments.push({
           id: `comment-${Date.now()}`,
           text,
           // どの箇所に対するコメントか（メッセージ/ファイル＋引用）。無ければセッション全体メモ。
-          anchor: msg.anchor && typeof msg.anchor === "object" ? msg.anchor : null,
+          anchor: msg.anchor && typeof msg.anchor === 'object' ? msg.anchor : null,
           timestamp: new Date().toISOString(),
         });
         storage.saveComments(key, comments);
         ws.send(
           JSON.stringify({
-            type: "comments_update",
+            type: 'comments_update',
             // active 照合はブリッジ ID で行うため echo は従来どおり sessionId
             sessionId: msg.sessionId,
             comments,
-          })
+          }),
         );
         break;
       }
 
-      case "get_comments": {
+      case 'get_comments': {
         const key = sessionKeyOf(msg);
         ws.send(
           JSON.stringify({
-            type: "comments_update",
+            type: 'comments_update',
             sessionId: msg.sessionId,
             comments: key ? storage.loadComments(key) : [],
-          })
+          }),
         );
         break;
       }
 
-      case "delete_comment": {
+      case 'delete_comment': {
         const key = sessionKeyOf(msg);
         if (!key) break;
-        const comments = storage
-          .loadComments(key)
-          .filter((c) => c.id !== msg.commentId);
+        const comments = storage.loadComments(key).filter((c) => c.id !== msg.commentId);
         storage.saveComments(key, comments);
         ws.send(
           JSON.stringify({
-            type: "comments_update",
+            type: 'comments_update',
             sessionId: msg.sessionId,
             comments,
-          })
+          }),
         );
         break;
       }
 
       // --- レビュー（セッション横断の pending review → Submit で一括送信）---
-      case "get_review": {
+      case 'get_review': {
         const key = sessionKeyOf(msg);
         ws.send(
           JSON.stringify({
-            type: "review_update",
+            type: 'review_update',
             sessionId: msg.sessionId,
             items: key ? storage.loadReviewDraft(key).items : [],
-          })
+          }),
         );
         break;
       }
 
-      case "save_review": {
+      case 'save_review': {
         // 送信前の下書きを保存（追加/編集/削除のたびに items 全体で上書き）。
         const key = sessionKeyOf(msg);
         if (!key) break;
-        const items = (Array.isArray(msg.items) ? msg.items : [])
-          .map((it) => ({
-            id: it?.id || `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            text: typeof it?.text === "string" ? it.text : "",
-            // レビュー項目が指す対象（引用＋位置）。無ければ位置なしの指摘。
-            anchor: it?.anchor && typeof it.anchor === "object" ? it.anchor : null,
-          }));
+        const items = (Array.isArray(msg.items) ? msg.items : []).map((it) => ({
+          id: it?.id || `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          text: typeof it?.text === 'string' ? it.text : '',
+          // レビュー項目が指す対象（引用＋位置）。無ければ位置なしの指摘。
+          anchor: it?.anchor && typeof it.anchor === 'object' ? it.anchor : null,
+        }));
         storage.saveReviewDraft(key, { items, updatedAt: new Date().toISOString() });
-        ws.send(
-          JSON.stringify({ type: "review_update", sessionId: msg.sessionId, items })
-        );
+        ws.send(JSON.stringify({ type: 'review_update', sessionId: msg.sessionId, items }));
         break;
       }
 
-      case "submit_review": {
+      case 'submit_review': {
         // pending review を一括送信。送信先はサーバーが対象セッション種別で出し分ける:
         // readonly → inbox（agent 側フックが取り込む） / それ以外（PTY あり）→ session.write。
         const key = sessionKeyOf(msg);
         if (!key) {
-          ws.send(JSON.stringify({ type: "submit_review_result", ok: false }));
+          ws.send(JSON.stringify({ type: 'submit_review_result', ok: false }));
           break;
         }
         // 各項目を「対象（引用）について: 指摘本文」に整形する。anchor があれば引用を前置。
         const items = (Array.isArray(msg.items) ? msg.items : [])
           .map((it) => {
-            const note = typeof it?.text === "string" ? it.text.trim() : "";
+            const note = typeof it?.text === 'string' ? it.text.trim() : '';
             if (!note) return null;
-            const quote = it?.anchor?.quote ? String(it.anchor.quote).trim() : "";
+            const quote = it?.anchor?.quote ? String(it.anchor.quote).trim() : '';
             return quote ? `「${quote}」について:\n${note}` : note;
           })
           .filter(Boolean);
         if (items.length === 0) {
-          ws.send(JSON.stringify({ type: "submit_review_result", ok: false }));
+          ws.send(JSON.stringify({ type: 'submit_review_result', ok: false }));
           break;
         }
         const body =
           items.length === 1
             ? `[レビュー] ${items[0]}`
-            : `[レビュー ${items.length}件]\n${items
-                .map((t, i) => `${i + 1}. ${t}`)
-                .join("\n")}`;
+            : `[レビュー ${items.length}件]\n${items.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
 
         const session = findSession(msg.sessionId);
         let ok = false;
         try {
-          if (session?.type === "readonly") {
+          if (session?.type === 'readonly') {
             // readonly は PTY を持たないため inbox 経由（宛先は claudeSessionId）
             storage.appendInbox(session.claudeSessionId || key, { text: body });
             ok = true;
           } else if (session) {
-            session.write(body + "\r");
+            session.write(body + '\r');
             ok = true;
           }
         } catch (e) {
-          console.error("submit_review failed:", e.message);
+          console.error('submit_review failed:', e.message);
         }
 
         if (ok) {
           // 送信できたら下書きをクリアして同期
           storage.saveReviewDraft(key, { items: [], updatedAt: new Date().toISOString() });
-          ws.send(
-            JSON.stringify({ type: "review_update", sessionId: msg.sessionId, items: [] })
-          );
+          ws.send(JSON.stringify({ type: 'review_update', sessionId: msg.sessionId, items: [] }));
         }
         ws.send(
           JSON.stringify({
-            type: "submit_review_result",
+            type: 'submit_review_result',
             ok,
-            via: session?.type === "readonly" ? "inbox" : "pty",
+            via: session?.type === 'readonly' ? 'inbox' : 'pty',
             count: items.length,
-          })
+          }),
         );
         break;
       }
 
-      case "list_claude_sessions": {
+      case 'list_claude_sessions': {
         listClaudeSessions({ limit: msg.limit || 30 }).then((claudeSessions) => {
           ws.send(
             JSON.stringify({
-              type: "claude_sessions",
+              type: 'claude_sessions',
               sessions: claudeSessions,
-            })
+            }),
           );
         });
         break;
       }
 
-      case "load_session_history": {
-        loadSessionHistory(msg.claudeSessionId, msg.projectDir).then(
-          (history) => {
-            ws.send(
-              JSON.stringify({
-                type: "session_history",
-                // どのタブ宛の履歴かをクライアントが判別できるよう bridge 側 ID も返す
-                bridgeSessionId: msg.sessionId,
-                claudeSessionId: msg.claudeSessionId,
-                messages: history,
-              })
-            );
-          }
-        );
+      case 'load_session_history': {
+        loadSessionHistory(msg.claudeSessionId, msg.projectDir).then((history) => {
+          ws.send(
+            JSON.stringify({
+              type: 'session_history',
+              // どのタブ宛の履歴かをクライアントが判別できるよう bridge 側 ID も返す
+              bridgeSessionId: msg.sessionId,
+              claudeSessionId: msg.claudeSessionId,
+              messages: history,
+            }),
+          );
+        });
         break;
       }
 
-      case "resume_session": {
+      case 'resume_session': {
         const resumeCwd = msg.cwd || process.env.HOME;
         const session = sessionManager.createSessionWithArgs({
           name: msg.name || `Resume: ${msg.claudeSessionId.slice(0, 8)}`,
           cwd: resumeCwd,
-          args: ["--resume", msg.claudeSessionId],
+          args: ['--resume', msg.claudeSessionId],
         });
 
         session.onOutput((data) => {
           broadcast({
-            type: "output",
+            type: 'output',
             sessionId: session.id,
             data,
           });
@@ -960,7 +930,7 @@ wss.on("connection", (ws) => {
         session.onExit((code) => {
           jsonlWatcher.stopWatching(session.id);
           broadcast({
-            type: "session_exited",
+            type: 'session_exited',
             sessionId: session.id,
             code,
           });
@@ -974,74 +944,70 @@ wss.on("connection", (ws) => {
           onMessage: (chatMsg) => broadcast(chatMsg),
         });
 
-        ws.send(
-          JSON.stringify({ type: "session_opened", bridgeSessionId: session.id })
-        );
+        ws.send(JSON.stringify({ type: 'session_opened', bridgeSessionId: session.id }));
         broadcastSessionList();
         break;
       }
 
-      case "get_buffer": {
+      case 'get_buffer': {
         const session = findSession(msg.sessionId);
         if (session) {
           Promise.resolve(session.getOutputBuffer()).then((data) => {
             ws.send(
               JSON.stringify({
-                type: "output_buffer",
+                type: 'output_buffer',
                 sessionId: msg.sessionId,
                 data,
-              })
+              }),
             );
           });
         }
         break;
       }
 
-      case "list_tmux_panes": {
+      case 'list_tmux_panes': {
         listClaudeTmuxPanes()
           .then((panes) => enrichPanesWithSessionMeta(panes))
           .then((panes) => {
             ws.send(
               JSON.stringify({
-                type: "tmux_panes",
+                type: 'tmux_panes',
                 panes,
-              })
+              }),
             );
           });
         break;
       }
 
-      case "list_running_sessions": {
+      case 'list_running_sessions': {
         // ホーム画面用: 今マシン上で起動している Claude セッション一覧
         // （~/.claude/sessions/*.json ＋ 生存 PID）。ブリッジのタブとは独立した情報で、
         // どれがタブとして開かれているかの突合はクライアント側で行う。
         listRunningSessions().then((running) => {
-          ws.send(JSON.stringify({ type: "running_sessions", sessions: running }));
+          ws.send(JSON.stringify({ type: 'running_sessions', sessions: running }));
         });
         break;
       }
 
-      case "list_recent_sessions": {
+      case 'list_recent_sessions': {
         // ホーム画面用: 直近 days 日に更新された Claude セッション（終了済みも含む）。
         // 起動中セッションとの重複除去はクライアント側で行う。
         const days = clampDays(msg.days);
         const starred = sanitizeSessionIds(msg.starred);
         listRecentSessions({ days, limit: 50, includeSessionIds: starred }).then((recent) => {
-          ws.send(
-            JSON.stringify({ type: "recent_sessions", days, sessions: recent })
-          );
+          ws.send(JSON.stringify({ type: 'recent_sessions', days, sessions: recent }));
         });
         break;
       }
 
-      case "list_agents": {
+      case 'list_agents': {
         listClaudeAgents().then((agents) => {
-          ws.send(JSON.stringify({ type: "agents", agents }));
+          ws.send(JSON.stringify({ type: 'agents', agents }));
         });
         break;
       }
 
-      case "attach_tmux_pane": {
+      case 'attach_tmux_pane': {
         attachTmuxPaneAsSession(ws, {
           paneId: msg.paneId,
           name: msg.name,
@@ -1055,7 +1021,7 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      case "resume_in_tmux": {
+      case 'resume_in_tmux': {
         // 起動していないセッションを tmux 側で起こす。PTY 直起動（resume_session）と違い
         // ブリッジを落としても生き残り、ターミナルからも操作できる。
         resumeInTmuxWindow({
@@ -1076,16 +1042,16 @@ wss.on("connection", (ws) => {
             });
           })
           .catch((e) => {
-            console.error("resume_in_tmux failed:", e.message);
+            console.error('resume_in_tmux failed:', e.message);
             sendTo(ws, {
-              type: "home_error",
+              type: 'home_error',
               message: `tmux で再開できませんでした: ${e.message}`,
             });
           });
         break;
       }
 
-      case "detach_tmux_pane": {
+      case 'detach_tmux_pane': {
         jsonlWatcher.stopWatching(msg.sessionId);
         tmuxSessionManager.detachSession(msg.sessionId);
         lastChoicePrompts.delete(msg.sessionId);
@@ -1093,12 +1059,12 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      case "open_readonly_session": {
+      case 'open_readonly_session': {
         // claude プロセスを起動せず、既存セッションの JSONL を読むだけのビュー
         // projectDir 未指定（agent 一覧由来など）なら cwd から導出する
-        const roProjectDir = msg.projectDir || cwdToProjectDir(msg.cwd || "");
+        const roProjectDir = msg.projectDir || cwdToProjectDir(msg.cwd || '');
         const session = readonlySessionManager.create({
-          name: msg.name || `閲覧: ${(msg.claudeSessionId || "").slice(0, 8)}`,
+          name: msg.name || `閲覧: ${(msg.claudeSessionId || '').slice(0, 8)}`,
           cwd: msg.cwd,
           claudeSessionId: msg.claudeSessionId,
           projectDir: roProjectDir,
@@ -1109,14 +1075,14 @@ wss.on("connection", (ws) => {
           .then((history) => {
             ws.send(
               JSON.stringify({
-                type: "session_history",
+                type: 'session_history',
                 bridgeSessionId: session.id,
                 messages: history,
-              })
+              }),
             );
           })
           .catch((e) => {
-            console.error("readonly history load failed:", e.message);
+            console.error('readonly history load failed:', e.message);
           });
 
         // 既存 JSONL の新着のみ監視（attachExisting）。プロセス起動はしない
@@ -1128,44 +1094,39 @@ wss.on("connection", (ws) => {
           onMessage: (chatMsg) => broadcast(chatMsg),
         });
 
-        ws.send(
-          JSON.stringify({ type: "session_opened", bridgeSessionId: session.id })
-        );
+        ws.send(JSON.stringify({ type: 'session_opened', bridgeSessionId: session.id }));
         broadcastSessionList();
         break;
       }
 
-      case "close_readonly_session": {
+      case 'close_readonly_session': {
         jsonlWatcher.stopWatching(msg.sessionId);
         readonlySessionManager.remove(msg.sessionId);
         broadcastSessionList();
         break;
       }
 
-      case "send_to_agent": {
+      case 'send_to_agent': {
         // フックベース送信: 対象セッションの inbox に書くだけ（agent 側フックが取り込む）
         const items = (Array.isArray(msg.comments) ? msg.comments : [])
-          .map((c) => (typeof c === "string" ? c.trim() : ""))
+          .map((c) => (typeof c === 'string' ? c.trim() : ''))
           .filter(Boolean);
         if (!msg.claudeSessionId || items.length === 0) {
-          ws.send(JSON.stringify({ type: "send_to_agent_result", ok: false }));
+          ws.send(JSON.stringify({ type: 'send_to_agent_result', ok: false }));
           break;
         }
-        const text =
-          items.length === 1
-            ? items[0]
-            : items.map((t, i) => `[コメント${i + 1}] ${t}`).join("\n");
+        const text = items.length === 1 ? items[0] : items.map((t, i) => `[コメント${i + 1}] ${t}`).join('\n');
         try {
           storage.appendInbox(msg.claudeSessionId, { text });
-          ws.send(JSON.stringify({ type: "send_to_agent_result", ok: true }));
+          ws.send(JSON.stringify({ type: 'send_to_agent_result', ok: true }));
         } catch (e) {
-          console.error("send_to_agent failed:", e.message);
+          console.error('send_to_agent failed:', e.message);
           ws.send(
             JSON.stringify({
-              type: "send_to_agent_result",
+              type: 'send_to_agent_result',
               ok: false,
               error: e.message,
-            })
+            }),
           );
         }
         break;
@@ -1173,47 +1134,45 @@ wss.on("connection", (ws) => {
 
       // セッションが起動したサブエージェント（Agent ツール）の一覧。
       // 情報源は <projectDir>/<claudeSessionId>/subagents/ なので readonly でも動く。
-      case "list_subagent_tasks": {
+      case 'list_subagent_tasks': {
         try {
           const target = resolveClaudeTarget(findSession(msg.sessionId));
           const tasks = target ? await listSubagentTasks(target) : [];
-          sendTo(ws, { type: "subagent_tasks", sessionId: msg.sessionId, tasks });
+          sendTo(ws, { type: 'subagent_tasks', sessionId: msg.sessionId, tasks });
         } catch (e) {
-          console.error("list_subagent_tasks failed:", e.message);
-          sendTo(ws, { type: "subagent_tasks", sessionId: msg.sessionId, tasks: [] });
+          console.error('list_subagent_tasks failed:', e.message);
+          sendTo(ws, { type: 'subagent_tasks', sessionId: msg.sessionId, tasks: [] });
         }
         break;
       }
 
-      case "get_subagent_transcript": {
+      case 'get_subagent_transcript': {
         try {
           const target = resolveClaudeTarget(findSession(msg.sessionId));
-          const messages = target
-            ? await readSubagentTranscript({ ...target, agentId: msg.agentId })
-            : null;
+          const messages = target ? await readSubagentTranscript({ ...target, agentId: msg.agentId }) : null;
           if (!messages) {
             sendTo(ws, {
-              type: "subagent_transcript",
+              type: 'subagent_transcript',
               sessionId: msg.sessionId,
               agentId: msg.agentId,
               status: null,
               messages: [],
-              error: "サブエージェントの会話を読み込めませんでした。",
+              error: 'サブエージェントの会話を読み込めませんでした。',
             });
             break;
           }
           const tasks = await listSubagentTasks(target);
           sendTo(ws, {
-            type: "subagent_transcript",
+            type: 'subagent_transcript',
             sessionId: msg.sessionId,
             agentId: msg.agentId,
             status: tasks.find((t) => t.agentId === msg.agentId)?.status ?? null,
             messages,
           });
         } catch (e) {
-          console.error("get_subagent_transcript failed:", e.message);
+          console.error('get_subagent_transcript failed:', e.message);
           sendTo(ws, {
-            type: "subagent_transcript",
+            type: 'subagent_transcript',
             sessionId: msg.sessionId,
             agentId: msg.agentId,
             status: null,
@@ -1224,13 +1183,28 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      case "switch_session":
+      // 入力欄のスラッシュコマンド補完の候補。cwd はクライアントからは受け取らず、
+      // セッションが持っているものだけを使う（任意パスを走査させないため）。
+      // セッションが見つからなくてもユーザー側（~/.claude）の候補は返す。
+      case 'list_slash_commands': {
+        try {
+          const session = findSession(msg.sessionId);
+          const commands = await listSlashCommands({ cwd: session?.cwd });
+          sendTo(ws, { type: 'slash_commands', sessionId: msg.sessionId, commands });
+        } catch (e) {
+          console.error('list_slash_commands failed:', e.message);
+          sendTo(ws, { type: 'slash_commands', sessionId: msg.sessionId, commands: [] });
+        }
+        break;
+      }
+
+      case 'switch_session':
         break;
     }
   });
 
-  ws.on("close", () => {
-    console.log("WebSocket client disconnected");
+  ws.on('close', () => {
+    console.log('WebSocket client disconnected');
   });
 });
 

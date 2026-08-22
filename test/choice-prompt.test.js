@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import { parseChoicePrompt } from "../server/choice-prompt.js";
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseChoicePrompt } from '../server/choice-prompt.js';
 
 // 以下の画面テキストは実際の Claude Code (v2.1.233) の tmux capture-pane 出力から採った
-const RULE = "─".repeat(60);
+const RULE = '─'.repeat(60);
 
 const SINGLE_SELECT = `
 ❯ AskUserQuestion ツールで「好きな色は？」を1問だけ聞いて
@@ -90,9 +90,9 @@ const PERMISSION_PROMPT = `
 ${RULE}
  Create file
  perm-check.txt
-${"╌".repeat(60)}
+${'╌'.repeat(60)}
   1 hello
-${"╌".repeat(60)}
+${'╌'.repeat(60)}
  Do you want to create perm-check.txt?
  ❯ 1. Yes
    2. Yes, allow all edits during this session (shift+tab)
@@ -116,82 +116,82 @@ ${RULE}
   -- INSERT -- ⏵⏵ auto mode on (shift+tab to cycle)
 `;
 
-describe("parseChoicePrompt", () => {
-  it("parses a single-select AskUserQuestion prompt", () => {
+describe('parseChoicePrompt', () => {
+  it('parses a single-select AskUserQuestion prompt', () => {
     const prompt = parseChoicePrompt(SINGLE_SELECT);
 
     assert.ok(prompt);
-    assert.equal(prompt.question, "好きな色は？");
+    assert.equal(prompt.question, '好きな色は？');
     assert.equal(prompt.multiSelect, false);
     assert.equal(prompt.canCancel, true);
     assert.equal(prompt.options.length, 5);
     assert.deepEqual(
       prompt.options.map((o) => [o.index, o.label]),
       [
-        [1, "赤"],
-        [2, "青"],
-        [3, "緑"],
-        [4, "Type something"],
-        [5, "Chat about this"],
-      ]
+        [1, '赤'],
+        [2, '青'],
+        [3, '緑'],
+        [4, 'Type something'],
+        [5, 'Chat about this'],
+      ],
     );
-    assert.equal(prompt.options[0].description, "暖色系。情熱的で目を引く色。");
+    assert.equal(prompt.options[0].description, '暖色系。情熱的で目を引く色。');
     assert.equal(prompt.options[0].cursor, true);
     assert.equal(prompt.options[1].cursor, false);
     assert.equal(prompt.options[3].freeText, true);
     assert.equal(prompt.options[0].freeText, false);
-    assert.deepEqual(prompt.tabs.items, [{ label: "好きな色", checked: false }]);
+    assert.deepEqual(prompt.tabs.items, [{ label: '好きな色', checked: false }]);
     assert.equal(prompt.tabs.hasSubmit, false);
   });
 
-  it("parses checkbox state and the Submit tab of a multiSelect prompt", () => {
+  it('parses checkbox state and the Submit tab of a multiSelect prompt', () => {
     const prompt = parseChoicePrompt(MULTI_SELECT);
 
     assert.ok(prompt);
-    assert.equal(prompt.question, "好きな果物は？（複数可）");
+    assert.equal(prompt.question, '好きな果物は？（複数可）');
     assert.equal(prompt.multiSelect, true);
     assert.deepEqual(
       prompt.options.map((o) => [o.label, o.checked]),
       [
-        ["りんご", true],
-        ["みかん", false],
-        ["ぶどう", true],
-        ["Type something", false],
-        ["Chat about this", null],
-      ]
+        ['りんご', true],
+        ['みかん', false],
+        ['ぶどう', true],
+        ['Type something', false],
+        ['Chat about this', null],
+      ],
     );
-    assert.equal(prompt.options[0].description, "シャキシャキした食感と酸味のバランスが特徴。");
+    assert.equal(prompt.options[0].description, 'シャキシャキした食感と酸味のバランスが特徴。');
     // multiSelect の "Submit" 行は説明文に混ぜない
-    assert.equal(prompt.options[3].description, "");
+    assert.equal(prompt.options[3].description, '');
     assert.deepEqual(prompt.tabs, {
-      items: [{ label: "好きな果物", checked: true }],
+      items: [{ label: '好きな果物', checked: true }],
       hasSubmit: true,
       canPrev: true,
       canNext: true,
     });
   });
 
-  it("parses the review/submit step reached by Tab (footer is absent there)", () => {
+  it('parses the review/submit step reached by Tab (footer is absent there)', () => {
     const prompt = parseChoicePrompt(SUBMIT_TAB);
 
     assert.ok(prompt);
     assert.deepEqual(
       prompt.options.map((o) => o.label),
-      ["Submit answers", "Cancel"]
+      ['Submit answers', 'Cancel'],
     );
     assert.equal(prompt.multiSelect, false);
-    assert.equal(prompt.footer, "");
+    assert.equal(prompt.footer, '');
     assert.match(prompt.question, /Ready to submit your answers\?/);
     assert.equal(prompt.tabs.hasSubmit, true);
   });
 
-  it("parses the trust-folder prompt (Enter to confirm)", () => {
+  it('parses the trust-folder prompt (Enter to confirm)', () => {
     const prompt = parseChoicePrompt(TRUST_PROMPT);
 
     assert.ok(prompt);
     assert.deepEqual(
       prompt.options.map((o) => o.label),
-      ["Yes, I trust this folder", "No, exit"]
+      ['Yes, I trust this folder', 'No, exit'],
     );
     assert.match(prompt.question, /Quick safety check/);
     assert.equal(prompt.tabs, null);
@@ -201,11 +201,11 @@ describe("parseChoicePrompt", () => {
     const prompt = parseChoicePrompt(PERMISSION_PROMPT);
 
     assert.ok(prompt);
-    assert.equal(prompt.kind, "permission");
-    assert.equal(prompt.question, "Do you want to create perm-check.txt?");
+    assert.equal(prompt.kind, 'permission');
+    assert.equal(prompt.question, 'Do you want to create perm-check.txt?');
     assert.deepEqual(
       prompt.options.map((o) => o.label),
-      ["Yes", "Yes, allow all edits during this session (shift+tab)", "No"]
+      ['Yes', 'Yes, allow all edits during this session (shift+tab)', 'No'],
     );
     assert.equal(prompt.options[0].cursor, true);
     assert.equal(prompt.multiSelect, false);
@@ -213,19 +213,19 @@ describe("parseChoicePrompt", () => {
     assert.equal(prompt.tabs, null);
   });
 
-  it("reports kind for question and trust prompts", () => {
-    assert.equal(parseChoicePrompt(SINGLE_SELECT).kind, "question");
-    assert.equal(parseChoicePrompt(MULTI_SELECT).kind, "question");
-    assert.equal(parseChoicePrompt(TRUST_PROMPT).kind, "other");
+  it('reports kind for question and trust prompts', () => {
+    assert.equal(parseChoicePrompt(SINGLE_SELECT).kind, 'question');
+    assert.equal(parseChoicePrompt(MULTI_SELECT).kind, 'question');
+    assert.equal(parseChoicePrompt(TRUST_PROMPT).kind, 'other');
   });
 
-  it("returns null when no prompt is on screen", () => {
+  it('returns null when no prompt is on screen', () => {
     assert.equal(parseChoicePrompt(IDLE_SCREEN), null);
-    assert.equal(parseChoicePrompt(""), null);
+    assert.equal(parseChoicePrompt(''), null);
     assert.equal(parseChoicePrompt(null), null);
   });
 
-  it("returns null for a numbered list that is not a prompt (no footer)", () => {
+  it('returns null for a numbered list that is not a prompt (no footer)', () => {
     const screen = `● 手順はこうです。
 
   1. 依存を入れる
@@ -236,7 +236,7 @@ describe("parseChoicePrompt", () => {
     assert.equal(parseChoicePrompt(screen), null);
   });
 
-  it("picks the newest prompt when an older one is still on screen", () => {
+  it('picks the newest prompt when an older one is still on screen', () => {
     const screen = `${RULE}
  ☐ 古い質問
 
@@ -260,10 +260,10 @@ Enter to select · ↑/↓ to navigate · Esc to cancel`;
 
     const prompt = parseChoicePrompt(screen);
     assert.ok(prompt);
-    assert.equal(prompt.question, "新しい質問は？");
+    assert.equal(prompt.question, '新しい質問は？');
     assert.deepEqual(
       prompt.options.map((o) => o.label),
-      ["新しいA", "新しいB"]
+      ['新しいA', '新しいB'],
     );
   });
 });

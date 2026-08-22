@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
-import { ChatMessage } from "./ChatView.jsx";
-import "./SubagentDrawer.css";
+import { useEffect, useMemo } from 'react';
+import { ChatMessage } from './ChatView.jsx';
+import { useStickToBottom } from '../hooks/useStickToBottom.js';
+import './SubagentDrawer.css';
 
 // 実行中のサブエージェントの会話を取り直す間隔
 const TRANSCRIPT_POLL_INTERVAL = 4000;
@@ -17,26 +18,17 @@ export default function SubagentDrawer({
   onOpenPreview,
   onClose,
 }) {
-  const bodyRef = useRef(null);
+  // 最下部にいる間だけ新着に追従する（上を読んでいる最中に引き戻さない）
+  const { scrollRef: bodyRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(messages, agentId);
 
   // 開いた直後は即取得し、実行中の間だけポーリングで追いかける
   useEffect(() => {
     if (!agentId) return;
     onRequestTranscript(agentId);
-    if (status !== "running") return;
-    const timer = setInterval(
-      () => onRequestTranscript(agentId),
-      TRANSCRIPT_POLL_INTERVAL
-    );
+    if (status !== 'running') return;
+    const timer = setInterval(() => onRequestTranscript(agentId), TRANSCRIPT_POLL_INTERVAL);
     return () => clearInterval(timer);
   }, [agentId, status, onRequestTranscript]);
-
-  // 新着で末尾へ
-  useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
-  }, [messages]);
 
   // ChatMessage は id を key に使うので、クライアント側で採番する
   const items = useMemo(
@@ -45,7 +37,7 @@ export default function SubagentDrawer({
         ...m,
         id: `${agentId}-${i}`,
       })),
-    [messages, agentId]
+    [messages, agentId],
   );
 
   return (
@@ -53,19 +45,11 @@ export default function SubagentDrawer({
       <div className="subagent-drawer" onClick={(e) => e.stopPropagation()}>
         <div className="subagent-drawer-header">
           <div className="subagent-drawer-title-area">
-            <span className="subagent-drawer-title">
-              {description || agentType || agentId}
-            </span>
+            <span className="subagent-drawer-title">{description || agentType || agentId}</span>
             <div className="subagent-drawer-meta">
-              {agentType && (
-                <span className="subagent-badge">{agentType}</span>
-              )}
-              <span
-                className={`subagent-badge subagent-badge-status ${
-                  status === "running" ? "running" : "done"
-                }`}
-              >
-                {status === "running" ? "実行中" : "完了"}
+              {agentType && <span className="subagent-badge">{agentType}</span>}
+              <span className={`subagent-badge subagent-badge-status ${status === 'running' ? 'running' : 'done'}`}>
+                {status === 'running' ? '実行中' : '完了'}
               </span>
             </div>
           </div>
@@ -74,24 +58,21 @@ export default function SubagentDrawer({
           </button>
         </div>
 
-        <div className="subagent-drawer-body" ref={bodyRef}>
+        <div className="subagent-drawer-body" ref={bodyRef} onScroll={onScroll}>
           {items.length === 0 ? (
             <div className="subagent-drawer-empty">
-              {status === "running"
-                ? "サブエージェントの応答を待っています..."
-                : "会話がありません"}
+              {status === 'running' ? 'サブエージェントの応答を待っています...' : '会話がありません'}
             </div>
           ) : (
             items.map((m) => (
-              <ChatMessage
-                key={m.id}
-                message={m}
-                threads={[]}
-                comments={[]}
-                onOpenPreview={onOpenPreview}
-                readonly
-              />
+              <ChatMessage key={m.id} message={m} threads={[]} comments={[]} onOpenPreview={onOpenPreview} readonly />
             ))
+          )}
+
+          {hasNew && (
+            <button className="scroll-to-latest" onClick={scrollToBottom}>
+              ↓ 新しいメッセージ
+            </button>
           )}
         </div>
       </div>
