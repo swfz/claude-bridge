@@ -212,7 +212,7 @@
 }
 
 /* タスクリスト */
-.chat-message-body input[type="checkbox"] {
+.chat-message-body input[type='checkbox'] {
   margin-right: 6px;
 }
 
@@ -226,7 +226,7 @@
   background: rgba(255, 255, 255, 0.08);
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 13px;
 }
 
@@ -277,7 +277,7 @@
 }
 
 .code-block-wrapper code {
-  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -713,6 +713,34 @@
 }
 
 @keyframes comment-jump-flash {
-  0% { background: rgba(97, 175, 239, 0.25); }
-  100% { background: transparent; }
+  0% {
+    background: rgba(97, 175, 239, 0.25);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/* 上にスクロールして読んでいる間に来た新着の通知。押すと最新へ戻る。
+   SubagentDrawer の本文からも同じクラスで使う（あちらは block レイアウトなので margin でも中央寄せ） */
+.scroll-to-latest {
+  position: sticky;
+  bottom: 8px;
+  align-self: center;
+  margin: 0 auto;
+  width: fit-content;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+
+.scroll-to-latest:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }

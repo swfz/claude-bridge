@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import "./ReviewDraftPanel.css";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import './ReviewDraftPanel.css';
 
 let seq = 0;
-const newItem = (text = "") => ({
+const newItem = (text = '') => ({
   id: `r-${Date.now()}-${seq++}`,
   text,
 });
@@ -10,9 +10,7 @@ const newItem = (text = "") => ({
 // セッション横断の pending review パネル。指摘を溜めて（永続化）、Submit で一括送信。
 // 送信先（PTY / inbox）はサーバーが対象セッション種別で出し分けるので、ここでは投げるだけ。
 export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, onClose }) {
-  const [draft, setDraft] = useState(() =>
-    items.length ? items : [newItem()]
-  );
+  const [draft, setDraft] = useState(() => (items.length ? items : [newItem()]));
   // ユーザーが編集を始めるまではサーバー由来の items（get_review の遅延到着含む）を反映する。
   const touched = useRef(false);
 
@@ -31,9 +29,9 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
   const persist = useCallback(
     (next) => {
       // 空行は保存対象から除く
-      onSave(next.filter((it) => (it.text || "").trim()));
+      onSave(next.filter((it) => (it.text || '').trim()));
     },
-    [onSave]
+    [onSave],
   );
 
   const updateItem = (id, text) => {
@@ -56,7 +54,7 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
     });
   };
 
-  const filled = draft.filter((it) => (it.text || "").trim());
+  const filled = draft.filter((it) => (it.text || '').trim());
 
   const handleSubmit = () => {
     if (filled.length === 0) return;
@@ -78,11 +76,11 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
     };
     const onUp = () => {
       dragging.current = false;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
     };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }, []);
 
   return (
@@ -91,9 +89,7 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
       <div className="review-draft-header">
         <h3>
           レビュー
-          {filled.length > 0 && (
-            <span className="review-draft-count">{filled.length}</span>
-          )}
+          {filled.length > 0 && <span className="review-draft-count">{filled.length}</span>}
         </h3>
         <button className="review-draft-close" onClick={onClose} title="閉じる">
           x
@@ -101,8 +97,7 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
       </div>
 
       <div className="review-draft-hint">
-        指摘を溜めて「Submit」で一括送信。送信先:{" "}
-        {readonly ? "inbox（agent が取り込む）" : "Claude（このセッション）"}
+        指摘を溜めて「Submit」で一括送信。送信先: {readonly ? 'inbox（agent が取り込む）' : 'Claude（このセッション）'}
       </div>
 
       <div className="review-draft-body">
@@ -111,22 +106,18 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
             <div className="review-draft-item-header">
               <span className="review-draft-item-number">#{index + 1}</span>
               {draft.length > 1 && (
-                <button
-                  className="review-draft-item-remove"
-                  onClick={() => removeItem(item.id)}
-                  title="この指摘を削除"
-                >
+                <button className="review-draft-item-remove" onClick={() => removeItem(item.id)} title="この指摘を削除">
                   x
                 </button>
               )}
             </div>
             {item.anchor?.quote && (
               <div className="review-draft-item-quote">
-                {item.anchor.type === "file" && item.anchor.filePath
-                  ? `📄 ${item.anchor.filePath.split("/").pop()}: `
-                  : ""}
+                {item.anchor.type === 'file' && item.anchor.filePath
+                  ? `📄 ${item.anchor.filePath.split('/').pop()}: `
+                  : ''}
                 “{item.anchor.quote.slice(0, 80)}
-                {item.anchor.quote.length > 80 ? "…" : ""}”
+                {item.anchor.quote.length > 80 ? '…' : ''}”
               </div>
             )}
             <textarea
@@ -134,7 +125,7 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
               value={item.text}
               onChange={(e) => updateItem(item.id, e.target.value)}
               onBlur={() => persist(draft)}
-              placeholder={item.anchor?.quote ? "この箇所への指摘を入力..." : "指摘を入力..."}
+              placeholder={item.anchor?.quote ? 'この箇所への指摘を入力...' : '指摘を入力...'}
               rows={2}
             />
           </div>
@@ -145,12 +136,8 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
         <button className="btn btn-ghost review-draft-add" onClick={addItem}>
           + 指摘を追加
         </button>
-        <button
-          className="btn btn-primary review-draft-submit"
-          onClick={handleSubmit}
-          disabled={filled.length === 0}
-        >
-          {filled.length > 1 ? `${filled.length}件をSubmit` : "Submit"}
+        <button className="btn btn-primary review-draft-submit" onClick={handleSubmit} disabled={filled.length === 0}>
+          {filled.length > 1 ? `${filled.length}件をSubmit` : 'Submit'}
         </button>
       </div>
     </div>

@@ -1,24 +1,28 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from 'react';
 
+/* eslint-disable no-control-regex -- ANSI エスケープシーケンス除去のため制御文字を意図的にマッチ */
 function cleanPtyOutput(str) {
-  return str
-    // カーソル前進 (ESC[NC) をスペースに変換
-    .replace(/\x1b\[\d*C/g, " ")
-    // OSC シーケンス (ESC]...BEL or ESC]...ST)
-    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
-    // CSI シーケンス — <, >, ?, =, ! 等の中間バイトも含めて除去
-    .replace(/\x1b\[[0-9;:<=>?]*[- /]*[A-Za-z@`{}~]/g, "")
-    // DCS/PM/APC シーケンス
-    .replace(/\x1b[PX^_][^\x1b]*\x1b\\/g, "")
-    // 2文字エスケープ (ESC + 1文字)
-    .replace(/\x1b[^[\]PX^_]/g, "")
-    // 残ったベアESC
-    .replace(/\x1b/g, "")
-    // 改行正規化
-    .replace(/\r\r\n/g, "\n")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
+  return (
+    str
+      // カーソル前進 (ESC[NC) をスペースに変換
+      .replace(/\x1b\[\d*C/g, ' ')
+      // OSC シーケンス (ESC]...BEL or ESC]...ST)
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+      // CSI シーケンス — <, >, ?, =, ! 等の中間バイトも含めて除去
+      .replace(/\x1b\[[0-9;:<=>?]*[- /]*[A-Za-z@`{}~]/g, '')
+      // DCS/PM/APC シーケンス
+      .replace(/\x1b[PX^_][^\x1b]*\x1b\\/g, '')
+      // 2文字エスケープ (ESC + 1文字)
+      .replace(/\x1b[^[\]PX^_]/g, '')
+      // 残ったベアESC
+      .replace(/\x1b/g, '')
+      // 改行正規化
+      .replace(/\r\r\n/g, '\n')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+  );
 }
+/* eslint-enable no-control-regex */
 
 // 出力がプロンプトで終わっているか判定
 function endsWithPrompt(buf) {
@@ -30,7 +34,7 @@ const FLUSH_DELAY = 2000; // 2秒出力が止まったらフラッシュ
 
 export function useChatParser() {
   const [messages, setMessages] = useState([]);
-  const bufferRef = useRef("");
+  const bufferRef = useRef('');
   const messageIdCounter = useRef(0);
   const waitingForResponseRef = useRef(false);
   const flushTimerRef = useRef(null);
@@ -40,47 +44,50 @@ export function useChatParser() {
     if (!buf) return;
 
     // プロンプト部分を除去
-    const content = buf.replace(/\n\s*❯\s*$/, "").trim();
+    const content = buf.replace(/\n\s*❯\s*$/, '').trim();
     if (content) {
       const id = `msg-${++messageIdCounter.current}`;
       setMessages((prev) => [
         ...prev,
         {
           id,
-          role: "assistant",
+          role: 'assistant',
           content,
           timestamp: new Date().toISOString(),
         },
       ]);
     }
-    bufferRef.current = "";
+    bufferRef.current = '';
     waitingForResponseRef.current = false;
   }, []);
 
-  const processOutput = useCallback((rawData) => {
-    const clean = cleanPtyOutput(rawData);
-    bufferRef.current += clean;
+  const processOutput = useCallback(
+    (rawData) => {
+      const clean = cleanPtyOutput(rawData);
+      bufferRef.current += clean;
 
-    // タイマーをリセット
-    if (flushTimerRef.current) {
-      clearTimeout(flushTimerRef.current);
-    }
+      // タイマーをリセット
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+      }
 
-    // プロンプトを検出したら即座にフラッシュ
-    if (endsWithPrompt(bufferRef.current) && waitingForResponseRef.current) {
-      flushBuffer();
-      return;
-    }
+      // プロンプトを検出したら即座にフラッシュ
+      if (endsWithPrompt(bufferRef.current) && waitingForResponseRef.current) {
+        flushBuffer();
+        return;
+      }
 
-    // 出力が止まって FLUSH_DELAY ms 経ったらフラッシュ
-    if (waitingForResponseRef.current) {
-      flushTimerRef.current = setTimeout(() => {
-        if (bufferRef.current.trim()) {
-          flushBuffer();
-        }
-      }, FLUSH_DELAY);
-    }
-  }, [flushBuffer]);
+      // 出力が止まって FLUSH_DELAY ms 経ったらフラッシュ
+      if (waitingForResponseRef.current) {
+        flushTimerRef.current = setTimeout(() => {
+          if (bufferRef.current.trim()) {
+            flushBuffer();
+          }
+        }, FLUSH_DELAY);
+      }
+    },
+    [flushBuffer],
+  );
 
   const addUserMessage = useCallback((text) => {
     // タイマークリア
@@ -90,28 +97,28 @@ export function useChatParser() {
     // バッファに溜まっている出力をフラッシュ
     const buf = bufferRef.current.trim();
     if (buf) {
-      const content = buf.replace(/\n\s*❯\s*$/, "").trim();
+      const content = buf.replace(/\n\s*❯\s*$/, '').trim();
       if (content) {
         const id = `msg-${++messageIdCounter.current}`;
         setMessages((prev) => [
           ...prev,
           {
             id,
-            role: "assistant",
+            role: 'assistant',
             content,
             timestamp: new Date().toISOString(),
           },
         ]);
       }
     }
-    bufferRef.current = "";
+    bufferRef.current = '';
 
     const id = `msg-${++messageIdCounter.current}`;
     setMessages((prev) => [
       ...prev,
       {
         id,
-        role: "human",
+        role: 'human',
         content: text,
         timestamp: new Date().toISOString(),
       },
@@ -122,7 +129,7 @@ export function useChatParser() {
   const clearMessages = useCallback(() => {
     if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
     setMessages([]);
-    bufferRef.current = "";
+    bufferRef.current = '';
     waitingForResponseRef.current = false;
   }, []);
 
@@ -136,7 +143,7 @@ export function useChatParser() {
       isHistory: true,
     }));
     setMessages(loaded);
-    bufferRef.current = "";
+    bufferRef.current = '';
     waitingForResponseRef.current = false;
   }, []);
 
