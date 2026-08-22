@@ -1,11 +1,6 @@
-import { watch, readFileSync, readdirSync, statSync } from "fs";
-import { join, basename } from "path";
-import {
-  CLAUDE_PROJECTS_DIR,
-  cwdToProjectDir,
-  extractTextContent,
-  extractToolUses,
-} from "./jsonl-utils.js";
+import { watch, readFileSync, readdirSync, statSync } from 'fs';
+import { join, basename } from 'path';
+import { CLAUDE_PROJECTS_DIR, cwdToProjectDir, extractTextContent, extractToolUses } from './jsonl-utils.js';
 
 export class JsonlWatcher {
   constructor() {
@@ -30,8 +25,8 @@ export class JsonlWatcher {
       targetFile = join(projectPath, `${explicitId}.jsonl`);
       // 既存の行数をカウントしてスキップ（新規メッセージのみ配信）
       try {
-        const existing = readFileSync(targetFile, "utf-8");
-        linesRead = existing.split("\n").filter((l) => l.trim()).length;
+        const existing = readFileSync(targetFile, 'utf-8');
+        linesRead = existing.split('\n').filter((l) => l.trim()).length;
       } catch {
         // ファイルがまだない場合
       }
@@ -41,8 +36,8 @@ export class JsonlWatcher {
       // 既存行はスキップし、新規メッセージのみ配信
       if (targetFile) {
         try {
-          const existing = readFileSync(targetFile, "utf-8");
-          linesRead = existing.split("\n").filter((l) => l.trim()).length;
+          const existing = readFileSync(targetFile, 'utf-8');
+          linesRead = existing.split('\n').filter((l) => l.trim()).length;
         } catch {
           // ignore
         }
@@ -81,7 +76,7 @@ export class JsonlWatcher {
     const state = this.watchers.get(bridgeSessionId);
     if (!state || !state.targetFile) return null;
     return {
-      claudeSessionId: basename(state.targetFile, ".jsonl"),
+      claudeSessionId: basename(state.targetFile, '.jsonl'),
       projectDir: cwdToProjectDir(state.cwd),
     };
   }
@@ -92,7 +87,7 @@ export class JsonlWatcher {
     const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
     const filePath = this._findLatestJsonl(projectPath);
     if (!filePath) return null;
-    const sessionId = basename(filePath, ".jsonl");
+    const sessionId = basename(filePath, '.jsonl');
     return { sessionId, projectDir };
   }
 
@@ -100,7 +95,7 @@ export class JsonlWatcher {
   _findLatestJsonl(projectPath) {
     try {
       const files = readdirSync(projectPath)
-        .filter((f) => f.endsWith(".jsonl"))
+        .filter((f) => f.endsWith('.jsonl'))
         .map((f) => ({
           path: join(projectPath, f),
           mtime: statSync(join(projectPath, f)).mtime,
@@ -154,17 +149,13 @@ export class JsonlWatcher {
     } catch {
       // 監視対象がまだ存在しない場合、ディレクトリを監視
       try {
-        state.fsWatcher = watch(
-          state.projectPath,
-          { persistent: false },
-          () => {
-            if (!state.targetFile) {
-              this._detectNewFile(state);
-            } else {
-              this._readNewLines(state);
-            }
+        state.fsWatcher = watch(state.projectPath, { persistent: false }, () => {
+          if (!state.targetFile) {
+            this._detectNewFile(state);
+          } else {
+            this._readNewLines(state);
           }
-        );
+        });
       } catch {
         // プロジェクトディレクトリ自体がない場合はポーリングで待つ
         if (!state.pollTimer) {
@@ -181,52 +172,52 @@ export class JsonlWatcher {
 
     let content;
     try {
-      content = readFileSync(state.targetFile, "utf-8");
+      content = readFileSync(state.targetFile, 'utf-8');
     } catch {
       return;
     }
 
-    const lines = content.split("\n").filter((l) => l.trim());
+    const lines = content.split('\n').filter((l) => l.trim());
     const newLines = lines.slice(state.linesRead);
     state.linesRead = lines.length;
 
     for (const line of newLines) {
       try {
         const record = JSON.parse(line);
-        if (record.type === "user") {
+        if (record.type === 'user') {
           const text = extractTextContent(record.message);
           if (text) {
             state.onMessage({
-              type: "chat_message",
+              type: 'chat_message',
               bridgeSessionId: state.bridgeSessionId,
-              role: "human",
+              role: 'human',
               content: text,
               // JSONL の uuid を安定アンカー（コメント/レビューの位置）として伝播する
               uuid: record.uuid,
-              timestamp: record.timestamp || "",
+              timestamp: record.timestamp || '',
             });
           }
-        } else if (record.type === "queue-operation" && record.operation === "enqueue" && record.content) {
+        } else if (record.type === 'queue-operation' && record.operation === 'enqueue' && record.content) {
           state.onMessage({
-            type: "chat_message",
+            type: 'chat_message',
             bridgeSessionId: state.bridgeSessionId,
-            role: "human",
+            role: 'human',
             content: record.content,
             uuid: record.uuid,
-            timestamp: record.timestamp || "",
+            timestamp: record.timestamp || '',
           });
-        } else if (record.type === "assistant") {
+        } else if (record.type === 'assistant') {
           const text = extractTextContent(record.message);
           const toolUses = extractToolUses(record.message);
           if (text || toolUses.length > 0) {
             state.onMessage({
-              type: "chat_message",
+              type: 'chat_message',
               bridgeSessionId: state.bridgeSessionId,
-              role: "assistant",
+              role: 'assistant',
               content: text,
               toolUses: toolUses.length > 0 ? toolUses : undefined,
               uuid: record.uuid,
-              timestamp: record.timestamp || "",
+              timestamp: record.timestamp || '',
             });
           }
         }

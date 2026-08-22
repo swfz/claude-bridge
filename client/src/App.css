@@ -136,6 +136,20 @@
   line-height: 16px;
 }
 
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.app-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .app-content {
   display: flex;
   flex: 1;
