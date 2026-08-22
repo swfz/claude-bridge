@@ -231,7 +231,7 @@ app.use(
   }),
 );
 // SPA フォールバック
-app.get('*', (req, res) => {
+app.get('/{*splat}', (req, res) => {
   const indexPath = join(clientDist, 'index.html');
   if (existsSync(indexPath)) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
