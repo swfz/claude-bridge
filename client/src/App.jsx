@@ -464,6 +464,16 @@ export default function App() {
     setSensitiveSessions((prev) => toggleSensitive(prev, sessionId));
   }, []);
 
+  // 共有モード中のセンシティブ指定はタブ自体が消えるので、そのセッションを表示したままだと
+  // 本文だけ残って戻る手段も無くなる。アクティブが隠し対象ならホームへ退避する
+  useEffect(() => {
+    if (!shareMode || showHome) return;
+    const active = sessions.find((s) => s.id === activeSessionId);
+    if (active?.claudeSessionId && sensitiveIds.has(active.claudeSessionId)) {
+      setShowHome(true);
+    }
+  }, [shareMode, showHome, sensitiveIds, sessions, activeSessionId]);
+
   useEffect(() => {
     localStorage.setItem('showHome', String(showHome));
   }, [showHome]);
