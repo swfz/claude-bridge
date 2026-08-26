@@ -28,9 +28,8 @@ mock.module('child_process', {
   },
 });
 
-const { pickTargetSession, buildResumeWindowName, resumeInTmuxWindow, sendCommandWhenShellReady } = await import(
-  '../server/tmux-session.js'
-);
+const { pickTargetSession, buildResumeWindowName, resumeInTmuxWindow, sendCommandWhenShellReady } =
+  await import('../server/tmux-session.js');
 
 describe('pickTargetSession', () => {
   it('picks the most recently attached session', () => {
@@ -194,7 +193,9 @@ describe('sendCommandWhenShellReady', () => {
 
     await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { pollMs: 5, timeoutMs: 200 });
 
-    const literalIdx = execCalls.findIndex((c) => c.includes('send-keys -t %7 -l') && c.includes('claude --resume abc-123'));
+    const literalIdx = execCalls.findIndex(
+      (c) => c.includes('send-keys -t %7 -l') && c.includes('claude --resume abc-123'),
+    );
     const captureIdx = execCalls.findIndex((c) => c.includes('capture-pane -t %7'));
     const enterIdx = execCalls.findIndex((c) => c === 'tmux send-keys -t %7 Enter');
 
