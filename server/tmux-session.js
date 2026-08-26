@@ -98,10 +98,50 @@ function escapeForShell(str) {
 
 // tmux サーバーが動いていないときに作る受け皿セッション名
 const FALLBACK_TMUX_SESSION = 'bridge';
-// シェルの rc 読み込み中に send-keys すると入力が食われることがあるので少し待つ
-const SHELL_READY_DELAY_MS = 400;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// C-u + 再送を試みるまでのポーリング回数（既定 pollMs=250 で約2秒）
+const RESEND_AFTER_POLLS = 8;
+
+// シェルの rc 初期化（mise/nvm/p10k 等）が終わる前に send-keys すると入力が
+// 食われることがあるため、固定 delay ではなく「画面にコマンドがエコーされたか」を
+// ポーリングで確認してから Enter を送る。エコーが見えなければ入力行をクリアして
+// 再送し、これを一定回数繰り返す。
+export async function sendCommandWhenShellReady(paneId, command, { pollMs = 250, timeoutMs = 15000 } = {}) {
+  validatePaneId(paneId);
+  const escapedCommand = escapeForShell(command);
+  const normalizedCommand = command.replace(/\s+/g, '');
+  const sendLiteral = () => execAsync(`tmux send-keys -t ${paneId} -l ${escapedCommand}`);
+
+  await sendLiteral();
+
+  const startedAt = Date.now();
+  let pollsSinceResend = 0;
+
+  while (true) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error('シェルの起動を確認できませんでした（tmux window 内でコマンドが受け付けられません）');
+    }
+
+    await delay(pollMs);
+
+    // ペイン幅が狭いとコマンドが折り返されるので、空白を全部除いて比較する
+    const screen = await capturePane(paneId);
+    const normalizedScreen = screen.replace(/\s+/g, '');
+    if (normalizedScreen.includes(normalizedCommand)) {
+      await execAsync(`tmux send-keys -t ${paneId} Enter`);
+      return;
+    }
+
+    pollsSinceResend += 1;
+    if (pollsSinceResend >= RESEND_AFTER_POLLS) {
+      pollsSinceResend = 0;
+      await execAsync(`tmux send-keys -t ${paneId} C-u`);
+      await sendLiteral();
+    }
+  }
+}
 
 // `tmux list-sessions -F "#{session_last_attached}\t#{session_name}"` の出力から
 // 直近にアタッチされたセッション名を選ぶ。候補がなければ null。
@@ -170,8 +210,7 @@ export async function resumeInTmuxWindow({ claudeSessionId, cwd }) {
   validatePaneId(paneId);
 
   // シェル経由で流すので rc（mise/nvm 等）を通る。claude を抜けてもペインは残る
-  await delay(SHELL_READY_DELAY_MS);
-  await sendKeysToPane(paneId, `claude --resume ${claudeSessionId}`);
+  await sendCommandWhenShellReady(paneId, `claude --resume ${claudeSessionId}`);
 
   return {
     paneId,
