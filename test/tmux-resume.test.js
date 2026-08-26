@@ -5,9 +5,11 @@ import assert from 'node:assert/strict';
 const execCalls = [];
 let responses = {};
 
+// パターンの値は文字列/Error に加え、呼ばれるたびに再評価したい場合は関数も許可する
+// （sendCommandWhenShellReady のポーリングで capture-pane の返り値を変化させるテスト用）
 function stdoutFor(cmd) {
   for (const [pattern, value] of Object.entries(responses)) {
-    if (cmd.includes(pattern)) return value;
+    if (cmd.includes(pattern)) return typeof value === 'function' ? value(cmd) : value;
   }
   return '';
 }
@@ -26,7 +28,8 @@ mock.module('child_process', {
   },
 });
 
-const { pickTargetSession, buildResumeWindowName, resumeInTmuxWindow } = await import('../server/tmux-session.js');
+const { pickTargetSession, buildResumeWindowName, resumeInTmuxWindow, sendCommandWhenShellReady } =
+  await import('../server/tmux-session.js');
 
 describe('pickTargetSession', () => {
   it('picks the most recently attached session', () => {
@@ -72,6 +75,7 @@ describe('resumeInTmuxWindow', () => {
     responses = {
       'list-sessions': '100\told-sess\n900\tmain-sess\n',
       'new-window': '%7\tmain-sess:3.0\n',
+      'capture-pane': 'claude --resume abc-123\n',
     };
 
     const pane = await resumeInTmuxWindow({
@@ -93,9 +97,9 @@ describe('resumeInTmuxWindow', () => {
     // cwd はシングルクォートでエスケープされる（空白を含んでも壊れない）
     assert.ok(newWindow.includes("-c '/home/user/my project'"));
 
-    const sendKeys = execCalls.find((c) => c.includes('send-keys'));
+    const sendKeys = execCalls.find((c) => c.includes('send-keys -t %7 -l'));
     assert.ok(sendKeys.includes('claude --resume abc-123'));
-    assert.ok(sendKeys.includes('send-keys -t %7 Enter'));
+    assert.ok(execCalls.some((c) => c === 'tmux send-keys -t %7 Enter'));
   });
 
   it('targets a purely numeric session name as a session, not a window index', async () => {
@@ -104,6 +108,7 @@ describe('resumeInTmuxWindow', () => {
     responses = {
       'list-sessions': '900\t0\n',
       'new-window': '%3\t0:2.0\n',
+      'capture-pane': 'claude --resume abc-123\n',
     };
 
     const pane = await resumeInTmuxWindow({ claudeSessionId: 'abc-123', cwd: '/tmp/work' });
@@ -117,6 +122,7 @@ describe('resumeInTmuxWindow', () => {
     responses = {
       'list-sessions': new Error('no server running on /tmp/tmux-1000/default'),
       'new-session': '%0\tbridge:0.0\n',
+      'capture-pane': 'claude --resume def-456\n',
     };
 
     const pane = await resumeInTmuxWindow({
@@ -171,5 +177,78 @@ describe('resumeInTmuxWindow', () => {
       () => resumeInTmuxWindow({ claudeSessionId: 'abc', cwd: '/tmp' }),
       /tmux window の作成に失敗しました/,
     );
+  });
+});
+
+describe('sendCommandWhenShellReady', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    responses = {};
+  });
+
+  it('presses Enter once the echoed command is visible on the first capture', async () => {
+    responses = {
+      'capture-pane': 'user@host:~$ claude --resume abc-123\n',
+    };
+
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { pollMs: 5, timeoutMs: 200 });
+
+    const literalIdx = execCalls.findIndex(
+      (c) => c.includes('send-keys -t %7 -l') && c.includes('claude --resume abc-123'),
+    );
+    const captureIdx = execCalls.findIndex((c) => c.includes('capture-pane -t %7'));
+    const enterIdx = execCalls.findIndex((c) => c === 'tmux send-keys -t %7 Enter');
+
+    assert.ok(literalIdx > -1, 'sends the command literally');
+    assert.ok(captureIdx > literalIdx, 'polls the pane after sending');
+    assert.ok(enterIdx > captureIdx, 'sends Enter after the echo is confirmed');
+    // C-u によるクリア＋再送は起きていない
+    assert.ok(!execCalls.some((c) => c.includes('C-u')));
+  });
+
+  it('clears the input and resends when the echo does not show up for a while', async () => {
+    let captureCount = 0;
+    responses = {
+      // 最初の8回は空（シェルの rc がまだ準備中）、以降はエコーが見える
+      'capture-pane': () => {
+        captureCount += 1;
+        return captureCount <= 8 ? '' : 'claude --resume abc-123\n';
+      },
+    };
+
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { pollMs: 5, timeoutMs: 2000 });
+
+    const literalSends = execCalls.filter(
+      (c) => c.includes('send-keys -t %7 -l') && c.includes('claude --resume abc-123'),
+    );
+    const clearIdx = execCalls.findIndex((c) => c.includes('C-u'));
+    const enterIdx = execCalls.findIndex((c) => c === 'tmux send-keys -t %7 Enter');
+
+    // 初回送信 + リトライ後の再送で最低2回本文を送る
+    assert.ok(literalSends.length >= 2);
+    assert.ok(clearIdx > -1, 'clears the input line with C-u before resending');
+    assert.ok(enterIdx > clearIdx, 'presses Enter only after the retried echo is confirmed');
+  });
+
+  it('throws when the echo never appears within timeoutMs', async () => {
+    responses = {
+      'capture-pane': '',
+    };
+
+    await assert.rejects(
+      () => sendCommandWhenShellReady('%7', 'claude --resume abc-123', { pollMs: 5, timeoutMs: 50 }),
+      /シェルの起動を確認できませんでした/,
+    );
+  });
+
+  it('detects the echo even when the pane wraps the command across lines', async () => {
+    responses = {
+      // 狭いペイン幅で折り返された想定。空白（改行含む）を除去して比較するので検知できる
+      'capture-pane': 'user@host:~$ claude --resume\nabc-123\n',
+    };
+
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { pollMs: 5, timeoutMs: 200 });
+
+    assert.ok(execCalls.some((c) => c === 'tmux send-keys -t %7 Enter'));
   });
 });
