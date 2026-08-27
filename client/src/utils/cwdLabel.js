@@ -7,15 +7,16 @@
 const WORKTREE_MARKERS = [['.claude', 'worktrees'], ['.worktrees'], ['worktrees']];
 
 /**
- * cwd を { project, worktree } に分解する。
+ * cwd を { parent, project, worktree } に分解する。
+ * parent は project の一つ上のディレクトリ名（同名プロジェクトの識別用。無ければ null）。
  * @param {string} cwd
- * @returns {{ project: string, worktree: string | null }}
+ * @returns {{ parent: string | null, project: string, worktree: string | null }}
  */
 export function parseCwd(cwd) {
-  if (!cwd || typeof cwd !== 'string') return { project: '', worktree: null };
+  if (!cwd || typeof cwd !== 'string') return { parent: null, project: '', worktree: null };
 
   const segments = cwd.split('/').filter((s) => s.length > 0);
-  if (segments.length === 0) return { project: '', worktree: null };
+  if (segments.length === 0) return { parent: null, project: '', worktree: null };
 
   // 末尾側から探すため逆順に走査する
   for (let i = segments.length - 1; i >= 0; i--) {
@@ -30,6 +31,7 @@ export function parseCwd(cwd) {
       const projectIdx = start - 1;
       if (worktreeIdx < segments.length && projectIdx >= 0) {
         return {
+          parent: projectIdx >= 1 ? segments[projectIdx - 1] : null,
           project: segments[projectIdx],
           worktree: segments[worktreeIdx],
         };
@@ -37,5 +39,9 @@ export function parseCwd(cwd) {
     }
   }
 
-  return { project: segments[segments.length - 1], worktree: null };
+  return {
+    parent: segments.length >= 2 ? segments[segments.length - 2] : null,
+    project: segments[segments.length - 1],
+    worktree: null,
+  };
 }

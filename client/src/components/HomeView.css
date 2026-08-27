@@ -134,6 +134,12 @@
   white-space: nowrap;
 }
 
+/* 親ディレクトリは識別の補助なので薄く（同名プロジェクトの区別用） */
+.home-card-project-parent {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
 .home-card-worktree {
   margin-left: 4px;
   font-weight: 400;

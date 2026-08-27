@@ -73,10 +73,11 @@ function HiddenNote({ count }) {
 
 // タイトル行に出すプロジェクト名（worktree があれば併記）。タブの下段と同じ parseCwd を使う。
 function ProjectChip({ cwd }) {
-  const { project, worktree } = parseCwd(cwd);
+  const { parent, project, worktree } = parseCwd(cwd);
   if (!project) return null;
   return (
     <span className="home-card-project" title={cwd}>
+      {parent && <span className="home-card-project-parent">{parent}/</span>}
       {project}
       {worktree && <span className="home-card-worktree">⎇ {worktree}</span>}
     </span>
