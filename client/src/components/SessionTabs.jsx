@@ -78,7 +78,7 @@ export default function SessionTabs({
           // 「隠しているセッションがある」事実自体が見えてしまうため）。
           .filter((session) => !(shareMode && session.claudeSessionId && sensitiveIds?.has(session.claudeSessionId)))
           .map((session) => {
-            const { project, worktree } = parseCwd(session.cwd);
+            const { parent, project, worktree } = parseCwd(session.cwd);
             const hasAttention = session.alive && attentionIds?.has(session.id);
             return (
               <div
@@ -148,7 +148,10 @@ export default function SessionTabs({
                   )}
                 </div>
                 <span className={`tab-cwd ${session.type === 'tmux' ? 'tab-cwd-strong' : ''}`} title={session.cwd}>
-                  <span className="tab-cwd-project">{project}</span>
+                  <span className="tab-cwd-project">
+                    {parent && <span className="tab-cwd-parent">{parent}/</span>}
+                    {project}
+                  </span>
                   {worktree && <span className="tab-cwd-worktree">⎇ {worktree}</span>}
                 </span>
               </div>

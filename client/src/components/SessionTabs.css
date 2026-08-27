@@ -124,6 +124,12 @@
   min-width: 0;
 }
 
+/* 親ディレクトリは識別の補助なので薄く（同名プロジェクトの区別用） */
+.tab-cwd-parent {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
 /* worktree 名はプロジェクト名と区別できるようバッジ風に */
 .tab-cwd-worktree {
   flex-shrink: 1;
