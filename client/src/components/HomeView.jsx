@@ -18,17 +18,21 @@ const OTHER_TAB_SEARCH_FIELDS = ['name', 'cwd'];
 // 「直近のセッション」の期間プリセット
 const DAY_PRESETS = [1, 3, 7, 30];
 
-// cwd を「親ディレクトリ + 末尾」に分けて表示（末尾を強調して識別しやすくする）
-function Cwd({ cwd, branch }) {
-  if (!cwd) return null;
-  const parts = cwd.split('/');
-  const base = parts.pop();
-  const parent = parts.join('/');
+// 既定ブランチは「どのセッションにも付く」＝識別に効かないので出さない
+const DEFAULT_BRANCHES = new Set(['main', 'master', 'HEAD']);
+
+// カード上段のパス行。フルパスは共通プレフィックスばかりで情報量が無いので
+// parseCwd で「親/プロジェクト（+ worktree）」まで削り、全体は title に逃がす。
+function PathLine({ cwd, branch }) {
+  const { parent, project, worktree } = parseCwd(cwd);
+  if (!project) return null;
+  const shownBranch = branch && !DEFAULT_BRANCHES.has(branch) ? branch : null;
   return (
-    <div className="home-card-cwd" title={cwd}>
-      {parent && <span className="home-cwd-parent">{parent}/</span>}
-      <span className="home-cwd-base">{base}</span>
-      {branch && <span className="home-branch">{branch}</span>}
+    <div className="home-card-path" title={[cwd, branch].filter(Boolean).join(' · ')}>
+      {parent && <span className="home-path-parent">{parent}/</span>}
+      <span className="home-path-project">{project}</span>
+      {worktree && <span className="home-path-worktree">⎇ {worktree}</span>}
+      {shownBranch && <span className="home-path-branch">{shownBranch}</span>}
     </div>
   );
 }
@@ -71,26 +75,28 @@ function HiddenNote({ count }) {
   return <div className="home-hidden-note">🔒 {count} 件を非表示中（共有モード）</div>;
 }
 
-// タイトル行に出すプロジェクト名（worktree があれば併記）。タブの下段と同じ parseCwd を使う。
-function ProjectChip({ cwd }) {
-  const { parent, project, worktree } = parseCwd(cwd);
-  if (!project) return null;
-  return (
-    <span className="home-card-project" title={cwd}>
-      {parent && <span className="home-card-project-parent">{parent}/</span>}
-      {project}
-      {worktree && <span className="home-card-worktree">⎇ {worktree}</span>}
-    </span>
-  );
-}
-
-// カード内の会話抜粋（冒頭の依頼・直近のやりとり）。中身が分かる最低限の情報。
+// カード内の会話抜粋（直近のやりとり）。1 行に clamp して全カードの高さを揃える。
 function Snippet({ label, text, role }) {
   if (!text) return null;
   return (
     <div className={`home-snippet ${role || ''}`} title={text}>
       <span className="home-snippet-label">{label}</span>
       <span className="home-snippet-text">{text}</span>
+    </div>
+  );
+}
+
+// メタ行の区切り（"·"）。空の項目は落として区切りが余らないようにする。
+function Meta({ items, title }) {
+  const parts = items.filter(Boolean);
+  if (parts.length === 0) return null;
+  return (
+    <div className="home-card-meta" title={title}>
+      {parts.map((part, i) => (
+        <span key={i} className="home-meta-item">
+          {part}
+        </span>
+      ))}
     </div>
   );
 }
@@ -204,6 +210,20 @@ export default function HomeView({
     else openReadonly(r);
   };
 
+  // 左の縦帯（レール）は「ブリッジとの関係」だけを表す。
+  // プロセスの状態（busy / idle）はタイトル左のドットが持つので、色を二重に使わない。
+  const railClass = (r) => {
+    if (!r.openTab) return '';
+    return r.openTab.id === activeSessionId ? 'rail-active' : 'rail-open';
+  };
+
+  // 「タブで表示中」は帯の色で分かるが、色だけだと凡例が要るのでメタ行に短く添える。
+  const openLabel = (openTab) => {
+    if (!openTab) return null;
+    const suffix = openTab.type === 'readonly' ? '・閲覧' : openTab.type === 'tmux' ? '・tmux' : '';
+    return <span className="home-open-mark">タブ{suffix}</span>;
+  };
+
   return (
     <div className="home-view">
       <div className="home-header">
@@ -283,27 +303,16 @@ export default function HomeView({
             // タブとして開いていればその表示名をそのまま使い、カードとタブの見出しを一致させる
             const label = r.openTab?.name || tabName(r);
             const starredNow = isStarred(starred, r.sessionId);
+            // 見出しに使わなかった側の名前（スラッグ）はメタ行に落として 1 行分を節約する
+            const sub = [r.title, r.name].find((t) => t && t !== label);
             return (
               <div
                 key={r.sessionId}
-                className={`home-card ${r.openTab ? 'open' : ''} ${
-                  r.openTab && r.openTab.id === activeSessionId ? 'active' : ''
-                } ${starredNow ? 'starred' : ''}`}
+                className={`home-card ${railClass(r)} ${starredNow ? 'starred' : ''}`}
                 onClick={() => handleCardClick(r)}
               >
                 <div className="home-card-top">
-                  <span className={`home-status home-status-${statusClass(r.status)}`} title={r.status || 'unknown'} />
-                  <ProjectChip cwd={r.cwd} />
-                  <span className="home-card-name">{label}</span>
-                  {r.kind && <span className="home-badge kind">{r.kind}</span>}
-                  {r.openTab ? (
-                    <span className="home-badge open-badge">
-                      タブで表示中
-                      {r.openTab.type === 'readonly' ? '（閲覧）' : r.openTab.type === 'tmux' ? '（tmux）' : ''}
-                    </span>
-                  ) : (
-                    <span className="home-badge closed-badge">未オープン</span>
-                  )}
+                  <PathLine cwd={r.cwd} branch={r.gitBranch} />
                   <StarButton on={starredNow} onToggle={() => onToggleStar(r.sessionId)} />
                   <SensitiveButton
                     on={isSensitive(sensitive, r.sessionId)}
@@ -311,24 +320,20 @@ export default function HomeView({
                   />
                 </div>
 
-                {/* 見出しに使わなかった側の名前（AI タイトル / スラッグ）も併記する */}
-                {(() => {
-                  const sub = [r.title, r.name].find((t) => t && t !== label);
-                  return sub ? <div className="home-card-title">{sub}</div> : null;
-                })()}
-
-                <Cwd cwd={r.cwd} branch={r.gitBranch} />
-
-                <Snippet label="冒頭" text={r.firstUserMessage} />
-                <Snippet label="直近" text={r.lastUserMessage} />
-                <Snippet label="応答" text={r.lastAssistantMessage} role="assistant" />
-
-                <div className="home-card-meta">
-                  <span>pid {r.pid}</span>
-                  {r.tmuxTarget && <span>tmux {r.tmuxTarget}</span>}
-                  {r.status && <span>{r.status}</span>}
-                  <span>{formatElapsed(r.updatedAt)}</span>
+                <div className="home-card-name" title={label}>
+                  <span className={`home-status home-status-${statusClass(r.status)}`} title={r.status || 'unknown'} />
+                  {label}
                 </div>
+
+                <div className="home-card-snippets">
+                  <Snippet label="直近" text={r.lastUserMessage || r.firstUserMessage} />
+                  <Snippet label="応答" text={r.lastAssistantMessage} role="assistant" />
+                </div>
+
+                <Meta
+                  items={[openLabel(r.openTab), r.kind !== 'interactive' && r.kind, formatElapsed(r.updatedAt), sub]}
+                  title={[`pid ${r.pid}`, r.tmuxTarget && `tmux ${r.tmuxTarget}`, r.status].filter(Boolean).join(' · ')}
+                />
 
                 <div className="home-card-actions" onClick={(e) => e.stopPropagation()}>
                   {r.openTab ? (
@@ -383,49 +388,55 @@ export default function HomeView({
               : emptyMessageFor(`直近 ${recentDays} 日に動いていたセッションはありません`)}
           </p>
         ) : (
-          <div className="home-grid">
+          // 直近は「見比べる」より「探す」一覧なので、カードではなく列の揃った行で出す
+          <div className="home-rows">
+            {/* 列名。行と同じ grid を共有するので列位置がずれない */}
+            <div className="home-rows-header">
+              <span />
+              <span />
+              <span>プロジェクト</span>
+              <span>タイトル</span>
+              <span>直近の指示</span>
+              <span>応答</span>
+              <span className="home-row-time">更新</span>
+            </div>
             {filteredRecent.map((s) => {
               const label = s.openTab?.name || tabName(s);
               const starredNow = isStarred(starred, s.sessionId);
+              const snippet = s.lastUserMessage || s.firstUserMessage;
               return (
                 <div
                   key={s.sessionId}
-                  className={`home-card recent ${s.openTab ? 'open' : ''} ${
-                    s.openTab && s.openTab.id === activeSessionId ? 'active' : ''
-                  } ${starredNow ? 'starred' : ''}`}
+                  className={`home-row ${railClass(s)}`}
                   onClick={() => (s.openTab ? onSelectTab(s.openTab.id) : openReadonly(s))}
                 >
-                  <div className="home-card-top">
-                    <ProjectChip cwd={s.cwd} />
-                    <span className="home-card-name">{label}</span>
-                    {s.openTab && <span className="home-badge open-badge">タブで表示中</span>}
-                    <StarButton on={starredNow} onToggle={() => onToggleStar(s.sessionId)} />
-                    <SensitiveButton
-                      on={isSensitive(sensitive, s.sessionId)}
-                      onToggle={() => onToggleSensitive(s.sessionId)}
-                    />
-                  </div>
+                  <StarButton on={starredNow} onToggle={() => onToggleStar(s.sessionId)} />
+                  <SensitiveButton
+                    on={isSensitive(sensitive, s.sessionId)}
+                    onToggle={() => onToggleSensitive(s.sessionId)}
+                  />
+                  <PathLine cwd={s.cwd} branch={s.gitBranch} />
+                  <span className="home-row-name" title={label}>
+                    {label}
+                  </span>
+                  <span className="home-row-snippet" title={snippet}>
+                    {snippet}
+                  </span>
+                  <span className="home-row-snippet assistant" title={s.lastAssistantMessage}>
+                    {s.lastAssistantMessage}
+                  </span>
+                  <span className="home-row-time" title={`${Math.round((s.size || 0) / 1024)} KB · ${s.sessionId}`}>
+                    {openLabel(s.openTab) || formatElapsed(s.updatedAt)}
+                  </span>
 
-                  <Cwd cwd={s.cwd} branch={s.gitBranch} />
-
-                  <Snippet label="冒頭" text={s.firstUserMessage} />
-                  <Snippet label="直近" text={s.lastUserMessage} />
-                  <Snippet label="応答" text={s.lastAssistantMessage} role="assistant" />
-
-                  <div className="home-card-meta">
-                    <span>{formatElapsed(s.updatedAt)}</span>
-                    <span>{Math.round((s.size || 0) / 1024)} KB</span>
-                    <span className="home-sid">{s.sessionId.slice(0, 8)}</span>
-                  </div>
-
-                  <div className="home-card-actions" onClick={(e) => e.stopPropagation()}>
+                  <div className="home-row-actions" onClick={(e) => e.stopPropagation()}>
                     {s.openTab ? (
                       <button className="home-action" onClick={() => onSelectTab(s.openTab.id)}>
                         タブへ移動
                       </button>
                     ) : (
                       <button className="home-action" onClick={() => openReadonly(s)}>
-                        閲覧で開く
+                        閲覧
                       </button>
                     )}
                     <button
@@ -440,7 +451,7 @@ export default function HomeView({
                       onClick={() => resume(s)}
                       title="ブリッジ内で claude を起動（サーバーを落とすと終了・ブラウザからのみ操作）"
                     >
-                      再開（内蔵）
+                      内蔵
                     </button>
                   </div>
                 </div>
