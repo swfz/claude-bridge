@@ -11,18 +11,18 @@ test.describe('ホーム画面', () => {
     // WS 接続後にヘッダーの接続状態が Connected になる
     await expect(page.locator('.connection-status')).toContainText('Connected');
 
-    const card = page.locator('.home-card.recent', { hasText: FIXTURE_TITLE });
-    await expect(card).toBeVisible();
-    await expect(card.locator('.home-card-cwd')).toContainText(FIXTURE_CWD_BASE);
+    const row = page.locator('.home-row', { hasText: FIXTURE_TITLE });
+    await expect(row).toBeVisible();
+    await expect(row.locator('.home-card-path')).toContainText(FIXTURE_CWD_BASE);
   });
 
   test('直近セッション一覧に 2 件目の fixture も表示される', async ({ page }) => {
     await page.goto('/');
 
-    const card = page.locator('.home-card.recent', {
+    const row = page.locator('.home-row', {
       hasText: 'レート制限メーターの表示がずれているので直してください',
     });
-    await expect(card).toBeVisible();
-    await expect(card.locator('.home-card-cwd')).toContainText('second-project');
+    await expect(row).toBeVisible();
+    await expect(row.locator('.home-card-path')).toContainText('second-project');
   });
 });
