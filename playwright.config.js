@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { mkdirSync } from 'fs';
+import { mkdirSync, readdirSync, utimesSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -13,6 +13,16 @@ const BRIDGE_DIR = join(__dirname, 'e2e', '.tmp', 'bridge');
 // CLAUDE_BRIDGE_DIR はサーバー起動時に Storage が mkdirSync するが、
 // webServer の起動前に一応存在させておく（gitignore 対象の作業ディレクトリ）
 mkdirSync(BRIDGE_DIR, { recursive: true });
+
+// 直近セッション一覧は JSONL の mtime で期間（既定 7 日）を絞るため、fixture が
+// コミットされてから日が経つとローカルでは 0 件になりテストが落ちる。CI は checkout
+// 時刻が mtime に入るので気づけない。内容は変えず mtime だけ現在に合わせる。
+const now = new Date();
+for (const projectDir of readdirSync(PROJECTS_DIR)) {
+  for (const file of readdirSync(join(PROJECTS_DIR, projectDir))) {
+    if (file.endsWith('.jsonl')) utimesSync(join(PROJECTS_DIR, projectDir, file), now, now);
+  }
+}
 
 export default defineConfig({
   testDir: 'e2e',

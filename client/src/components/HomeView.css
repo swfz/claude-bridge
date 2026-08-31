@@ -1,8 +1,10 @@
 /* ホーム画面。app-main が overflow:hidden なので自前でスクロールさせる */
 .home-view {
+  /* sticky の基準はこの padding box なので、貼り付け位置を打ち消せるよう変数で持つ */
+  --home-pad-top: 20px;
   height: 100%;
   overflow-y: auto;
-  padding: 20px 24px 40px;
+  padding: var(--home-pad-top) 24px 40px;
 }
 
 .home-header {
@@ -70,85 +72,113 @@
   color: var(--text-primary);
 }
 
+/* 行ごとに高さを揃えてグリッド下端のガタつきを消す（.home-card-meta の margin-top:auto と対） */
 .home-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 10px;
 }
 
+/* カードの色は 2 系統だけに絞る。
+   左の縦帯（::before）＝ ブリッジとの関係（表示中 / タブで開き済）、
+   タイトル左のドット ＝ Claude プロセスの状態（busy / idle）。
+   位置で役割が分かれているので、色の意味が混ざらない。 */
 .home-card {
+  position: relative;
+  overflow: hidden;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px 10px 15px;
   cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
+  transition: border-color 0.15s;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
+}
+
+.home-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--rail, transparent);
 }
 
 .home-card:hover {
   border-color: var(--accent);
 }
 
-/* タブとして開いているセッションは左に色帯を出して一目で分かるようにする */
-.home-card.open {
-  border-left: 3px solid var(--accent-secondary);
-  background: var(--bg-surface);
+/* 今タブで表示しているセッション */
+.home-card.rail-active {
+  --rail: var(--accent);
 }
 
-.home-card.active {
-  border-color: var(--accent);
-  border-left-color: var(--accent);
+/* タブとして開いてはいるが、表示していないセッション */
+.home-card.rail-open {
+  --rail: var(--accent-secondary);
 }
 
+/* パス行と印。タイトルより先に来るが、視線の起点はタイトルなので一段薄くする */
 .home-card-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 16px;
 }
 
+/* 視線の起点。1 行に固定して全カードで同じ位置に置く */
 .home-card-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.35;
   color: var(--text-primary);
-}
-
-/* タイトル行のプロジェクト名（タブ下段の cwd 表示と同じ parseCwd 由来） */
-.home-card-project {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 1px 6px;
-  flex-shrink: 0;
-  max-width: 40%;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* パス行。フルパスは title 属性へ逃がし、識別に効く末尾だけ出す */
+/* 親/プロジェクトは 1 つのパスとして読ませたいので間を空けない（gap は付けない） */
+.home-card-path {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-path-parent {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.home-path-project {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.home-path-worktree,
+.home-path-branch {
+  margin-left: 6px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  font-size: 10px;
   white-space: nowrap;
 }
 
-/* 親ディレクトリは識別の補助なので薄く（同名プロジェクトの区別用） */
-.home-card-project-parent {
-  font-weight: 400;
-  color: var(--text-secondary);
-}
-
-.home-card-worktree {
-  margin-left: 4px;
-  font-weight: 400;
-  color: var(--text-secondary);
-}
-
 .home-status {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--text-secondary);
@@ -188,34 +218,14 @@
   border: 1px solid var(--border);
 }
 
-.home-badge.open-badge {
-  background: var(--accent-secondary);
-  color: #fff;
-}
-
 .home-badge.closed-badge {
   background: transparent;
   color: var(--text-secondary);
   border: 1px dashed var(--border);
 }
 
-.home-card-cwd {
-  font-size: 12px;
-  word-break: break-all;
-}
-
-.home-cwd-parent {
-  color: var(--text-secondary);
-}
-
-.home-cwd-base {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
 /* Star（未解決／続きをやる）。カードの右上に置き、付いているものは金色で塗る */
 .home-star {
-  margin-left: auto;
   background: transparent;
   border: none;
   color: var(--text-secondary);
@@ -239,10 +249,8 @@
   color: #f0ad4e;
 }
 
-/* Star 付きカードは上辺に金色のラインを引く（open の左帯・active の枠色と衝突させない） */
-.home-card.starred {
-  box-shadow: inset 0 2px 0 0 #f0ad4e;
-}
+/* Star 付きは並び順（先頭寄せ）と ★ の金色で示す。
+   カード上辺のラインは左の帯と競合して「色の意味」が読めなくなるので引かない。 */
 
 .home-count.starred-count {
   color: #f0ad4e;
@@ -281,24 +289,13 @@
   gap: 2px;
 }
 
-/* /rename 済みの名前に加えて出す AI タイトル */
-.home-card-title {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.4;
+/* 会話抜粋は 1 行ずつ。近接でひとまとまりに見せたいので行間を詰める */
+.home-card-snippets {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-/* git ブランチ（cwd の右） */
-.home-branch {
-  margin-left: 6px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0 4px;
-}
-
-/* 会話抜粋。2 行までに抑えてカードの高さを揃える */
 .home-snippet {
   display: flex;
   gap: 6px;
@@ -311,23 +308,19 @@
   color: var(--text-secondary);
 }
 
+/* ラベルは枠を外してテキストだけに（枠付きバッジが並ぶと視覚ノイズになる） */
 .home-snippet-label {
   flex-shrink: 0;
   font-size: 10px;
   color: var(--text-secondary);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 0 4px;
-  height: fit-content;
-  margin-top: 2px;
+  opacity: 0.7;
 }
 
 .home-snippet-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  min-width: 0;
+  white-space: nowrap;
   overflow: hidden;
-  word-break: break-word;
+  text-overflow: ellipsis;
 }
 
 /* 期間プリセット（直近のセッション） */
@@ -356,22 +349,61 @@
   color: #fff;
 }
 
-.home-sid {
-  font-family: var(--font-mono, monospace);
-}
-
+/* メタ行は "·" 区切りの一列。カードで一番弱い情報なのでさらに薄く落とす */
 .home-card-meta {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-secondary);
+  opacity: 0.85;
+  margin-top: auto;
 }
 
+.home-meta-item + .home-meta-item::before {
+  content: '·';
+  margin-right: 6px;
+  opacity: 0.5;
+}
+
+/* 「タブで表示中」は左帯の色の言い換え。色と同じ意味なので同じ色で置く */
+.home-open-mark {
+  color: var(--accent-secondary);
+  font-weight: 600;
+}
+
+/* アクションはカード下部にホバーで重ねる（常時 1 行を占有させない）。
+   主要動作はカード全体のクリックで足りるので、隠れても操作は詰まらない。 */
 .home-card-actions {
+  position: absolute;
+  left: 3px;
+  right: 0;
+  bottom: 0;
   display: flex;
   gap: 6px;
-  margin-top: 2px;
+  padding: 14px 12px 10px;
+  background: linear-gradient(to bottom, transparent, var(--bg-secondary) 45%);
+  opacity: 0;
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+
+.home-card:hover .home-card-actions,
+.home-card:focus-within .home-card-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ホバーできない環境（タッチ）では隠すと操作不能になるので常時出す */
+@media (hover: none) {
+  .home-card-actions {
+    position: static;
+    padding: 0;
+    background: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .home-action {
@@ -515,4 +547,171 @@
   background: var(--accent-secondary);
   border-color: var(--accent-secondary);
   color: #fff;
+}
+
+/* 直近のセッションは「探す」一覧なので、カードではなく列の揃った行で並べる。
+   列位置が全行で同じなので、件数が増えても目で走査できる。
+   色の役割はカードと同じ（左の帯＝ブリッジとの関係）。 */
+.home-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* hidden にすると内側の sticky ヘッダーが固定されなくなるので clip を使う */
+  overflow: clip;
+}
+
+/* 列名。行と同じ列定義を共有し、スクロール中も見えるよう上端に貼り付ける */
+.home-rows-header {
+  position: sticky;
+  /* top: 0 だとスクロールポートの padding box（= 上に padding 分の隙間）に貼り付き、
+     そこから直前の行が覗くので、padding 分を打ち消してビューポート上端に合わせる */
+  top: calc(-1 * var(--home-pad-top));
+  z-index: 1;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 13px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  /* opacity は背景にも効いて下の行が透けるので、薄さは色だけで作る */
+  color: var(--text-secondary);
+}
+
+.home-rows-header span {
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-rows-header,
+.home-row {
+  grid-template-columns: 18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) 62px;
+}
+
+.home-row {
+  position: relative;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 13px;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.home-rows-header + .home-row {
+  border-top: none;
+}
+
+.home-row:hover {
+  background: var(--bg-secondary);
+}
+
+.home-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--rail, transparent);
+}
+
+.home-row.rail-active {
+  --rail: var(--accent);
+}
+
+.home-row.rail-open {
+  --rail: var(--accent-secondary);
+}
+
+/* 行の見出し。ここだけコントラストを上げて走査の手掛かりにする */
+.home-row-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-row-snippet {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 応答は「直近の指示」より弱い情報なので一段落とす（カードのスニペットと同じ扱い）。
+   指示列との境目が文字だけでは分からないので、細い罫線だけ引いて往復を読ませる。 */
+.home-row-snippet.assistant {
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+  opacity: 0.7;
+}
+
+/* 右端は「経過時間」か、タブで開いていればその印（＝左帯の色の言い換え） */
+.home-row-time {
+  text-align: right;
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.home-row-time .home-open-mark {
+  font-size: 10px;
+}
+
+/* センシティブ指定は付いている行以外では畳んでおく（アイコンが並ぶと走査の邪魔になる） */
+.home-row .home-sensitive {
+  opacity: 0;
+}
+
+.home-row:hover .home-sensitive,
+.home-row .home-sensitive.on {
+  opacity: 0.4;
+}
+
+.home-row:hover .home-sensitive:hover,
+.home-row .home-sensitive.on {
+  opacity: 1;
+}
+
+/* 行のアクションはホバーで右端に重ねる。行クリック（＝閲覧で開く）で足りるので隠してよい */
+.home-row-actions {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 4px;
+  padding-left: 24px;
+  background: linear-gradient(to right, transparent, var(--bg-secondary) 24px);
+  opacity: 0;
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+
+.home-row:hover .home-row-actions,
+.home-row:focus-within .home-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.home-row-actions .home-action {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+@media (hover: none) {
+  .home-row-actions {
+    position: static;
+    transform: none;
+    padding-left: 0;
+    background: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
 }

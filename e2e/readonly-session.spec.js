@@ -6,12 +6,12 @@ const FIXTURE_TITLE = 'E2Eフィクスチャ: ヘルスチェック追加';
 // broadcast する（1人のユーザーが1つのブラウザで使う前提の設計）。同じ fixture を
 // 複数のテストから開くと readonly セッションが毎回新規に作られ蓄積してしまうため、
 // 「開く→会話が見える→ホームに戻ってもタブが残る」を1テストにまとめて検証する。
-test('カードをクリックすると readonly セッションが開き、会話が見え、ホームに戻ってもタブは残る', async ({ page }) => {
+test('行をクリックすると readonly セッションが開き、会話が見え、ホームに戻ってもタブは残る', async ({ page }) => {
   await page.goto('/');
 
-  const card = page.locator('.home-card.recent', { hasText: FIXTURE_TITLE });
-  await expect(card).toBeVisible();
-  await card.click();
+  const row = page.locator('.home-row', { hasText: FIXTURE_TITLE });
+  await expect(row).toBeVisible();
+  await row.click();
 
   // readonly セッションが開くとチャットビューに切り替わる
   await expect(page.locator('.chat-view')).toBeVisible();
