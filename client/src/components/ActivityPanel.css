@@ -1,0 +1,341 @@
+/* ホーム画面の活動パネル。草 / 日別の棒 / 曜日別の 3 ビューが同じ枠を共有する。 */
+.activity {
+  --cell: 11px;
+  --cell-gap: 3px;
+  --bar: 3px;
+  --bar-gap: 1px;
+  --plot-height: 84px;
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.activity-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.activity-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.activity-caret {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.activity-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.activity-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ビュー切替とメトリック切替は同じ見た目のトグル群 */
+.activity-segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.activity-segment {
+  background: var(--bg-primary);
+  border: none;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.activity-segment + .activity-segment {
+  border-left: 1px solid var(--border);
+}
+
+.activity-segment.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.activity-refresh {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.activity-refresh:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.activity-body {
+  margin-top: 10px;
+}
+
+.activity-loading {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 12px 0;
+}
+
+/* 草と日別は 1 年分が横に長いので、このブロックだけ横スクロールさせる */
+.activity-viewport.scrolls {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+/* --- 草 --- */
+
+.activity-grid-wrap {
+  display: flex;
+  gap: 6px;
+  width: max-content;
+}
+
+/* 曜日ラベル。月ラベルの行と高さを揃えるため上に余白を足す。
+   横スクロールで流れていかないよう左端に貼り付ける（背景が無いと升目が透ける） */
+.activity-weekdays {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: repeat(7, var(--cell));
+  gap: var(--cell-gap);
+  margin-top: calc(14px + var(--cell-gap));
+  padding-right: 2px;
+  background: var(--bg-secondary);
+}
+
+.activity-weekday {
+  font-size: 9px;
+  line-height: var(--cell);
+  color: var(--text-secondary);
+  text-align: right;
+  width: 14px;
+}
+
+.activity-columns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cell-gap);
+}
+
+.activity-months {
+  display: flex;
+  gap: var(--cell-gap);
+  height: 14px;
+}
+
+.activity-month {
+  width: var(--cell);
+  font-size: 9px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.activity-weeks {
+  display: flex;
+  gap: var(--cell-gap);
+}
+
+.activity-week {
+  display: grid;
+  grid-template-rows: repeat(7, var(--cell));
+  gap: var(--cell-gap);
+}
+
+.activity-cell {
+  width: var(--cell);
+  height: var(--cell);
+  border-radius: 2px;
+  background: var(--heat-0);
+}
+
+.activity-cell.empty {
+  background: transparent;
+}
+
+.activity-cell.level-1 {
+  background: var(--heat-1);
+}
+.activity-cell.level-2 {
+  background: var(--heat-2);
+}
+.activity-cell.level-3 {
+  background: var(--heat-3);
+}
+.activity-cell.level-4 {
+  background: var(--heat-4);
+}
+
+/* --- 日別の棒 --- */
+
+.activity-daily {
+  display: flex;
+  gap: 6px;
+  width: max-content;
+}
+
+/* 目盛りは最大・半分・0 の 3 つだけ（棒の高さを読む手がかりに足りる）。
+   曜日ラベルと同じく、横スクロールしても左端に残す */
+.activity-daily-axis {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding-right: 4px;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: var(--plot-height);
+  font-size: 9px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.activity-daily-plot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* 棒と月ラベルは同じ列グリッドを共有するので、目盛りが必ず日と揃う */
+.activity-bars,
+.activity-daily-months {
+  display: grid;
+  grid-template-columns: repeat(var(--count), var(--bar));
+  gap: var(--bar-gap);
+}
+
+.activity-bars {
+  align-items: end;
+  height: var(--plot-height);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ホバー領域を棒の高さに関わらず一定にするため、スロットで受ける */
+.activity-bar-slot {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+}
+
+.activity-bar {
+  width: 100%;
+  min-height: 1px;
+  background: var(--heat-3);
+  border-radius: 1px 1px 0 0;
+}
+
+.activity-bar-slot:hover .activity-bar {
+  background: var(--heat-4);
+}
+
+/* 活動のない日も「その日があった」ことは見せる（軸上の点） */
+.activity-bar.zero {
+  height: 1px !important;
+  background: var(--heat-0);
+}
+
+.activity-daily-months {
+  height: 12px;
+}
+
+.activity-daily-months .activity-month {
+  width: auto;
+}
+
+/* --- 曜日別 --- */
+
+.activity-weekday-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 560px;
+}
+
+.activity-weekday-row {
+  display: grid;
+  grid-template-columns: 16px 1fr 64px 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.activity-weekday-label {
+  color: var(--text-primary);
+}
+
+.activity-weekday-track {
+  height: 10px;
+  border-radius: 2px;
+  background: var(--heat-0);
+  overflow: hidden;
+}
+
+.activity-weekday-fill {
+  height: 100%;
+  background: var(--heat-3);
+  border-radius: 2px;
+}
+
+.activity-weekday-value {
+  text-align: right;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-weekday-days {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- 凡例 --- */
+
+.activity-legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 8px;
+}
+
+.activity-legend-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin: 0 3px;
+}
+
+.activity-legend-note {
+  margin-left: 10px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* 凡例が草の升目だけのときは左余白を作らない */
+.activity-legend > .activity-legend-note:first-child {
+  margin-left: 0;
+}

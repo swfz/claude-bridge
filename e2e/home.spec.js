@@ -25,4 +25,33 @@ test.describe('ホーム画面', () => {
     await expect(row).toBeVisible();
     await expect(row.locator('.home-card-path')).toContainText('second-project');
   });
+
+  test('活動パネルが草・日別・曜日の 3 ビューを切り替えられる', async ({ page }) => {
+    await page.goto('/');
+
+    const activity = page.locator('.activity');
+    await expect(activity).toBeVisible();
+
+    // 集計が届くまでは「集計中…」。届いたら 53 週分の列が出る
+    await expect(activity.locator('.activity-week')).toHaveCount(53, { timeout: 30_000 });
+    // 1 年分の升目（先頭の週は曜日合わせで欠ける日がある）
+    expect(await activity.locator('.activity-week .activity-cell').count()).toBeGreaterThanOrEqual(365);
+
+    // 日別: 1 日 1 本の棒
+    await activity.getByRole('button', { name: '日別' }).click();
+    await expect(activity.locator('.activity-bar-slot')).toHaveCount(365);
+
+    // 曜日別: 月〜日の 7 行
+    await activity.getByRole('button', { name: '曜日' }).click();
+    const weekdayRows = activity.locator('.activity-weekday-row');
+    await expect(weekdayRows).toHaveCount(7);
+    await expect(weekdayRows.first().locator('.activity-weekday-label')).toHaveText('月');
+
+    // メトリック切替はビューをまたいで効く（fixture の活動量には依存しない）
+    await activity.getByRole('button', { name: 'トークン' }).click();
+    await expect(activity.locator('.activity-segment.active')).toHaveText(['曜日', 'トークン']);
+
+    await activity.getByRole('button', { name: '草' }).click();
+    await expect(activity.locator('.activity-week')).toHaveCount(53);
+  });
 });

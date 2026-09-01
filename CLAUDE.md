@@ -40,6 +40,7 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - `storage.js` -- `~/.claude-bridge/` への永続化。`appendInbox()` で agent への送信を inbox に書き込む
 - `claude-agents.js` -- `claude agents --json` から agent view のセッション一覧を取得
 - `running-sessions.js` -- ホーム画面用。`~/.claude/sessions/*.json`（pid/sessionId/cwd/name/status/tmux）を読み、`ps` の生存 PID で絞って「今起動中の Claude セッション」を返す。`tmux` フィールドの paneId は `%<数字>` 形式のみ採用
+- `activity-heatmap.js` -- ホーム画面の活動ヒートマップ（草）。`~/.claude/projects/**/*.jsonl` を全部読み、**ローカル日付**で「ユーザーの実プロンプト数 / assistant の応答数 / トークン（input・output・cache_creation・cache_read）」を日別に足す。サブエージェントの `subagents/agent-*.jsonl` も対象（本体側には書かれないので二重計上にはならない）。tool_result の user レコードは人が打ったものではないので数えない。全走査は 900MB 弱／9 秒かかるので、**ファイル単位の日別集計を `<dataDir>/activity-heatmap.json` に永続化**し、2 回目以降は追記分（前回オフセット以降）だけ読み足す（末尾の書きかけ行は最後の改行までで打ち切る／ファイルが縮んでいたら先頭から読み直す）。同じ走査が並行しないよう in-flight の Promise を共有する
 - `thread-store.js` -- スレッド CRUD
 - `slash-commands.js` -- 入力欄のスラッシュコマンド補完の候補を集める `listSlashCommands({cwd, claudeDir})`。プロセス起動はせず、スキル/コマンドのファイルを走査するだけ（`<claudeDir>/skills/*/SKILL.md`、`<claudeDir>/commands/**/*.md`、`cwd` 側の `.claude/` 配下、`plugins/installed_plugins.json` の `installPath` 配下、組み込みコマンドの静的配列）。スキルのディレクトリはシンボリックリンクが多いので `lstat` ではなく `stat` で追従する。**本体同梱スキル（`/code-review` `/simplify` `/loop` 等）は単一 ELF バイナリに埋め込まれていて走査も列挙サブコマンドも無いため、`BUNDLED_SKILLS` の静的リストで持つ既知の妥協**（本体更新で増減し得る）。description は frontmatter の `description:`（無ければ本文の最初の非空行）を 120 文字に切る。name の重複は project > user > plugin > bundled > builtin で先勝ち。走査が重いので `cwd`+`claudeDir` 単位で 30 秒キャッシュ（`clearSlashCommandsCache()` で破棄）。**`BUILTIN_COMMANDS` は「ブラウザから使える」と実測できた 4 件だけ**（`clear` / `compact` / `context` / `init`）。TUI 内にモーダルを開くもの（`/model` 等）は見えず操作もできないので出さない（詳細は「スラッシュコマンド補完」の節）
 - `rate-limits.js` -- Claude のレート制限（5h/7d ウィンドウの使用率）取得。**credentials・外部通信は使わない**。Claude Code が statusLine コマンドの stdin に渡す `rate_limits`（`used_percentage` / epoch 秒の `resets_at`）を `scripts/statusline/bridge-statusline-tee.js` がファイル（`<dataDir>/rate-limits.json`）に横流しし、`readRateLimits()` はそれを読むだけ。ローカルファイル読みなので `index.js` は 15 秒間隔でポーリングし、内容が変わったときだけ `rate_limits {usage, fetchedAt}` をブロードキャスト（`fetchedAt` は tee が書いた取得時刻で、statusline 連携が止まっていれば古いまま＝クライアント側の stale 判定に使われる）。statusline 未連携（ファイル無し）は `no-file` として一度だけ案内ログを出す
@@ -55,6 +56,11 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - `ThreadPanel.jsx` -- リサイズハンドルは `widthRef` で useCallback の依存を空に
 - `HomeView.jsx` -- ホーム画面（起動中セッション＋直近セッション）。`utils/runningSessions.js` の純粋関数で突合・整形
 - `RateLimitMeter.jsx` -- ヘッダー右側の 5h/7d レート制限メーター。`rate_limits` メッセージを表示するだけの純表示コンポーネント（データが無ければ非表示）。バー色は使用率で `--success` / `--warning` / `--accent`、ツールチップにリセット時刻・残り時間・モデル別 weekly・取得時刻。`fetchedAt` が 10 分より古い（statusline 連携が止まっている＝セッション非稼働の疑い）と `stale` クラスで薄く表示し、ツールチップにも注記する（60 秒間隔の内部 tick で再判定するだけで、データ自体はサーバー push 任せ）
+- `ActivityPanel.jsx` -- ホーム最上段の活動パネル。`activity_heatmap`（365 日分）を描くだけの純表示コンポーネントで、集計・整形は `utils/heatmap.js` の純粋関数が持つ。**同じデータを 3 ビューで見せる**（`HeatmapView` / `DailyView` / `WeekdayView` の小コンポーネントを 1 ファイルに同居）。ビュー・メトリック（メッセージ / トークン）・開閉は localStorage（`homeActivityView` / `homeHeatmapMetric` / `homeHeatmapOpen`）に覚える
+  - **草**: 1 列 = 1 週（GitHub と同じ日曜始まり）。**濃淡のしきい値は固定値ではなく「活動があった日」の分位（p25/p50/p75）**。日によって桁が違う（トークンは特に）ため。色は `--heat-0`〜`--heat-4`（ライト/ダークで別値）
+  - **日別**: 1 本 = 1 日の縦棒。濃淡では潰れる量の差を高さで読むビューなので、**分位ではなく最大値に対する線形**にする（草と役割を分ける）。棒と月の目盛りは同じ `grid-template-columns: repeat(var(--count), var(--bar))` を共有するので必ず日と揃う
+  - **曜日**: 月曜始まりの横棒 7 本（草だけが日曜始まりなのは GitHub に合わせているため）。合計値と「その曜日で活動があった日数」を添える
+  - 草と日別は横に長いのでこのブロックだけ横スクロールし、初期位置は右端（最新）。**左端の曜日ラベル／y 軸目盛りは `position: sticky; left: 0` で貼り付ける**（スクロールすると流れて消えるため。背景色を敷かないと升目が透ける）
 - `InputBar.jsx` -- 送信欄。書きかけは `key={draftKey}` の remount をまたぐようモジュールレベルの `drafts` Map に置く。**スラッシュコマンド補完**は `slashCommands` prop の候補を入力欄の直上にドロップダウンで出す。表示条件は `text` が `/^\/[A-Za-z0-9_:-]*$/`（先頭 `/` の 1 トークン目を打っている間）で、前方一致が 0 件なら部分一致にフォールバックし 50 件で打ち切る。表示中は ArrowUp/Down で選択、Tab/Enter で `/name ` に確定（**Enter は送信しない**）、Escape で畳む（次の入力で復帰）。`onSendEscape` が渡されたときだけ送信ボタンの左に `Esc` ボタンを出す（TUI で開いてしまったモーダルを閉じる用。**補完を畳む Escape キー操作とは別物**）
 - `ChoicePrompt.jsx` -- 選択肢プロンプトのカード（入力欄の直上）。選択肢ボタン＝キー送信で、状態は毎回サーバーが読み直した画面から来る（クライアントは選択状態を持たない）
 - `TaskStrip.jsx` -- サブエージェントタスクのチップ列（入力欄の直上、選択肢カードの上）。実行中は `⚙`、完了は `✓`。完了は 3 件を超えたら「✓ 他 N 件」に畳む
@@ -100,6 +106,7 @@ TUI の補完はブラウザからは使えないので、入力欄でスキル�
 - **カードは 1 行 clamp × 固定構成**（パス行／タイトル／スニペット 2 行／メタ行）で、`.home-grid` の `grid-auto-rows: 1fr` と `.home-card-meta` の `margin-top: auto` で行ごとに高さを揃える。フルパス・pid・tmux ターゲット・サイズ・sessionId は `title` 属性へ逃がす。アクションボタンはカード下部／行の右端にホバーで重ねる（`@media (hover: none)` では常時表示）。全件に付くもの（`INTERACTIVE` / `未オープン` バッジ、`main` `master` `HEAD` のブランチ名）は識別に寄与しないので出さない
 - `cwd` は projectDir 名から復元するとディレクトリ名のハイフンが壊れる（`claude-bridge` → `claude/bridge`）ため、JSONL に書かれた `cwd` を優先する。resume の起動先になるので重要
 - どちらの一覧にも紐づかないタブ（期間外のセッションを閲覧で開いた・終了したタブ）は最下段の「その他の開いているタブ」に出す
+- **最上段の活動パネル**: `list_activity_heatmap {days}` → `activity_heatmap {days, total, generatedAt}`（`server/activity-heatmap.js`）。直近 365 日を草 / 日別の棒 / 曜日別の 3 ビューで見せ、メッセージ数とトークン数を切り替えられる（ビューを変えてもサーバーには取りに行かない。3 つとも同じ 365 日分から計算する）。取得はホームを開いた時と「更新」時だけ（直近一覧と同じ理由）。**セッション一覧のどのセクションにも属さない全体の指標なので、見出しより前・画面の最上段に置く**。共有モードでもパスは出ないので隠していない
 - ホーム表示は `showHome` state（localStorage 記憶）。`activeSessionId` は保持したまま切り替えるため Home ⇄ 作業中タブを往復できる。起動中一覧はホーム表示中のみ 5 秒間隔でポーリングし、直近一覧はホームを開いた時・日数変更時・「更新」時だけ取得する（JSONL 全走査のため）
 
 ### 選択肢プロンプト（AskUserQuestion / ツール許可 / trust 確認）への回答

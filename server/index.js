@@ -18,6 +18,7 @@ import { parseChoicePrompt } from './choice-prompt.js';
 import { listSubagentTasks, readSubagentTranscript } from './subagent-tasks.js';
 import { readRateLimits } from './rate-limits.js';
 import { listSlashCommands } from './slash-commands.js';
+import { getActivityHeatmap } from './activity-heatmap.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -260,6 +261,13 @@ function clampDays(days) {
   const n = Number(days);
   if (!Number.isFinite(n)) return 7;
   return Math.min(365, Math.max(1, Math.floor(n)));
+}
+
+// ヒートマップの期間。1 年分の升目が既定で、指定は 28〜730 日に丸める
+function clampHeatmapDays(days) {
+  const n = Number(days);
+  if (!Number.isFinite(n)) return 365;
+  return Math.min(730, Math.max(28, Math.floor(n)));
 }
 
 function findSession(id) {
@@ -997,6 +1005,19 @@ wss.on('connection', (ws) => {
         listRecentSessions({ days, limit: 50, includeSessionIds: starred }).then((recent) => {
           ws.send(JSON.stringify({ type: 'recent_sessions', days, sessions: recent }));
         });
+        break;
+      }
+
+      case 'list_activity_heatmap': {
+        // ホーム画面の草。初回は JSONL を全走査するので数秒かかるが、
+        // 以降はファイル単位キャッシュの差分だけ読む（activity-heatmap.js）。
+        getActivityHeatmap({ days: clampHeatmapDays(msg.days) })
+          .then((heatmap) => {
+            ws.send(JSON.stringify({ type: 'activity_heatmap', ...heatmap }));
+          })
+          .catch((err) => {
+            ws.send(JSON.stringify({ type: 'home_error', message: `活動量の集計に失敗しました: ${err.message}` }));
+          });
         break;
       }
 

@@ -50,6 +50,9 @@ export default function App() {
   // ホームの「直近のセッション」（終了済みを含む JSONL 由来）。null = 未取得
   const [recentSessions, setRecentSessions] = useState(null);
   const [recentDays, setRecentDays] = useState(() => Number(localStorage.getItem('homeRecentDays')) || 7);
+  // ホームの活動ヒートマップ（草）。null = 未取得
+  const [heatmap, setHeatmap] = useState(null);
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
   // ホーム画面の操作エラー（tmux 再開の失敗など）。チャット欄には出せないのでバナーで見せる
   const [homeError, setHomeError] = useState(null);
   // セッションごとの選択肢プロンプト（id -> {prompt, waitingFor}）。
@@ -371,6 +374,18 @@ export default function App() {
   }, [on]);
 
   useEffect(() => {
+    return on('activity_heatmap', (msg) => {
+      setHeatmap({ days: msg.days || [], total: msg.total, generatedAt: msg.generatedAt });
+      setHeatmapLoading(false);
+    });
+  }, [on]);
+
+  // 集計に失敗しても loading を出しっぱなしにしない
+  useEffect(() => {
+    return on('home_error', () => setHeatmapLoading(false));
+  }, [on]);
+
+  useEffect(() => {
     return on('rate_limits', (msg) => setRateLimits({ usage: msg.usage, fetchedAt: msg.fetchedAt }));
   }, [on]);
 
@@ -439,6 +454,18 @@ export default function App() {
       starred: starredRef.current,
     });
   }, [showHome, connected, recentDays, send]);
+
+  // 活動ヒートマップも JSONL 由来なので、ホームを開いた時と「更新」時だけ取る。
+  // サーバー側はファイル単位のキャッシュを持つので 2 回目以降は差分だけ読む
+  const requestHeatmap = useCallback(() => {
+    setHeatmapLoading(true);
+    send({ type: 'list_activity_heatmap', days: 365 });
+  }, [send]);
+
+  useEffect(() => {
+    if (!showHome || !connected) return;
+    requestHeatmap();
+  }, [showHome, connected, requestHeatmap]);
 
   useEffect(() => {
     localStorage.setItem('homeRecentDays', String(recentDays));
@@ -1160,6 +1187,9 @@ export default function App() {
                   activeSessionId={activeSessionId}
                   loading={runningSessions === null}
                   recentLoading={recentSessions === null}
+                  heatmap={heatmap}
+                  heatmapLoading={heatmapLoading}
+                  onRefreshHeatmap={requestHeatmap}
                   error={homeError}
                   onDismissError={() => setHomeError(null)}
                   onRefresh={() => {
@@ -1170,6 +1200,7 @@ export default function App() {
                       days: recentDays,
                       starred: starredSessions,
                     });
+                    requestHeatmap();
                   }}
                   onSelectTab={handleSwitchSession}
                   onAttachTmux={handleAttachTmux}
