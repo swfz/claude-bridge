@@ -679,16 +679,18 @@
   opacity: 1;
 }
 
-/* 行のアクションはホバーで右端に重ねる。行クリック（＝閲覧で開く）で足りるので隠してよい */
+/* 行のアクションはホバーで左寄せに重ねる（カーソルが行頭側にあるので押しやすい）。
+   ★／🔒 は押せたままにしたいので、その 2 列（13 + 18 + 8 + 18 + 8px）分だけ右にずらす。
+   行クリック（＝閲覧で開く）で足りるので普段は隠してよい */
 .home-row-actions {
   position: absolute;
-  right: 8px;
+  left: 65px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
   gap: 4px;
-  padding-left: 24px;
-  background: linear-gradient(to right, transparent, var(--bg-secondary) 24px);
+  padding-right: 24px;
+  background: linear-gradient(to left, transparent, var(--bg-secondary) 24px);
   opacity: 0;
   transition: opacity 0.12s;
   pointer-events: none;
@@ -709,7 +711,7 @@
   .home-row-actions {
     position: static;
     transform: none;
-    padding-left: 0;
+    padding-right: 0;
     background: none;
     opacity: 1;
     pointer-events: auto;
