@@ -10,6 +10,7 @@ import { isStarred, sortStarredFirst } from '../utils/starredSessions.js';
 import { isSensitive, splitSensitive } from '../utils/sensitiveSessions.js';
 import { parseCwd } from '../utils/cwdLabel.js';
 import { filterBySearch, collectProjects, filterByProject } from '../utils/sessionSearch.js';
+import ActivityPanel from './ActivityPanel.jsx';
 import './HomeView.css';
 
 // 「その他の開いているタブ」は name/cwd しか持たないので検索対象をこの2つに絞る
@@ -117,6 +118,9 @@ export default function HomeView({
   activeSessionId,
   loading,
   recentLoading,
+  heatmap,
+  heatmapLoading,
+  onRefreshHeatmap,
   error,
   onDismissError,
   onRefresh,
@@ -226,6 +230,9 @@ export default function HomeView({
 
   return (
     <div className="home-view">
+      {/* 草は一覧のどのセクションにも属さないので、見出しより前・画面の最上段に置く */}
+      <ActivityPanel data={heatmap} loading={heatmapLoading} onRefresh={onRefreshHeatmap} />
+
       <div className="home-header">
         <h2 className="home-title">起動中の Claude セッション</h2>
         <div className="home-header-actions">

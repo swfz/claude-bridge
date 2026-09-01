@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
-const DATA_DIR = process.env.CLAUDE_BRIDGE_DIR || join(homedir(), '.claude-bridge');
+export const DATA_DIR = process.env.CLAUDE_BRIDGE_DIR || join(homedir(), '.claude-bridge');
 const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
 const INBOX_DIR = join(DATA_DIR, 'inbox');
 
