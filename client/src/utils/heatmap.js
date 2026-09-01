@@ -99,7 +99,9 @@ export function cellTooltip(day) {
     lines.push('活動なし');
     return lines.join('\n');
   }
-  lines.push(`メッセージ ${formatCount(day.messages)}（あなた ${formatCount(day.prompts)} / Claude ${formatCount(day.replies)}）`);
+  lines.push(
+    `メッセージ ${formatCount(day.messages)}（あなた ${formatCount(day.prompts)} / Claude ${formatCount(day.replies)}）`,
+  );
   lines.push(`トークン ${formatTokens(day.tokens)}`);
   lines.push(
     `  入力 ${formatTokens(day.inputTokens)} / 出力 ${formatTokens(day.outputTokens)}`,

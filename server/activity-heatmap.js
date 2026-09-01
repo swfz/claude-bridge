@@ -233,7 +233,12 @@ async function refreshDaily({ dir, cacheFile }) {
 }
 
 // ホーム画面のヒートマップ用。直近 days 日の日別集計を返す。
-export async function getActivityHeatmap({ days = 365, dir = CLAUDE_PROJECTS_DIR, cacheFile = CACHE_FILE, now = Date.now() } = {}) {
+export async function getActivityHeatmap({
+  days = 365,
+  dir = CLAUDE_PROJECTS_DIR,
+  cacheFile = CACHE_FILE,
+  now = Date.now(),
+} = {}) {
   if (!inflight) {
     inflight = refreshDaily({ dir, cacheFile }).finally(() => {
       inflight = null;

@@ -224,9 +224,7 @@ export default function ActivityPanel({ data, loading, onRefresh }) {
               </>
             )}
             <span className="activity-legend-note">
-              {view === 'weekday'
-                ? `直近 ${days.length} 日の合計`
-                : `最大 ${formatMetric(metric, maxPerDay)} / 日`}
+              {view === 'weekday' ? `直近 ${days.length} 日の合計` : `最大 ${formatMetric(metric, maxPerDay)} / 日`}
             </span>
           </div>
         </div>
