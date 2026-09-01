@@ -5,11 +5,28 @@ import './SessionTabs.css';
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
 const DEFAULT_WIDTH = 240;
+const COLLAPSED_WIDTH = 48;
 
 function readStoredWidth() {
   const stored = Number(localStorage.getItem('sidebarWidth'));
   if (!Number.isFinite(stored) || stored <= 0) return DEFAULT_WIDTH;
   return Math.max(MIN_WIDTH, Math.min(stored, MAX_WIDTH));
+}
+
+// 折りたたみ時はプロジェクト名の頭文字だけで見分ける（Chrome の favicon 相当）
+function miniLabel(project) {
+  if (!project) return '?';
+  const parts = String(project)
+    .split(/[-_.\s]+/)
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return parts
+      .slice(0, 3)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase();
+  }
+  return String(project).slice(0, 2).toUpperCase();
 }
 
 export default function SessionTabs({
@@ -29,6 +46,7 @@ export default function SessionTabs({
   onNew,
 }) {
   const [width, setWidth] = useState(readStoredWidth);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === '1');
   const widthRef = useRef(width);
   widthRef.current = width;
   const dragging = useRef(false);
@@ -38,6 +56,10 @@ export default function SessionTabs({
   useEffect(() => {
     localStorage.setItem('sidebarWidth', String(width));
   }, [width]);
+
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+  }, [collapsed]);
 
   const onDragStart = useCallback((e) => {
     e.preventDefault();
@@ -59,18 +81,34 @@ export default function SessionTabs({
     document.addEventListener('mouseup', onUp);
   }, []);
 
+  const shownWidth = collapsed ? COLLAPSED_WIDTH : width;
+
   return (
-    <div className="session-tabs" style={{ width, minWidth: width }}>
-      <div className="sidebar-resize-handle" onMouseDown={onDragStart} onDragStart={(e) => e.preventDefault()} />
+    <div className={`session-tabs ${collapsed ? 'collapsed' : ''}`} style={{ width: shownWidth, minWidth: shownWidth }}>
+      {/* 折りたたみ中は幅固定なのでリサイズハンドルは出さない */}
+      {!collapsed && (
+        <div className="sidebar-resize-handle" onMouseDown={onDragStart} onDragStart={(e) => e.preventDefault()} />
+      )}
+      <div className="sidebar-head">
+        <button
+          className="sidebar-toggle"
+          onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? 'タブリストを開く' : 'タブリストを閉じる'}
+          aria-label={collapsed ? 'タブリストを開く' : 'タブリストを閉じる'}
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? '»' : '«'}
+        </button>
+      </div>
       <button
         className={`tab-home ${homeActive ? 'active' : ''}`}
         onClick={onHome}
         title="ホーム（起動中セッション一覧）"
       >
-        ⌂ Home
+        {collapsed ? '⌂' : '⌂ Home'}
       </button>
       <button className="tab-new" onClick={onNew} title="新しいセッション">
-        ＋ 新しいセッション
+        {collapsed ? '＋' : '＋ 新しいセッション'}
       </button>
       <div className="tabs-list">
         {sessions
@@ -80,12 +118,36 @@ export default function SessionTabs({
           .map((session) => {
             const { parent, project, worktree } = parseCwd(session.cwd);
             const hasAttention = session.alive && attentionIds?.has(session.id);
+            const isWaiting = Boolean(session.waitingFor) && session.alive;
+            const className = `tab ${session.id === activeSessionId ? 'active' : ''} ${!session.alive ? 'dead' : ''} ${hasAttention ? 'tab-attention' : ''}`;
+
+            if (collapsed) {
+              // 折りたたみ時はアイコン相当（頭文字＋状態）だけ。詳細は tooltip に逃がす
+              const typeLabel = session.type === 'tmux' ? ' [tmux]' : session.type === 'readonly' ? ' [閲覧]' : '';
+              const stateLabel = isWaiting
+                ? session.waitingFor === 'permission prompt'
+                  ? ' / 許可待ち'
+                  : ' / 回答待ち'
+                : hasAttention
+                  ? ' / 完了（未確認）'
+                  : '';
+              return (
+                <div
+                  key={session.id}
+                  className={`${className} tab-mini ${isWaiting ? 'tab-mini-waiting' : ''}`}
+                  onClick={() => session.alive && onSelect(session.id)}
+                  title={`${session.name}${typeLabel}${stateLabel}\n${session.cwd || ''}`}
+                >
+                  <span className="tab-mini-avatar">{miniLabel(project)}</span>
+                  {session.status && (
+                    <span className={`tab-status tab-status-${session.status}`} title={session.status} />
+                  )}
+                </div>
+              );
+            }
+
             return (
-              <div
-                key={session.id}
-                className={`tab ${session.id === activeSessionId ? 'active' : ''} ${!session.alive ? 'dead' : ''} ${hasAttention ? 'tab-attention' : ''}`}
-                onClick={() => session.alive && onSelect(session.id)}
-              >
+              <div key={session.id} className={className} onClick={() => session.alive && onSelect(session.id)}>
                 <div className="tab-row">
                   {session.status && (
                     <span className={`tab-status tab-status-${session.status}`} title={session.status} />
@@ -97,7 +159,7 @@ export default function SessionTabs({
                       完了
                     </span>
                   )}
-                  {session.waitingFor && session.alive && (
+                  {isWaiting && (
                     <span className="tab-badge tab-badge-waiting" title={session.waitingFor}>
                       {session.waitingFor === 'permission prompt' ? '許可待ち' : '回答待ち'}
                     </span>

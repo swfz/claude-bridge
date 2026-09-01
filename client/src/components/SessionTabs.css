@@ -276,3 +276,96 @@ body.light-mode .tab-badge-attention {
     opacity: 0.4;
   }
 }
+
+/* ==== 折りたたみ（Chrome のサイドタブ相当） ==== */
+
+.sidebar-head {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.session-tabs.collapsed .sidebar-head {
+  justify-content: center;
+}
+
+.sidebar-toggle {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.session-tabs.collapsed {
+  padding: 8px 4px;
+  gap: 4px;
+  align-items: center;
+}
+
+.session-tabs.collapsed .tab-home,
+.session-tabs.collapsed .tab-new {
+  width: 36px;
+  padding: 6px 0;
+  text-align: center;
+  border-left: none;
+}
+
+.session-tabs.collapsed .tab-home.active {
+  background: var(--tab-active);
+  color: var(--tab-active-text);
+}
+
+.session-tabs.collapsed .tabs-list {
+  width: 100%;
+  align-items: center;
+  gap: 4px;
+  overflow-x: hidden;
+}
+
+/* 折りたたみタブは頭文字アイコン。状態ドットは右上に重ねる */
+.tab-mini {
+  position: relative;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  flex-shrink: 0;
+  border-left: none;
+  border: 1px solid transparent;
+}
+
+.tab-mini.active {
+  border-color: var(--accent);
+}
+
+.tab-mini.tab-attention {
+  border-color: var(--success);
+}
+
+.tab-mini.tab-mini-waiting {
+  border-color: var(--warning, #f0ad4e);
+  animation: tab-status-pulse 1.2s ease-in-out infinite;
+}
+
+.tab-mini-avatar {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.tab-mini .tab-status {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+}
