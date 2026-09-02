@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { collectArtifacts } from '../client/src/utils/artifacts.js';
+import { collectArtifacts, groupArtifactPublishes } from '../client/src/utils/artifacts.js';
 
 const artifactMsg = (url, { title, path, timestamp } = {}) => ({
   role: 'artifact',
@@ -85,5 +85,57 @@ describe('collectArtifacts', () => {
   it('path が無ければ null', () => {
     const result = collectArtifacts([artifactMsg('https://claude.ai/code/artifact/x', { title: 't' })]);
     assert.equal(result[0].path, null);
+  });
+});
+
+describe('groupArtifactPublishes', () => {
+  it('配列以外・空配列でも落ちない', () => {
+    assert.deepEqual(groupArtifactPublishes([]), []);
+    assert.deepEqual(groupArtifactPublishes(null), []);
+    assert.deepEqual(groupArtifactPublishes(undefined), []);
+  });
+
+  it('url が無い項目は捨てる', () => {
+    assert.deepEqual(groupArtifactPublishes([{ title: 'url なし' }, null]), []);
+  });
+
+  it('サーバーから来た publish の生リストを URL ごとにまとめる', () => {
+    const publishes = [
+      {
+        url: 'https://claude.ai/code/artifact/a',
+        title: '初版',
+        path: '/tmp/a.html',
+        timestamp: '2026-08-17T01:00:00.000Z',
+      },
+      {
+        url: 'https://claude.ai/code/artifact/b',
+        title: '別のページ',
+        path: '/tmp/b.html',
+        timestamp: '2026-08-17T02:00:00.000Z',
+      },
+      {
+        url: 'https://claude.ai/code/artifact/a',
+        title: '第 2 版',
+        path: '/tmp/a2.html',
+        timestamp: '2026-08-17T03:00:00.000Z',
+      },
+    ];
+
+    const result = groupArtifactPublishes(publishes);
+    // 最新の publish が先頭
+    assert.deepEqual(
+      result.map((a) => a.title),
+      ['第 2 版', '別のページ'],
+    );
+    assert.equal(result[0].count, 2);
+    assert.equal(result[0].path, '/tmp/a2.html');
+    assert.equal(result[1].count, 1);
+  });
+
+  it('title が無ければ URL、path が無ければ null', () => {
+    const url = 'https://claude.ai/code/artifact/x';
+    const [artifact] = groupArtifactPublishes([{ url }]);
+    assert.equal(artifact.title, url);
+    assert.equal(artifact.path, null);
   });
 });

@@ -152,10 +152,42 @@ describe('readSessionSummary', () => {
     assert.equal(summary.lastUserMessage, '');
   });
 
+  it('collects the artifacts published in the session', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'cb-summary-'));
+    const file = join(dir, 's.jsonl');
+    await writeFile(
+      file,
+      jsonl([
+        { type: 'ai-title', aiTitle: 'レポート公開' },
+        userRecord('レポートを公開して'),
+        {
+          type: 'user',
+          message: { role: 'user', content: [{ tool_use_id: 't1', type: 'tool_result', content: 'Published' }] },
+          toolUseResult: {
+            url: 'https://claude.ai/code/artifact/abc',
+            path: '/tmp/report.html',
+            title: '集計レポート',
+          },
+          timestamp: '2026-08-17T05:00:00.000Z',
+        },
+      ]),
+    );
+    const summary = await readSessionSummary(file);
+    assert.deepEqual(summary.artifacts, [
+      {
+        url: 'https://claude.ai/code/artifact/abc',
+        path: '/tmp/report.html',
+        title: '集計レポート',
+        timestamp: '2026-08-17T05:00:00.000Z',
+      },
+    ]);
+  });
+
   it('returns an empty summary for a missing file', async () => {
     const summary = await readSessionSummary(join(tmpdir(), 'cb-nope.jsonl'));
     assert.equal(summary.title, '');
     assert.equal(summary.lastAssistantMessage, '');
+    assert.deepEqual(summary.artifacts, []);
   });
 });
 

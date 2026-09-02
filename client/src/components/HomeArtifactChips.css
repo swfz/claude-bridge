@@ -1,0 +1,68 @@
+/* ホームのカード／行に出す Artifact リンクのチップ。
+   見た目は ArtifactStrip の .artifact-chip に寄せ、ホームは詰まっているので padding を小さくする */
+.home-artifacts {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.home-artifacts.compact {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+/* 行では列幅（160px）に収めるため、チップ自体を縮めてタイトル側を省略する */
+.home-artifacts.compact .home-artifact-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.home-artifacts.compact .home-artifact-chip.more,
+.home-artifacts.compact .home-artifact-chip:not(:first-child) {
+  flex-shrink: 0;
+}
+
+.home-artifact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 200px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: inherit;
+  line-height: 1.5;
+  padding: 1px 6px;
+  text-decoration: none;
+}
+
+.home-artifact-chip:hover {
+  border-color: var(--accent);
+}
+
+/* 「+N」はリンクではないのでホバーの手掛かりを出さない */
+.home-artifact-chip.more {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.home-artifact-icon {
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.home-artifact-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-artifact-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+}

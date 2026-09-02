@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 // fixture: e2e/fixtures/projects/-home-e2e-fixture-project/e2e-fixture-session-1.jsonl
 const FIXTURE_TITLE = 'E2Eフィクスチャ: ヘルスチェック追加';
 const FIXTURE_CWD_BASE = 'fixture-project';
+const FIXTURE_ARTIFACT_URL = 'https://claude.ai/code/artifact/e2e00000-0000-4000-8000-000000000001';
 
 test.describe('ホーム画面', () => {
   test('直近セッション一覧に fixture のタイトルと cwd が表示される', async ({ page }) => {
@@ -24,6 +25,16 @@ test.describe('ホーム画面', () => {
     });
     await expect(row).toBeVisible();
     await expect(row.locator('.home-card-path')).toContainText('second-project');
+  });
+
+  test('公開した Artifact のリンクが直近セッションの行に出る', async ({ page }) => {
+    await page.goto('/');
+
+    const row = page.locator('.home-row', { hasText: FIXTURE_TITLE });
+    const chips = row.locator('.home-artifact-chip');
+    await expect(chips).toHaveCount(1);
+    await expect(chips.first()).toHaveAttribute('href', FIXTURE_ARTIFACT_URL);
+    await expect(chips.first()).toHaveAttribute('title', /E2E ヘルスチェックレポート/);
   });
 
   test('活動パネルが草・日別・曜日の 3 ビューを切り替えられる', async ({ page }) => {

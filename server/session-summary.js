@@ -3,6 +3,7 @@ import { stat } from 'fs/promises';
 import { createInterface } from 'readline';
 import { join } from 'path';
 import { CLAUDE_PROJECTS_DIR, cwdToProjectDir, extractTextContent } from './jsonl-utils.js';
+import { readSessionArtifacts } from './session-artifacts.js';
 
 // カードに出す「どんなセッションか」の情報を JSONL から取り出す。
 // 全文は読まず、先頭数十行（タイトル・冒頭の依頼）と末尾数十KB（直近のやりとり）だけ見る。
@@ -138,6 +139,7 @@ const EMPTY_SUMMARY = {
   lastUserMessage: '',
   lastAssistantMessage: '',
   lastTimestamp: '',
+  artifacts: [],
 };
 
 // セッション JSONL 1 本のサマリ。mtime が変わっていなければキャッシュを返す。
@@ -152,9 +154,12 @@ export async function readSessionSummary(filePath) {
   const hit = cache.get(filePath);
   if (hit && hit.mtimeMs === fileStat.mtimeMs) return hit.summary;
 
-  const [headLines, tailLines] = await Promise.all([
+  // Artifact の publish は JSONL のどこにでもあるので head/tail では拾えない。
+  // 全文を毎回読まないよう、session-artifacts.js が差分（前回オフセット以降）だけ読む。
+  const [headLines, tailLines, artifacts] = await Promise.all([
     readFirstLines(filePath, HEAD_LINES),
     readLastLines(filePath, fileStat.size),
+    readSessionArtifacts(filePath, fileStat),
   ]);
   const head = summarizeHead(headLines);
   const tail = summarizeTail(tailLines);
@@ -162,6 +167,7 @@ export async function readSessionSummary(filePath) {
   const summary = {
     ...head,
     ...tail,
+    artifacts,
     lastUserMessage: tail.lastUserMessage === head.firstUserMessage ? '' : tail.lastUserMessage,
     title: head.title || tail.lastUserMessage.slice(0, TITLE_MAX),
   };

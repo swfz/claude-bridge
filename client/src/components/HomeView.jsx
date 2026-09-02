@@ -11,6 +11,7 @@ import { isSensitive, splitSensitive } from '../utils/sensitiveSessions.js';
 import { parseCwd } from '../utils/cwdLabel.js';
 import { filterBySearch, collectProjects, filterByProject } from '../utils/sessionSearch.js';
 import ActivityPanel from './ActivityPanel.jsx';
+import HomeArtifactChips from './HomeArtifactChips.jsx';
 import './HomeView.css';
 
 // 「その他の開いているタブ」は name/cwd しか持たないので検索対象をこの2つに絞る
@@ -337,6 +338,10 @@ export default function HomeView({
                   <Snippet label="応答" text={r.lastAssistantMessage} role="assistant" />
                 </div>
 
+                <div className="home-card-artifacts">
+                  <HomeArtifactChips artifacts={r.artifacts} />
+                </div>
+
                 <Meta
                   items={[openLabel(r.openTab), r.kind !== 'interactive' && r.kind, formatElapsed(r.updatedAt), sub]}
                   title={[`pid ${r.pid}`, r.tmuxTarget && `tmux ${r.tmuxTarget}`, r.status].filter(Boolean).join(' · ')}
@@ -405,6 +410,7 @@ export default function HomeView({
               <span>タイトル</span>
               <span>直近の指示</span>
               <span>応答</span>
+              <span>Artifact</span>
               <span className="home-row-time">更新</span>
             </div>
             {filteredRecent.map((s) => {
@@ -431,6 +437,11 @@ export default function HomeView({
                   </span>
                   <span className="home-row-snippet assistant" title={s.lastAssistantMessage}>
                     {s.lastAssistantMessage}
+                  </span>
+                  {/* タイトル列に混ぜると .home-row-actions（ホバーで left: 65px から重なる）に
+                      隠れて押せなくなるので、右端寄りの独立した列に置く */}
+                  <span className="home-row-artifacts">
+                    <HomeArtifactChips artifacts={s.artifacts} compact />
                   </span>
                   <span className="home-row-time" title={`${Math.round((s.size || 0) / 1024)} KB · ${s.sessionId}`}>
                     {openLabel(s.openTab) || formatElapsed(s.updatedAt)}
