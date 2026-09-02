@@ -83,6 +83,55 @@ describe('JsonlWatcher', () => {
       assert.equal(messages[1].content, 'hi there');
     });
 
+    it('emits an artifact message for a successful Artifact publish', () => {
+      const filePath = join(tmpDir, 'artifact.jsonl');
+      const url = 'https://claude.ai/code/artifact/46f54464-0000-0000-0000-000000000000';
+      const records = [
+        JSON.stringify({
+          type: 'user',
+          uuid: 'u1',
+          timestamp: '2026-06-19T07:50:17.709Z',
+          message: {
+            role: 'user',
+            content: [{ tool_use_id: 'toolu_1', type: 'tool_result', content: `Published at ${url}` }],
+          },
+          toolUseResult: { url, path: '/tmp/report.html', title: 'dotfiles レポート' },
+        }),
+        // 失敗した publish は出さない
+        JSON.stringify({
+          type: 'user',
+          uuid: 'u2',
+          message: {
+            role: 'user',
+            content: [{ tool_use_id: 'toolu_2', type: 'tool_result', content: 'Error', is_error: true }],
+          },
+          toolUseResult: 'Error: publish failed',
+        }),
+      ];
+      writeFileSync(filePath, records.join('\n') + '\n');
+
+      const messages = [];
+      const state = {
+        bridgeSessionId: 'test-session',
+        targetFile: filePath,
+        linesRead: 0,
+        onMessage: (msg) => messages.push(msg),
+      };
+
+      watcher._readNewLines(state);
+
+      assert.equal(messages.length, 1);
+      assert.equal(messages[0].type, 'chat_message');
+      assert.equal(messages[0].role, 'artifact');
+      assert.equal(messages[0].bridgeSessionId, 'test-session');
+      assert.equal(messages[0].url, url);
+      assert.equal(messages[0].title, 'dotfiles レポート');
+      assert.equal(messages[0].content, 'dotfiles レポート');
+      assert.equal(messages[0].path, '/tmp/report.html');
+      assert.equal(messages[0].uuid, 'u1');
+      assert.equal(messages[0].timestamp, '2026-06-19T07:50:17.709Z');
+    });
+
     it('skips already-read lines', () => {
       const filePath = join(tmpDir, 'test.jsonl');
       writeFileSync(

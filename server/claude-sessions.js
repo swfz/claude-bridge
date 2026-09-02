@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import { CLAUDE_PROJECTS_DIR, extractTextContent, extractToolUses } from './jsonl-utils.js';
+import { CLAUDE_PROJECTS_DIR, extractArtifactPublish, extractTextContent, extractToolUses } from './jsonl-utils.js';
 import { readFirstLines, readSessionSummary } from './session-summary.js';
 
 // セッション JSONL から最初のユーザーメッセージを抽出
@@ -144,6 +144,20 @@ export function parseHistoryLines(content) {
             role: 'human',
             content: text,
             // 安定アンカー用に JSONL の uuid を持たせる
+            uuid: record.uuid,
+            timestamp: record.timestamp || record.updatedAt || '',
+          });
+        }
+        // Artifact の publish は tool_result だけの user レコードなので、
+        // テキスト抽出とは独立に見る（本文が無くても公開リンクは出したい）
+        const artifact = extractArtifactPublish(record);
+        if (artifact) {
+          messages.push({
+            role: 'artifact',
+            content: artifact.title,
+            url: artifact.url,
+            title: artifact.title,
+            path: artifact.path,
             uuid: record.uuid,
             timestamp: record.timestamp || record.updatedAt || '',
           });

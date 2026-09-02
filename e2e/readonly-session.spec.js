@@ -20,6 +20,18 @@ test('行をクリックすると readonly セッションが開き、会話が�
     'ヘルスチェックのエンドポイントを追加します',
   );
 
+  // Artifact ツールで公開したページは、会話内のカードと最上段のリンク一覧の両方に出る
+  const artifactUrl = 'https://claude.ai/code/artifact/e2e00000-0000-4000-8000-000000000001';
+  const artifactCard = page.locator('.chat-message.artifact');
+  await expect(artifactCard).toHaveCount(1);
+  await expect(artifactCard.locator('a')).toHaveAttribute('href', artifactUrl);
+  await expect(artifactCard).toContainText('E2E ヘルスチェックレポート');
+  const strip = page.locator('.artifact-strip');
+  await expect(strip).toBeVisible();
+  await expect(strip.locator('a')).toHaveCount(1);
+  await expect(strip.locator('a')).toHaveAttribute('href', artifactUrl);
+  await expect(strip.locator('a')).toHaveAttribute('target', '_blank');
+
   // 開いたセッションはサイドバーのタブとしても残る
   const tab = page.locator('.tab', { hasText: FIXTURE_TITLE });
   await expect(tab).toHaveCount(1);
