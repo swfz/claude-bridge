@@ -178,3 +178,63 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ルート切替（cwd 以外の起点も見られるようにするためのセレクト）。
+   ヘッダーは狭いので右端に寄せ、幅は縮めても潰れないよう最小幅だけ持たせる */
+.explorer-root-select {
+  margin-left: auto;
+  flex-shrink: 0;
+  max-width: 110px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+  padding: 1px 2px;
+  cursor: pointer;
+}
+
+.explorer-root-select:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+/* 任意パスの入力欄（「パスを指定...」を選んだときだけ出す） */
+.file-explorer-path-input {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-explorer-path-input input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 3px 6px;
+}
+
+.file-explorer-path-input input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.file-explorer-path-input button {
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.file-explorer-path-input button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
