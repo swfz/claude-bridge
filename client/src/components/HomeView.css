@@ -593,10 +593,9 @@
 
 .home-rows-header,
 .home-row {
-  grid-template-columns: 18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(
-      0,
-      160px
-    ) 62px;
+  grid-template-columns:
+    18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 160px)
+    62px;
 }
 
 .home-row {
