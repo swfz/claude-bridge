@@ -786,7 +786,18 @@ export default function PreviewDrawer({
                         value={item.comment}
                         onChange={(e) => updateComment(item.id, e.target.value)}
                         onFocus={() => setEditingId(item.id)}
-                        placeholder={item.kind === 'save' ? 'コメントを書く（送信されません）...' : '指摘を入力...'}
+                        onKeyDown={(e) => {
+                          // Ctrl/Cmd+Enter でその欄のボタン相当（残す＝保存 / 送る＝全件送信）。通常の Enter は改行
+                          if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+                          e.preventDefault();
+                          if (item.kind === 'save') saveComment(item.id);
+                          else handleSubmitAll();
+                        }}
+                        placeholder={
+                          item.kind === 'save'
+                            ? 'コメントを書く（送信されません / Ctrl+Enterで保存）...'
+                            : '指摘を入力...（Ctrl+Enterで送信）'
+                        }
                         rows={2}
                         autoFocus={editingId === item.id}
                       />

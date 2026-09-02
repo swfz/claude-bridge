@@ -39,9 +39,14 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
     setDraft((prev) => prev.map((it) => (it.id === id ? { ...it, text } : it)));
   };
 
+  // Ctrl+Enter で追加した欄にフォーカスを移すために、直近で追加した id を覚える
+  const [focusId, setFocusId] = useState(null);
+
   const addItem = () => {
     touched.current = true;
-    setDraft((prev) => [...prev, newItem()]);
+    const item = newItem();
+    setFocusId(item.id);
+    setDraft((prev) => [...prev, item]);
   };
 
   const removeItem = (id) => {
@@ -61,6 +66,17 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
     onSubmit(filled);
     touched.current = false;
     setDraft([newItem()]);
+  };
+
+  // Ctrl/Cmd+Enter で Submit、Ctrl/Cmd+Shift+Enter で次の指摘欄を追加（通常の Enter は改行）
+  const handleKeyDown = (e) => {
+    if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+    e.preventDefault();
+    if (e.shiftKey) {
+      addItem();
+    } else {
+      handleSubmit();
+    }
   };
 
   const onDragStart = useCallback((e) => {
@@ -125,7 +141,13 @@ export default function ReviewDraftPanel({ items, readonly, onSave, onSubmit, on
               value={item.text}
               onChange={(e) => updateItem(item.id, e.target.value)}
               onBlur={() => persist(draft)}
-              placeholder={item.anchor?.quote ? 'この箇所への指摘を入力...' : '指摘を入力...'}
+              onKeyDown={handleKeyDown}
+              autoFocus={item.id === focusId}
+              placeholder={
+                item.anchor?.quote
+                  ? 'この箇所への指摘を入力...（Ctrl+Enterで送信 / Ctrl+Shift+Enterで欄を追加）'
+                  : '指摘を入力...（Ctrl+Enterで送信 / Ctrl+Shift+Enterで欄を追加）'
+              }
               rows={2}
             />
           </div>

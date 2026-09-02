@@ -273,6 +273,12 @@ function clampDays(days) {
   return Math.min(365, Math.max(1, Math.floor(n)));
 }
 
+// 「直近のセッション」の件数上限。固定 50 件だと活発な期間は新しい数日分で埋まって
+// 30 日を選んでも 7 日分しか見えなくなるため、期間に比例させる（1 日あたり 10 件・下限 50・上限 500）
+function recentSessionLimit(days) {
+  return Math.min(500, Math.max(50, days * 10));
+}
+
 // ヒートマップの期間。1 年分の升目が既定で、指定は 28〜730 日に丸める
 function clampHeatmapDays(days) {
   const n = Number(days);
@@ -1012,9 +1018,15 @@ wss.on('connection', (ws) => {
         // 起動中セッションとの重複除去はクライアント側で行う。
         const days = clampDays(msg.days);
         const starred = sanitizeSessionIds(msg.starred);
-        listRecentSessions({ days, limit: 50, includeSessionIds: starred }).then((recent) => {
-          ws.send(JSON.stringify({ type: 'recent_sessions', days, sessions: recent }));
-        });
+        listRecentSessions({ days, limit: recentSessionLimit(days), includeSessionIds: starred })
+          .then((recent) => {
+            ws.send(JSON.stringify({ type: 'recent_sessions', days, sessions: recent }));
+          })
+          .catch((err) => {
+            ws.send(
+              JSON.stringify({ type: 'home_error', message: `直近セッションの取得に失敗しました: ${err.message}` }),
+            );
+          });
         break;
       }
 
