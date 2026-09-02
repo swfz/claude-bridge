@@ -349,6 +349,11 @@
   color: #fff;
 }
 
+/* カードの Artifact チップ。無いカードでは要素自体が空になるので隙間を作らない */
+.home-card-artifacts:empty {
+  display: none;
+}
+
 /* メタ行は "·" 区切りの一列。カードで一番弱い情報なのでさらに薄く落とす */
 .home-card-meta {
   display: flex;
@@ -588,7 +593,10 @@
 
 .home-rows-header,
 .home-row {
-  grid-template-columns: 18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) 62px;
+  grid-template-columns: 18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(
+      0,
+      160px
+    ) 62px;
 }
 
 .home-row {
@@ -650,6 +658,14 @@
   padding-left: 10px;
   border-left: 1px solid var(--border);
   opacity: 0.7;
+}
+
+/* Artifact 列。チップは固定幅の列に収め、溢れた分は「+N」で畳む（行の高さは変えない） */
+.home-row-artifacts {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  overflow: hidden;
 }
 
 /* 右端は「経過時間」か、タブで開いていればその印（＝左帯の色の言い換え） */
