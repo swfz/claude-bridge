@@ -1,0 +1,61 @@
+/* チャット最上部に貼り付ける、公開済み Artifact のチップ列 */
+.artifact-strip {
+  position: sticky;
+  /* .chat-view の padding(16px) を打ち消して border box の端に貼る
+     （padding box に貼ると直前のメッセージが上から覗く） */
+  top: -16px;
+  z-index: 5;
+  margin: -16px -16px 0;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.artifact-strip-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+
+.artifact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 3px 10px;
+  text-decoration: none;
+}
+
+.artifact-chip:hover {
+  border-color: var(--accent);
+}
+
+.artifact-chip-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.artifact-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-chip-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+}

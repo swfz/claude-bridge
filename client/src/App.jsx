@@ -290,7 +290,8 @@ export default function App() {
     return on('chat_message', (msg) => {
       const session = sessionsRef.current.find((s) => s.id === msg.bridgeSessionId);
       const isTmux = session?.type === 'tmux';
-      if (!(msg.role === 'assistant' || (isTmux && msg.role === 'human'))) return;
+      // artifact（公開リンク）はセッション種別を問わず受ける
+      if (!(msg.role === 'assistant' || msg.role === 'artifact' || (isTmux && msg.role === 'human'))) return;
 
       const newMsg = {
         id: `jsonl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -299,6 +300,10 @@ export default function App() {
         role: msg.role,
         content: msg.content,
         toolUses: msg.toolUses,
+        // Artifact の公開先（role: 'artifact' のときだけ入る）
+        url: msg.url,
+        title: msg.title,
+        path: msg.path,
         timestamp: msg.timestamp || new Date().toISOString(),
       };
 
@@ -535,6 +540,10 @@ export default function App() {
         role: m.role,
         content: m.content,
         toolUses: m.toolUses,
+        // Artifact の公開先（role: 'artifact' のときだけ入る）
+        url: m.url,
+        title: m.title,
+        path: m.path,
         timestamp: m.timestamp || new Date().toISOString(),
         // 境界がある: timestamp が境界以下 / 不在を履歴扱い、境界より新しければ通常表示
         // 境界がない: 従来通り全件履歴扱い（bridgeId 不明な resume 即時ロード等）

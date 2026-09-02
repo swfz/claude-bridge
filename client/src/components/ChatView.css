@@ -49,6 +49,42 @@
   max-width: 70%;
 }
 
+/* Artifact の公開リンク。中央寄せの控えめなカード。
+   各メッセージは div でラップされていて .chat-message 自身は flex item ではないので、
+   中央寄せは align-self ではなく fit-content + auto マージンで作る */
+.chat-message.artifact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 70%;
+  margin: 0 auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-secondary);
+  font-size: 13px;
+  /* 本文（.chat-message-body）を持たないので padding は自分で持つ */
+  padding: 6px 12px;
+}
+
+.artifact-message-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.artifact-message-label {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.artifact-message-link {
+  color: var(--accent-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-message.history {
   opacity: 0.6;
 }

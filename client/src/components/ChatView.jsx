@@ -5,8 +5,10 @@ import { remarkAlert } from 'remark-github-blockquote-alert';
 import { EXT_TO_LANG, highlightLines } from '../highlight.js';
 import { PREVIEWABLE_EXTS, getExt } from '../utils/previewExts.js';
 import { useStickToBottom } from '../hooks/useStickToBottom.js';
+import { collectArtifacts } from '../utils/artifacts.js';
 import FilePreview from './FilePreview.jsx';
 import CodeBlock from './CodeBlock.jsx';
+import ArtifactStrip from './ArtifactStrip.jsx';
 import './ChatView.css';
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
@@ -267,6 +269,29 @@ export function ChatMessage({
       </div>
     );
   }
+
+  // Artifact の publish（claude.ai の共有ページ）。本文は無いのでリンクだけ出す
+  if (message.role === 'artifact') {
+    return (
+      <div
+        className={`chat-message artifact ${isHistory ? 'history' : ''}`}
+        data-message-uuid={message.uuid || undefined}
+      >
+        <span className="artifact-message-icon">🔗</span>
+        <span className="artifact-message-label">Artifact を公開</span>
+        <a
+          className="artifact-message-link"
+          href={message.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={message.path || message.url}
+        >
+          {message.title || message.content || message.url}
+        </a>
+        <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
+      </div>
+    );
+  }
   const messageThreads = (threads || []).filter((t) => t.messageId === message.id);
   // このメッセージ（uuid）に紐付いたコメント
   const messageComments = (comments || []).filter(
@@ -506,6 +531,9 @@ export default function ChatView({
   // 最下部にいる間だけ新着に追従する（上を読んでいる最中に引き戻さない）
   const { scrollRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(messages, sessionId);
 
+  // このセッションで公開した Artifact（URL ごとに 1 件）
+  const artifacts = useMemo(() => collectArtifacts(messages), [messages]);
+
   // コメント一覧から指定の messageUuid へスクロール（ベストエフォート）
   useEffect(() => {
     if (!jumpToUuid || !scrollRef.current) return;
@@ -520,6 +548,7 @@ export default function ChatView({
 
   return (
     <div className="chat-view" ref={scrollRef} onScroll={onScroll}>
+      {messages.length > 0 && <ArtifactStrip artifacts={artifacts} />}
       {messages.length === 0 ? (
         <div className="chat-empty">Chat モード — Claude の出力がここに表示されます</div>
       ) : (

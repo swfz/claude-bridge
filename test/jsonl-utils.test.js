@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractTextContent, extractToolUses } from '../server/jsonl-utils.js';
+import { extractArtifactPublish, extractTextContent, extractToolUses } from '../server/jsonl-utils.js';
 
 describe('extractTextContent', () => {
   it('returns empty for null/undefined', () => {
@@ -51,6 +51,18 @@ describe('extractToolUses', () => {
 
   it('returns empty when content is not array', () => {
     assert.deepEqual(extractToolUses({ content: 'text' }), []);
+  });
+
+  it('summarizes Artifact tool by action / target file', () => {
+    const msg = {
+      content: [
+        { type: 'tool_use', id: 'a', name: 'Artifact', input: { file_path: '/tmp/x/report.html' } },
+        { type: 'tool_use', id: 'b', name: 'Artifact', input: { action: 'list' } },
+      ],
+    };
+    const [publish, list] = extractToolUses(msg);
+    assert.equal(publish.summary, 'publish .../x/report.html');
+    assert.equal(list.summary, 'list');
   });
 
   it('extracts tool_use blocks', () => {
@@ -159,5 +171,76 @@ describe('extractToolUses', () => {
       content: [{ type: 'tool_use', id: 't1', name: 'AskUserQuestion', input: {} }],
     };
     assert.equal(extractToolUses(msg)[0].summary, 'AskUserQuestion');
+  });
+});
+
+describe('extractArtifactPublish', () => {
+  const publishRecord = (toolUseResult, block = {}) => ({
+    type: 'user',
+    uuid: 'u1',
+    timestamp: '2026-06-19T07:50:17.709Z',
+    message: {
+      role: 'user',
+      content: [{ tool_use_id: 'toolu_1', type: 'tool_result', content: 'Published ...', ...block }],
+    },
+    toolUseResult,
+  });
+
+  const URL = 'https://claude.ai/code/artifact/46f54464-0000-0000-0000-000000000000';
+
+  it('extracts url/title/path from a successful publish', () => {
+    const record = publishRecord({ url: URL, path: '/tmp/report.html', title: 'dotfiles レポート' });
+    assert.deepEqual(extractArtifactPublish(record), {
+      url: URL,
+      title: 'dotfiles レポート',
+      path: '/tmp/report.html',
+    });
+  });
+
+  it('falls back to the file basename when title is missing', () => {
+    const record = publishRecord({ url: URL, path: '/home/user/work/report.html' });
+    assert.equal(extractArtifactPublish(record).title, 'report.html');
+  });
+
+  it('falls back to the url when neither title nor path is present', () => {
+    assert.equal(extractArtifactPublish(publishRecord({ url: URL })).title, URL);
+    assert.equal(extractArtifactPublish(publishRecord({ url: URL })).path, null);
+  });
+
+  it('returns null for a failed publish (string toolUseResult + is_error)', () => {
+    const record = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ tool_use_id: 'toolu_1', type: 'tool_result', content: 'Error', is_error: true }],
+      },
+      toolUseResult: 'Error: publish failed',
+    };
+    assert.equal(extractArtifactPublish(record), null);
+  });
+
+  it('returns null when the tool_result block is an error even with a url', () => {
+    assert.equal(extractArtifactPublish(publishRecord({ url: URL }, { is_error: true })), null);
+  });
+
+  it('returns null for urls outside claude.ai', () => {
+    assert.equal(extractArtifactPublish(publishRecord({ url: 'https://example.com/artifact/1' })), null);
+    assert.equal(extractArtifactPublish(publishRecord({ url: 'http://claude.ai/code/artifact/1' })), null);
+  });
+
+  it('returns null for read/list results that carry no url', () => {
+    assert.equal(extractArtifactPublish(publishRecord({ read: true, artifactRead: '<html>' })), null);
+    assert.equal(extractArtifactPublish(publishRecord({ artifacts: [{ url: URL }] })), null);
+  });
+
+  it('returns null for non-user records and missing/odd input', () => {
+    assert.equal(extractArtifactPublish(null), null);
+    assert.equal(extractArtifactPublish({ type: 'assistant', toolUseResult: { url: URL } }), null);
+    assert.equal(extractArtifactPublish({ type: 'user', toolUseResult: 'plain string' }), null);
+    // content が配列でない（tool_result ブロックを確かめられない）
+    assert.equal(
+      extractArtifactPublish({ type: 'user', message: { content: 'text' }, toolUseResult: { url: URL } }),
+      null,
+    );
   });
 });

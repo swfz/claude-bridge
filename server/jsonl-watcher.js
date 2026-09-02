@@ -1,6 +1,12 @@
 import { watch, readFileSync, readdirSync, statSync } from 'fs';
 import { join, basename } from 'path';
-import { CLAUDE_PROJECTS_DIR, cwdToProjectDir, extractTextContent, extractToolUses } from './jsonl-utils.js';
+import {
+  CLAUDE_PROJECTS_DIR,
+  cwdToProjectDir,
+  extractArtifactPublish,
+  extractTextContent,
+  extractToolUses,
+} from './jsonl-utils.js';
 
 export class JsonlWatcher {
   constructor() {
@@ -193,6 +199,22 @@ export class JsonlWatcher {
               role: 'human',
               content: text,
               // JSONL の uuid を安定アンカー（コメント/レビューの位置）として伝播する
+              uuid: record.uuid,
+              timestamp: record.timestamp || '',
+            });
+          }
+          // Artifact の publish は tool_result だけの user レコードなので、
+          // テキスト抽出とは独立に見る（本文が無くても公開リンクは出したい）
+          const artifact = extractArtifactPublish(record);
+          if (artifact) {
+            state.onMessage({
+              type: 'chat_message',
+              bridgeSessionId: state.bridgeSessionId,
+              role: 'artifact',
+              content: artifact.title,
+              url: artifact.url,
+              title: artifact.title,
+              path: artifact.path,
               uuid: record.uuid,
               timestamp: record.timestamp || '',
             });
