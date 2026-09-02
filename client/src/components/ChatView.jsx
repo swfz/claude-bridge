@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { createContext, memo, useContext, useEffect, useMemo, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
@@ -158,61 +158,77 @@ function preprocessFileUrls(text) {
     .join('');
 }
 
+// react-markdown に渡すものは全部モジュール定数にする。
+// components / remarkPlugins を毎レンダー作り直すと、React には「別のコンポーネント型」に見えて
+// 本文中の code / a 要素が全部アンマウント→再マウントされる（FilePreview が存在確認からやり直して
+// チップ⇄プレーン表示がチラつく）。ハンドラは要素の型に混ぜず context で渡す。
+const MarkdownHandlersContext = createContext({ sessionCwd: null, onOpenPreview: null, onOpenFileReview: null });
+const REMARK_PLUGINS = [remarkGfm, remarkAlert];
+const identityUrl = (url) => url;
+
+// react-markdown は hast の node も props で渡してくるので DOM に漏らさないよう抜く
+// eslint-disable-next-line no-unused-vars
+function MdCode({ className, children, node, ...props }) {
+  const { sessionCwd, onOpenPreview, onOpenFileReview } = useContext(MarkdownHandlersContext);
+  const isInline = !className;
+  if (isInline) {
+    const text = String(children).trim();
+    // インラインコード内の file:// URL を FilePreview に変換
+    if (isFileUrl(text)) {
+      return <FilePreview href={text} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />;
+    }
+    // ファイルパスを FilePreview に変換（絶対パス or CWD+相対パス）
+    const resolved = resolveFilePath(text, sessionCwd);
+    if (resolved) {
+      return (
+        <FilePreview href={`file://${resolved}`} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
+      );
+    }
+    return (
+      <code className="inline-code" {...props}>
+        {children}
+      </code>
+    );
+  }
+  return <CodeBlock className={className}>{children}</CodeBlock>;
+}
+
+// eslint-disable-next-line no-unused-vars
+function MdAnchor({ href, children, node, ...props }) {
+  const { onOpenPreview, onOpenFileReview } = useContext(MarkdownHandlersContext);
+  if (isFileUrl(href)) {
+    return <FilePreview href={href} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />;
+  }
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+      {children}
+    </a>
+  );
+}
+
+const MARKDOWN_COMPONENTS = { code: MdCode, a: MdAnchor };
+
 function MarkdownContent({ content, sessionCwd, onOpenPreview, onOpenFileReview }) {
-  const processed = preprocessFileUrls(content);
+  const processed = useMemo(() => preprocessFileUrls(content), [content]);
+  const handlers = useMemo(
+    () => ({ sessionCwd, onOpenPreview, onOpenFileReview }),
+    [sessionCwd, onOpenPreview, onOpenFileReview],
+  );
 
   return (
-    <Markdown
-      remarkPlugins={[remarkGfm, remarkAlert]}
-      urlTransform={(url) => url}
-      components={{
-        code({ className, children, ...props }) {
-          const isInline = !className;
-          if (isInline) {
-            const text = String(children).trim();
-            // インラインコード内の file:// URL を FilePreview に変換
-            if (isFileUrl(text)) {
-              return <FilePreview href={text} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />;
-            }
-            // ファイルパスを FilePreview に変換（絶対パス or CWD+相対パス）
-            const resolved = resolveFilePath(text, sessionCwd);
-            if (resolved) {
-              return (
-                <FilePreview
-                  href={`file://${resolved}`}
-                  onOpenPreview={onOpenPreview}
-                  onOpenFileReview={onOpenFileReview}
-                />
-              );
-            }
-            return (
-              <code className="inline-code" {...props}>
-                {children}
-              </code>
-            );
-          }
-          return <CodeBlock className={className}>{children}</CodeBlock>;
-        },
-        a({ href, children, ...props }) {
-          if (isFileUrl(href)) {
-            return <FilePreview href={href} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />;
-          }
-          return (
-            <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
-              {children}
-            </a>
-          );
-        },
-      }}
-    >
-      {processed}
-    </Markdown>
+    <MarkdownHandlersContext.Provider value={handlers}>
+      <Markdown remarkPlugins={REMARK_PLUGINS} urlTransform={identityUrl} components={MARKDOWN_COMPONENTS}>
+        {processed}
+      </Markdown>
+    </MarkdownHandlersContext.Provider>
   );
 }
 
 // サブエージェントのトランスクリプト（SubagentDrawer）からも使うので export する。
 // その場合 threads/comments は空、操作ハンドラは渡らない（readonly 表示）。
-export function ChatMessage({
+// 5 秒ごとのポーリング（subagent_tasks 等）で App が再描画されても本文を作り直さないよう memo する。
+// 親から渡す props は App 側で useCallback / state の参照を保っている前提
+export const ChatMessage = memo(function ChatMessage({
   message,
   threads,
   comments,
@@ -484,7 +500,7 @@ export function ChatMessage({
       )}
     </div>
   );
-}
+});
 
 export default function ChatView({
   messages,
