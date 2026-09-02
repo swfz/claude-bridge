@@ -85,9 +85,7 @@ function toolUseSummary(name, input) {
       return input.description || 'Agent';
     case 'Artifact':
       // publish 以外（read/list 等）は action 名、publish は対象ファイルを出す
-      return input.action && input.action !== 'publish'
-        ? input.action
-        : `publish ${shortPath(input.file_path)}`.trim();
+      return input.action && input.action !== 'publish' ? input.action : `publish ${shortPath(input.file_path)}`.trim();
     case 'AskUserQuestion':
       // 回答済みの選択肢は会話ログに残るので、何を聞かれたかが分かるようにする
       return (
