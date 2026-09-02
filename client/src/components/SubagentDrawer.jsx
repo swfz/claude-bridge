@@ -5,6 +5,8 @@ import './SubagentDrawer.css';
 
 // 実行中のサブエージェントの会話を取り直す間隔
 const TRANSCRIPT_POLL_INTERVAL = 4000;
+// memo した ChatMessage に毎レンダー新しい [] を渡すと比較が外れるので共有の空配列を使う
+const EMPTY = [];
 
 // サブエージェントの会話トランスクリプトを右サイドのドロワーで見せる。
 // 会話の描画は ChatView の ChatMessage を再利用する（readonly 固定）。
@@ -65,7 +67,14 @@ export default function SubagentDrawer({
             </div>
           ) : (
             items.map((m) => (
-              <ChatMessage key={m.id} message={m} threads={[]} comments={[]} onOpenPreview={onOpenPreview} readonly />
+              <ChatMessage
+                key={m.id}
+                message={m}
+                threads={EMPTY}
+                comments={EMPTY}
+                onOpenPreview={onOpenPreview}
+                readonly
+              />
             ))
           )}
 

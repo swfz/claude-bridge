@@ -1025,6 +1025,26 @@ export default function App() {
     [messagesBySession, activeSessionId],
   );
 
+  // プレビュー系ハンドラ。inline の arrow で渡すと毎レンダー別物になり、memo した ChatMessage の
+  // 再描画抑止が効かないので useCallback で固定する。messagesBySession はどのセッションに 1 通届いても
+  // identity が変わる（依存に入れるとストリーミング中は毎回作り直しになる）ため ref で読む
+  const messagesBySessionRef = useRef(messagesBySession);
+  messagesBySessionRef.current = messagesBySession;
+  const currentMessageCount = () => (messagesBySessionRef.current[activeSessionIdRef.current] || []).length;
+  const handleOpenPreview = useCallback((path) => {
+    setPreviewData({ filePath: path });
+    setDrawerOpenedAt(currentMessageCount());
+  }, []);
+  const handlePreviewMarkdown = useCallback((markdown, title) => {
+    setPreviewData({ markdown, title });
+    setDrawerOpenedAt(currentMessageCount());
+  }, []);
+  const handleOpenFileReview = useCallback((path) => {
+    setPreviewData({ filePath: path, reviewMode: true });
+    setDrawerOpenedAt(currentMessageCount());
+  }, []);
+  const handleJumpDone = useCallback(() => setJumpToUuid(null), []);
+
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -1168,10 +1188,7 @@ export default function App() {
             {showFileExplorer && sessionUiVisible && (
               <FileExplorer
                 cwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
-                onOpenPreview={(path) => {
-                  setPreviewData({ filePath: path });
-                  setDrawerOpenedAt(messages.length);
-                }}
+                onOpenPreview={handleOpenPreview}
               />
             )}
             <main className="app-main">
@@ -1226,19 +1243,10 @@ export default function App() {
                     onAddAnchoredComment={handleAddAnchoredComment}
                     onDeleteComment={handleDeleteComment}
                     jumpToUuid={jumpToUuid}
-                    onJumpDone={() => setJumpToUuid(null)}
-                    onOpenPreview={(path) => {
-                      setPreviewData({ filePath: path });
-                      setDrawerOpenedAt(messages.length);
-                    }}
-                    onPreviewMarkdown={(markdown, title) => {
-                      setPreviewData({ markdown, title });
-                      setDrawerOpenedAt(messages.length);
-                    }}
-                    onOpenFileReview={(path) => {
-                      setPreviewData({ filePath: path, reviewMode: true });
-                      setDrawerOpenedAt(messages.length);
-                    }}
+                    onJumpDone={handleJumpDone}
+                    onOpenPreview={handleOpenPreview}
+                    onPreviewMarkdown={handlePreviewMarkdown}
+                    onOpenFileReview={handleOpenFileReview}
                     readonly={isReadonly}
                     sessionId={activeSessionId}
                   />
@@ -1352,10 +1360,7 @@ export default function App() {
           status={subagentDrawer.status}
           messages={subagentDrawer.messages}
           onRequestTranscript={handleRequestTranscript}
-          onOpenPreview={(path) => {
-            setPreviewData({ filePath: path });
-            setDrawerOpenedAt(messages.length);
-          }}
+          onOpenPreview={handleOpenPreview}
           onClose={() => setSubagentDrawer(null)}
         />
       )}
