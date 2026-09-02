@@ -77,6 +77,8 @@ export default function App() {
   const [shareMode, setShareMode] = useState(loadShareMode);
   // タブ側は「隠すかどうか」の判定だけなので Set にして毎タブの includes を避ける
   const sensitiveIds = useMemo(() => new Set(sensitiveSessions), [sensitiveSessions]);
+  // Star も同じ理由で Set 化してタブリストに渡す（表示専用。付け外しはホームで行う）
+  const starredIds = useMemo(() => new Set(starredSessions), [starredSessions]);
   // 「ターン完了（未確認）」印を付けたタブの id（tmux のベル通知相当）。サーバーには持たせない。
   const [attentionIds, setAttentionIds] = useState(() => new Set());
   // 直近の session_list の status スナップショット（busy -> 非busy の遷移検出に使う）
@@ -1149,6 +1151,7 @@ export default function App() {
           homeActive={showHome}
           attentionIds={attentionIds}
           sensitiveIds={sensitiveIds}
+          starredIds={starredIds}
           shareMode={shareMode}
           onHome={() => setShowHome(true)}
           onSelect={handleSwitchSession}

@@ -54,6 +54,7 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - `App.jsx` -- 状態管理の中心。`sessionsRef` で sessions の最新値を参照（stale closure 対策）
 - `ChatView.jsx` -- highlight.js は静的 import で13言語を登録。`EditDiff` は全文ハイライト後に行分割。**新着への自動スクロールは「最下部付近にいる間だけ」**（`hooks/useStickToBottom.js`）。上にスクロールして過去を読んでいる最中は位置を動かさず、代わりに `.scroll-to-latest`（「↓ 新しいメッセージ」）を sticky で出して押されたら末尾へ戻す。追従の再開判定は `utils/scroll.js` の `isScrolledToBottom()`（余白 80px）。タブ切替（`sessionId` = resetKey の変化）では追従状態に戻す
 - `ThreadPanel.jsx` -- リサイズハンドルは `widthRef` で useCallback の依存を空に
+- `SessionTabs.jsx` -- 左サイドバーのタブリスト。**Star（★）とセンシティブ指定（🔒）は表示専用**で、付け外しはホーム側だけ（キーはホームと同じ `claudeSessionId`）。折りたたみ時は状態ドットが右上なので印は左下に重ね、下地（`background: inherit`）を敷いて頭文字と重なっても読めるようにする
 - `HomeView.jsx` -- ホーム画面（起動中セッション＋直近セッション）。`utils/runningSessions.js` の純粋関数で突合・整形
 - `RateLimitMeter.jsx` -- ヘッダー右側の 5h/7d レート制限メーター。`rate_limits` メッセージを表示するだけの純表示コンポーネント（データが無ければ非表示）。バー色は使用率で `--success` / `--warning` / `--accent`、ツールチップにリセット時刻・残り時間・モデル別 weekly・取得時刻。`fetchedAt` が 10 分より古い（statusline 連携が止まっている＝セッション非稼働の疑い）と `stale` クラスで薄く表示し、ツールチップにも注記する（60 秒間隔の内部 tick で再判定するだけで、データ自体はサーバー push 任せ）
 - `ActivityPanel.jsx` -- ホーム最上段の活動パネル。`activity_heatmap`（365 日分）を描くだけの純表示コンポーネントで、集計・整形は `utils/heatmap.js` の純粋関数が持つ。**同じデータを 3 ビューで見せる**（`HeatmapView` / `DailyView` / `WeekdayView` の小コンポーネントを 1 ファイルに同居）。ビュー・メトリック（メッセージ / トークン）・開閉は localStorage（`homeActivityView` / `homeHeatmapMetric` / `homeHeatmapOpen`）に覚える
