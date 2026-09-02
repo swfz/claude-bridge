@@ -369,3 +369,42 @@ body.light-mode .tab-badge-attention {
   top: 2px;
   right: 2px;
 }
+
+/* ==== Star / センシティブの印（表示専用。付け外しはホーム側） ==== */
+
+.tab-mark {
+  font-size: 10px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.tab-mark-star {
+  color: #f0ad4e;
+  font-size: 11px;
+}
+
+.tab-mark-lock {
+  opacity: 0.75;
+}
+
+/* 折りたたみ時は状態ドット（右上）とぶつからないよう左下に寄せる。
+   頭文字と重なる位置なので、下地を敷いて読めるようにする */
+.tab-mini-marks {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 0 2px 1px;
+  border-radius: 4px 0 0 4px;
+  background: inherit;
+}
+
+.tab-mini-marks .tab-mark {
+  font-size: 9px;
+}
+
+.tab-mini-marks .tab-mark-star {
+  font-size: 10px;
+}

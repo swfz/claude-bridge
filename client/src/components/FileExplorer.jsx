@@ -1,15 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FileIcon, FolderIcon } from './fileIcons.jsx';
 import { getExt, isPreviewable } from '../utils/previewExts.js';
+import {
+  CWD_ROOT,
+  addCustomRoot,
+  buildRootOptions,
+  loadCustomRoots,
+  loadRoot,
+  normalizeRootInput,
+  resolveRootPath,
+  rootLabel,
+  saveCustomRoots,
+  saveRoot,
+} from '../utils/filerRoots.js';
 import './FileExplorer.css';
 
 function joinPath(parent, name) {
   return parent.endsWith('/') ? `${parent}${name}` : `${parent}/${name}`;
 }
 
-// cwd からの相対ディレクトリ部分（検索結果で「どこにあるか」を示す）。直下なら ""。
-function relativeDir(cwd, full) {
-  let rel = full.startsWith(cwd) ? full.slice(cwd.length) : full;
+// ルートからの相対ディレクトリ部分（検索結果で「どこにあるか」を示す）。直下なら ""。
+function relativeDir(root, full) {
+  let rel = root && full.startsWith(root) ? full.slice(root.length) : full;
   rel = rel.replace(/^\/+/, '');
   const idx = rel.lastIndexOf('/');
   return idx >= 0 ? rel.slice(0, idx + 1) : '';
@@ -144,13 +156,48 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
     document.addEventListener('mouseup', onUp);
   }, []);
 
-  // ファイル名検索（cwd 配下を再帰検索。空のときはツリー表示）
+  // ルート（起点ディレクトリ）。cwd 以外（~/tmp 等）も見たいので切り替えられるようにする。
+  // 実際に開けるかはサーバー側のサンドボックス（home / /tmp 配下）が決める。
+  const [roots, setRoots] = useState(null);
+  const [rootValue, setRootValue] = useState(loadRoot);
+  const [customRoots, setCustomRoots] = useState(loadCustomRoots);
+  const [pathInput, setPathInput] = useState('');
+  const [showPathInput, setShowPathInput] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/roots')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setRoots(data);
+      })
+      .catch(() => {
+        // ルート候補が取れなくても cwd だけで動くので黙って諦める
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    saveRoot(rootValue);
+  }, [rootValue]);
+
+  useEffect(() => {
+    saveCustomRoots(customRoots);
+  }, [customRoots]);
+
+  const home = roots?.home || null;
+  const rootOptions = buildRootOptions({ cwd, home, homeTmp: roots?.homeTmp, customRoots });
+  const rootPath = resolveRootPath(rootValue, { cwd, home });
+
+  // ファイル名検索（選択中のルート配下を再帰検索。空のときはツリー表示）
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState({ matches: [], truncated: false, loading: false });
 
   useEffect(() => {
     const q = query.trim();
-    if (!cwd || !q) {
+    if (!rootPath || !q) {
       setSearch({ matches: [], truncated: false, loading: false });
       return;
     }
@@ -158,7 +205,7 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
     let cancelled = false;
     const id = setTimeout(async () => {
       try {
-        const res = await fetch(`/search?path=${encodeURIComponent(cwd)}&q=${encodeURIComponent(q)}`);
+        const res = await fetch(`/search?path=${encodeURIComponent(rootPath)}&q=${encodeURIComponent(q)}`);
         const data = res.ok ? await res.json() : { matches: [], truncated: false };
         if (!cancelled) setSearch({ matches: data.matches || [], truncated: !!data.truncated, loading: false });
       } catch {
@@ -169,9 +216,25 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
       cancelled = true;
       clearTimeout(id);
     };
-  }, [query, cwd]);
+  }, [query, rootPath]);
 
-  if (!cwd) {
+  const applyPathInput = () => {
+    const path = normalizeRootInput(pathInput, home);
+    if (!path) return;
+    setCustomRoots((list) =>
+      addCustomRoot(
+        list,
+        path,
+        rootOptions.map((o) => o.path),
+      ),
+    );
+    setRootValue(path);
+    setPathInput('');
+    setShowPathInput(false);
+  };
+
+  // cwd が無く /roots も取れていない間は開くものが決まらない
+  if (!rootPath) {
     return (
       <div className="file-explorer" style={{ width, minWidth: width }}>
         <div className="file-explorer-header">ファイラ</div>
@@ -182,18 +245,57 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
     );
   }
 
-  const rootName = cwd.split('/').filter(Boolean).pop() || cwd;
-
+  const rootName = rootPath.split('/').filter(Boolean).pop() || rootPath;
   const searching = query.trim().length > 0;
 
   return (
     <div className="file-explorer" style={{ width, minWidth: width }}>
-      <div className="file-explorer-header" title={cwd}>
+      <div className="file-explorer-header" title={rootPath}>
         <span className="explorer-header-icon">
           <FolderIcon root size={16} />
         </span>
         <span className="explorer-header-name">{rootName}</span>
+        <select
+          className="explorer-root-select"
+          value={rootOptions.some((o) => o.value === rootValue) ? rootValue : CWD_ROOT}
+          onChange={(e) => {
+            if (e.target.value === '__custom__') {
+              setShowPathInput(true);
+              return;
+            }
+            setRootValue(e.target.value);
+          }}
+          title={`ルート: ${rootLabel(rootPath, home)}`}
+        >
+          {rootOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+          <option value="__custom__">パスを指定...</option>
+        </select>
       </div>
+      {showPathInput && (
+        <div className="file-explorer-path-input">
+          <input
+            type="text"
+            autoFocus
+            value={pathInput}
+            onChange={(e) => setPathInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyPathInput();
+              if (e.key === 'Escape') {
+                setPathInput('');
+                setShowPathInput(false);
+              }
+            }}
+            placeholder="~/tmp/retrospectives"
+          />
+          <button onClick={applyPathInput} title="このパスを開く">
+            開く
+          </button>
+        </div>
+      )}
       <div className="file-explorer-search">
         <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ファイル名で検索..." />
         {searching && (
@@ -217,14 +319,21 @@ export default function FileExplorer({ cwd, onOpenPreview }) {
                   name={m.name}
                   depth={0}
                   onOpenPreview={onOpenPreview}
-                  subPath={relativeDir(cwd, m.path)}
+                  subPath={relativeDir(rootPath, m.path)}
                 />
               ))}
               {search.truncated && <p className="explorer-empty-state">（結果が多いため一部のみ表示）</p>}
             </>
           )
         ) : (
-          <DirNode key={cwd} path={cwd} name={rootName} depth={0} initiallyOpen onOpenPreview={onOpenPreview} />
+          <DirNode
+            key={rootPath}
+            path={rootPath}
+            name={rootName}
+            depth={0}
+            initiallyOpen
+            onOpenPreview={onOpenPreview}
+          />
         )}
       </div>
       <div className="file-explorer-resize-handle" onMouseDown={onDragStart} />

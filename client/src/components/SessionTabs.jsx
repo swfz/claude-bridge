@@ -35,6 +35,7 @@ export default function SessionTabs({
   homeActive,
   attentionIds,
   sensitiveIds,
+  starredIds,
   shareMode,
   onHome,
   onSelect,
@@ -119,6 +120,9 @@ export default function SessionTabs({
             const { parent, project, worktree } = parseCwd(session.cwd);
             const hasAttention = session.alive && attentionIds?.has(session.id);
             const isWaiting = Boolean(session.waitingFor) && session.alive;
+            // Star / センシティブはホームと同じ claudeSessionId 単位。ここは表示専用（付け外しはホーム）
+            const isStarredTab = Boolean(session.claudeSessionId && starredIds?.has(session.claudeSessionId));
+            const isSensitiveTab = Boolean(session.claudeSessionId && sensitiveIds?.has(session.claudeSessionId));
             const className = `tab ${session.id === activeSessionId ? 'active' : ''} ${!session.alive ? 'dead' : ''} ${hasAttention ? 'tab-attention' : ''}`;
 
             if (collapsed) {
@@ -131,16 +135,23 @@ export default function SessionTabs({
                 : hasAttention
                   ? ' / 完了（未確認）'
                   : '';
+              const markLabel = `${isStarredTab ? ' / ★ Star' : ''}${isSensitiveTab ? ' / 🔒 共有時は非表示' : ''}`;
               return (
                 <div
                   key={session.id}
                   className={`${className} tab-mini ${isWaiting ? 'tab-mini-waiting' : ''}`}
                   onClick={() => session.alive && onSelect(session.id)}
-                  title={`${session.name}${typeLabel}${stateLabel}\n${session.cwd || ''}`}
+                  title={`${session.name}${typeLabel}${stateLabel}${markLabel}\n${session.cwd || ''}`}
                 >
                   <span className="tab-mini-avatar">{miniLabel(project)}</span>
                   {session.status && (
                     <span className={`tab-status tab-status-${session.status}`} title={session.status} />
+                  )}
+                  {(isStarredTab || isSensitiveTab) && (
+                    <span className="tab-mini-marks">
+                      {isStarredTab && <span className="tab-mark tab-mark-star">★</span>}
+                      {isSensitiveTab && <span className="tab-mark tab-mark-lock">🔒</span>}
+                    </span>
                   )}
                 </div>
               );
@@ -151,6 +162,16 @@ export default function SessionTabs({
                 <div className="tab-row">
                   {session.status && (
                     <span className={`tab-status tab-status-${session.status}`} title={session.status} />
+                  )}
+                  {isStarredTab && (
+                    <span className="tab-mark tab-mark-star" title="Star 付き（未解決／続きをやる）">
+                      ★
+                    </span>
+                  )}
+                  {isSensitiveTab && (
+                    <span className="tab-mark tab-mark-lock" title="共有モード中は隠すセッション">
+                      🔒
+                    </span>
                   )}
                   {session.type === 'tmux' && <span className="tab-badge">tmux</span>}
                   {session.type === 'readonly' && <span className="tab-badge">閲覧</span>}

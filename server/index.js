@@ -160,6 +160,16 @@ app.get('/ls', (req, res) => {
   res.json({ path: safe.canonical, entries });
 });
 
+// ファイラのルート候補
+// サンドボックス（home / /tmp 配下）の起点をクライアントに教えるだけ。
+// クライアント側は絶対パスだけを扱えるようにしたいので `~` の展開はここで済ませる。
+app.get('/roots', (req, res) => {
+  const home = resolve(process.env.HOME || '/home');
+  const homeTmp = join(home, 'tmp');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json({ home, tmp: '/tmp', homeTmp: existsSync(homeTmp) ? homeTmp : null });
+});
+
 // ファイラ用の再帰ファイル名検索
 // /search?path=<dir>&q=<term>
 // cwd 配下を walk し、ファイル名に q を含むものを返す。隠し/node_modules は除外、
