@@ -78,6 +78,16 @@ function previewUrl(localPath) {
 
 let commentIdSeq = 0;
 
+// 書きかけのレビュー項目。ドロワーは閉じるとアンマウントされる（App の previewData が null になる）ので、
+// InputBar の drafts と同じくモジュールレベルに置いて同じファイルを開き直したときに復元する。
+// キーは filePath（Markdown プレビューは title）。リロードで消えるのは書きかけとして許容する。
+const reviewDrafts = new Map();
+
+function reviewDraftKey(filePath, title) {
+  if (filePath) return filePath;
+  return title ? `md:${title}` : null;
+}
+
 export default function PreviewDrawer({
   filePath,
   markdown,
@@ -100,7 +110,14 @@ export default function PreviewDrawer({
   const isMarkdownFile = MARKDOWN_EXTS.includes(ext);
   const [fileContent, setFileContent] = useState(null);
   const [loadError, setLoadError] = useState(false);
-  const [reviewItems, setReviewItems] = useState([]);
+  const draftKey = reviewDraftKey(filePath, title);
+  const [reviewItems, setReviewItems] = useState(() => (draftKey && reviewDrafts.get(draftKey)) || []);
+  // 項目が変わるたびに下書きへ写す（空になったら消す）
+  useEffect(() => {
+    if (!draftKey) return;
+    if (reviewItems.length === 0) reviewDrafts.delete(draftKey);
+    else reviewDrafts.set(draftKey, reviewItems);
+  }, [draftKey, reviewItems]);
   // このプレビューを開いている間に「残した」コメント（送信せず保存済み・参照用）
   const [savedComments, setSavedComments] = useState([]);
   const [selectionPopup, setSelectionPopup] = useState(null);
