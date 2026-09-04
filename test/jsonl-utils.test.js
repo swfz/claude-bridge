@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractArtifactPublish, extractTextContent, extractToolUses } from '../server/jsonl-utils.js';
+import { cwdToProjectDir, extractArtifactPublish, extractTextContent, extractToolUses } from '../server/jsonl-utils.js';
 
 describe('extractTextContent', () => {
   it('returns empty for null/undefined', () => {
@@ -242,5 +242,19 @@ describe('extractArtifactPublish', () => {
       extractArtifactPublish({ type: 'user', message: { content: 'text' }, toolUseResult: { url: URL } }),
       null,
     );
+  });
+});
+
+describe('cwdToProjectDir', () => {
+  it('/ を - に置き換える', () => {
+    assert.equal(cwdToProjectDir('/home/user/proj'), '-home-user-proj');
+  });
+
+  it('. や _ など英数字以外も - にする（Claude Code の projects ディレクトリ名と同じ規則）', () => {
+    assert.equal(
+      cwdToProjectDir('/home/user/gh/claude-bridge/.claude/worktrees/feat-x'),
+      '-home-user-gh-claude-bridge--claude-worktrees-feat-x',
+    );
+    assert.equal(cwdToProjectDir('/tmp/my_dir.v2'), '-tmp-my-dir-v2');
   });
 });

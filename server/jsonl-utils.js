@@ -3,10 +3,12 @@ import { homedir } from 'os';
 
 export const CLAUDE_PROJECTS_DIR = process.env.CLAUDE_BRIDGE_PROJECTS_DIR || join(homedir(), '.claude', 'projects');
 
-// cwd からプロジェクトディレクトリ名を算出
+// cwd からプロジェクトディレクトリ名を算出。Claude Code は `/` だけでなく英数字以外を
+// すべて `-` にする（`.claude/worktrees/x` → `--claude-worktrees-x`。実測 v2.1.260）ので同じ規則で写す。
+// `/` だけ置換すると worktree 配下の cwd で JSONL が見つからず、tmux タブに履歴もタスクも出ない
 // e.g. /path/to/project → -path-to-project
 export function cwdToProjectDir(cwd) {
-  return cwd.replace(/\//g, '-');
+  return cwd.replace(/[^A-Za-z0-9]/g, '-');
 }
 
 // message オブジェクトからテキストを取り出す（maxLen=0 で全文）
