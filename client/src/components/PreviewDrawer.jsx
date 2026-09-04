@@ -835,7 +835,7 @@ export default function PreviewDrawer({
     }, 60);
     return () => {
       clearTimeout(id);
-      bodyRef.current?.querySelectorAll('.comment-anchored').forEach((e) => e.classList.remove('comment-anchored'));
+      body.querySelectorAll('.comment-anchored').forEach((e) => e.classList.remove('comment-anchored'));
     };
   }, [displaySaved, markdownToRender, markdownBody, fileContent, isText, isMarkdownFile, width, lightMode]);
 

@@ -175,7 +175,7 @@ export function useNumberPick({
       return;
     }
     dispatch(action);
-  }, []);
+  }, [subLimitOf]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);

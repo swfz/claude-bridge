@@ -657,7 +657,7 @@ export default function ChatView({
       const msg = pickable[pickable.length - n];
       if (!msg || !onPickMessageForReview) return;
       // 行が指定されていれば、そのソース行に対応する表示ブロックの文を引用にする
-      let quote = '';
+      let quote;
       if (line != null) {
         const body = messageElOf(n)?.querySelector('.chat-message-body');
         const block = body ? blockForLine(collectSourceBlocks(body), line) : null;
@@ -814,7 +814,7 @@ export default function ChatView({
       setTimeout(() => el.classList.remove('comment-jump-highlight'), 1500);
     }
     onJumpDone?.();
-  }, [jumpToUuid, onJumpDone]);
+  }, [jumpToUuid, onJumpDone, scrollRef]);
 
   return (
     <div className="chat-view" ref={scrollRef} onScroll={onScroll}>
