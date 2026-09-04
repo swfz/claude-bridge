@@ -27,6 +27,14 @@ export function isPickModeShortcut(e) {
   return e.code === 'KeyR' || (e.key || '').toLowerCase() === 'r';
 }
 
+// Alt+I: どこからでも送信欄（InputBar の textarea）へフォーカスを移す。
+// Ctrl/Cmd 系は既存のブラウザ・アプリのショートカットと衝突しやすいので Alt にしてある（他の Alt 系と同じ理由）。
+// キーボードレイアウトによっては Alt 併用で e.key が別文字になるため、物理キー（e.code）も見る。
+export function isFocusInputShortcut(e) {
+  if (!e || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+  return e.code === 'KeyI' || (e.key || '').toLowerCase() === 'i';
+}
+
 // Ctrl/Cmd+Shift+Backspace（Delete）: 今書いている指摘の欄そのものを消す。
 // Ctrl+Backspace 単体は textarea の「単語削除」なので、Shift 併用を必須にして踏み分ける。
 export function isDeleteItemShortcut(e) {
