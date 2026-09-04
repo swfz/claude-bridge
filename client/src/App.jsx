@@ -19,6 +19,7 @@ import AgentSidePanel from './components/AgentSidePanel.jsx';
 import HomeView from './components/HomeView.jsx';
 import RateLimitMeter from './components/RateLimitMeter.jsx';
 import { loadStarred, saveStarred, toggleStarred } from './utils/starredSessions.js';
+import { periodEquals } from './utils/heatmap.js';
 import {
   loadSensitive,
   saveSensitive,
@@ -66,6 +67,10 @@ export default function App() {
   // ホームの「直近のセッション」（終了済みを含む JSONL 由来）。null = 未取得
   const [recentSessions, setRecentSessions] = useState(null);
   const [recentDays, setRecentDays] = useState(() => Number(localStorage.getItem('homeRecentDays')) || 7);
+  // 活動グラフの棒・升目で選んだ期間 {from, to, label}。その場限りの絞り込みなので保存しない
+  const [recentPeriod, setRecentPeriod] = useState(null);
+  const recentPeriodRef = useRef(recentPeriod);
+  recentPeriodRef.current = recentPeriod;
   // ホームの活動ヒートマップ（草）。null = 未取得
   const [heatmap, setHeatmap] = useState(null);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
@@ -429,6 +434,12 @@ export default function App() {
 
   useEffect(() => {
     return on('recent_sessions', (msg) => {
+      // 期間付きの応答は listActiveSessionIds の走査を待つぶん遅く、その間に × や
+      // プリセットで解除された「期間なし」の応答に追い越されることがある。
+      // サーバーがエコーする period と今の選択が食い違う応答は捨てる
+      const current = recentPeriodRef.current;
+      const echoed = msg.period || null;
+      if (!!echoed !== !!current || (echoed && !periodEquals(echoed, current))) return;
       setRecentSessions(msg.sessions || []);
     });
   }, [on]);
@@ -534,7 +545,13 @@ export default function App() {
     [send, activeSessionId],
   );
 
-  // 直近セッションは JSONL 全走査になるので、ホームを開いた時と日数変更時だけ取る。
+  // 日数・期間が変わったときだけ古い一覧を消す（Home ⇄ タブの往復や再接続では残す。
+  // 取得の effect に混ぜると往復のたびに「読み込み中」に戻り、送信が失敗すると復帰できない）
+  useEffect(() => {
+    setRecentSessions(null);
+  }, [recentDays, recentPeriod]);
+
+  // 直近セッションは JSONL 全走査になるので、ホームを開いた時と日数・期間の変更時だけ取る。
   // starred は「期間外でも一覧に含める対象」としてサーバーに渡す
   useEffect(() => {
     if (!showHome || !connected) return;
@@ -542,8 +559,9 @@ export default function App() {
       type: 'list_recent_sessions',
       days: recentDays,
       starred: starredRef.current,
+      ...(recentPeriod ? { period: { from: recentPeriod.from, to: recentPeriod.to } } : {}),
     });
-  }, [showHome, connected, recentDays, send]);
+  }, [showHome, connected, recentDays, recentPeriod, send]);
 
   // 活動ヒートマップも JSONL 由来なので、ホームを開いた時と「更新」時だけ取る。
   // サーバー側はファイル単位のキャッシュを持つので 2 回目以降は差分だけ読む
@@ -1312,6 +1330,8 @@ export default function App() {
                   recentSessions={recentSessions}
                   recentDays={recentDays}
                   onChangeRecentDays={setRecentDays}
+                  recentPeriod={recentPeriod}
+                  onChangeRecentPeriod={setRecentPeriod}
                   starred={starredSessions}
                   onToggleStar={handleToggleStar}
                   sensitive={sensitiveSessions}
@@ -1333,6 +1353,7 @@ export default function App() {
                       type: 'list_recent_sessions',
                       days: recentDays,
                       starred: starredSessions,
+                      ...(recentPeriod ? { period: { from: recentPeriod.from, to: recentPeriod.to } } : {}),
                     });
                     requestHeatmap();
                   }}
