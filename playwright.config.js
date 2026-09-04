@@ -5,9 +5,13 @@ import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const PORT = 3199;
+// 既定は 3199。別の worktree / 別セッションのサーバーが掴んでいると reuseExistingServer で
+// そちらに繋いでしまうため、E2E_PORT で逃がせるようにしてある
+const PORT = Number(process.env.E2E_PORT) || 3199;
 const PROJECTS_DIR = join(__dirname, 'e2e', 'fixtures', 'projects');
 const SESSIONS_DIR = join(__dirname, 'e2e', 'fixtures', 'sessions');
+// 実行中シェルの出力は本来 os.tmpdir() 配下に書かれるので、フィクスチャに向ける
+const SHELL_TASKS_DIR = join(__dirname, 'e2e', 'fixtures', 'shell-tasks');
 const BRIDGE_DIR = join(__dirname, 'e2e', '.tmp', 'bridge');
 
 // CLAUDE_BRIDGE_DIR はサーバー起動時に Storage が mkdirSync するが、
@@ -57,6 +61,7 @@ export default defineConfig({
       CLAUDE_BRIDGE_PROJECTS_DIR: PROJECTS_DIR,
       CLAUDE_BRIDGE_SESSIONS_DIR: SESSIONS_DIR,
       CLAUDE_BRIDGE_DIR: BRIDGE_DIR,
+      CLAUDE_BRIDGE_SHELL_TASKS_ROOT: SHELL_TASKS_DIR,
     },
   },
 });

@@ -1,12 +1,16 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'http';
+import { mkdtemp, mkdir, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
+import { listShellTasks, readShellTaskOutput, shellTasksDir } from '../server/shell-tasks.js';
 
 // index.js の全体起動は避け、WebSocket メッセージルーティングの
 // コア部分を再現してテスト
 
-function setupTestServer() {
+function setupTestServer({ shellTarget = null } = {}) {
   const server = createServer();
   const wss = new WebSocketServer({ server, path: '/ws' });
   const sessions = new Map();
@@ -51,6 +55,36 @@ function setupTestServer() {
               client.send(list);
             }
           }
+          break;
+        }
+
+        // シェル出力の 2 メッセージは index.js と同じ形（読み先はテスト側が固定で渡す）
+        case 'list_shell_tasks': {
+          (async () => {
+            const tasks = shellTarget ? await listShellTasks(shellTarget) : [];
+            ws.send(JSON.stringify({ type: 'shell_tasks', sessionId: msg.sessionId, tasks }));
+          })();
+          break;
+        }
+
+        case 'get_shell_task_output': {
+          (async () => {
+            const output = shellTarget ? await readShellTaskOutput({ ...shellTarget, taskId: msg.taskId }) : null;
+            ws.send(
+              JSON.stringify(
+                output
+                  ? { type: 'shell_task_output', sessionId: msg.sessionId, ...output }
+                  : {
+                      type: 'shell_task_output',
+                      sessionId: msg.sessionId,
+                      taskId: msg.taskId,
+                      status: null,
+                      text: '',
+                      error: 'シェル出力を読み込めませんでした。',
+                    },
+              ),
+            );
+          })();
           break;
         }
 
@@ -203,6 +237,64 @@ describe('WebSocket message routing', () => {
     assert.ok(testServer.messageLog.length >= 1);
     assert.equal(testServer.messageLog[0].type, 'new_session');
     assert.equal(testServer.messageLog[0].name, 'Logged');
+
+    ws.close();
+  });
+});
+
+// シェル出力の一覧・本文取得を WS 越しに一往復させる（メッセージの形の確認）
+async function setupShellFixture() {
+  const rootDir = await mkdtemp(join(tmpdir(), 'ws-shell-root-'));
+  const projectsDir = await mkdtemp(join(tmpdir(), 'ws-shell-projects-'));
+  const projectDir = '-home-user-proj';
+  const claudeSessionId = 'ws-shell-session';
+  const tasksDir = shellTasksDir({ projectDir, claudeSessionId, rootDir });
+  await mkdir(tasksDir, { recursive: true });
+  await mkdir(join(projectsDir, projectDir), { recursive: true });
+  await writeFile(join(projectsDir, projectDir, `${claudeSessionId}.jsonl`), '');
+  await writeFile(join(tasksDir, 'wsjob1.output'), 'compiling\n[exited with code 0]\n');
+  return { projectDir, claudeSessionId, rootDir, projectsDir };
+}
+
+describe('shell task messages', () => {
+  let testServer;
+
+  afterEach(() => {
+    if (testServer) testServer.close();
+  });
+
+  it('list_shell_tasks returns the tasks found on disk', async () => {
+    testServer = await setupTestServer({ shellTarget: await setupShellFixture() });
+    const { ws, received } = await connectClient(testServer.port);
+
+    await wait(50);
+    ws.send(JSON.stringify({ type: 'list_shell_tasks', sessionId: 'sess-1' }));
+    await wait(100);
+
+    const reply = received.find((m) => m.type === 'shell_tasks');
+    assert.ok(reply);
+    assert.equal(reply.sessionId, 'sess-1');
+    assert.equal(reply.tasks.length, 1);
+    assert.equal(reply.tasks[0].taskId, 'wsjob1');
+    assert.equal(reply.tasks[0].status, 'exited');
+    assert.equal(reply.tasks[0].exitCode, 0);
+
+    ws.close();
+  });
+
+  it('get_shell_task_output returns the body without the exit footer', async () => {
+    testServer = await setupTestServer({ shellTarget: await setupShellFixture() });
+    const { ws, received } = await connectClient(testServer.port);
+
+    await wait(50);
+    ws.send(JSON.stringify({ type: 'get_shell_task_output', sessionId: 'sess-1', taskId: 'wsjob1' }));
+    await wait(100);
+
+    const reply = received.find((m) => m.type === 'shell_task_output');
+    assert.ok(reply);
+    assert.equal(reply.taskId, 'wsjob1');
+    assert.equal(reply.status, 'exited');
+    assert.equal(reply.text, 'compiling\n');
 
     ws.close();
   });

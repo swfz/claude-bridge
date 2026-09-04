@@ -80,3 +80,14 @@
   color: var(--text-secondary);
   border-style: dashed;
 }
+
+/* 終了コードが 0 以外だったシェル。テーマに専用のエラー色が無いので警告色を借り、
+   点滅しない ✗ アイコンで実行中と区別する */
+.task-chip-failed {
+  border-color: var(--warning);
+  color: var(--text-secondary);
+}
+
+.task-chip-failed .task-chip-icon {
+  color: var(--warning);
+}
