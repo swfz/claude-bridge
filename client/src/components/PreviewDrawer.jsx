@@ -15,6 +15,12 @@ import {
   offsetToLineCol,
 } from '../utils/previewLocation.js';
 import { resolveInjectedScheme } from '../utils/previewColorScheme.js';
+import { halfPageScrollKey, isConfirmShortcut, isDeleteItemShortcut, isSubmitAllShortcut } from '../utils/keys.js';
+import { halfScreenJump } from '../utils/pickJump.js';
+import { buildCodeLinesHtml } from '../utils/codeLines.js';
+import { LEAF_BLOCKS, blockForLine, collectSourceBlocks } from '../utils/sourceBlocks.js';
+import { rehypeSourceLine } from '../utils/rehypeSourceLine.js';
+import { useNumberPick } from '../hooks/useNumberPick.js';
 import './PreviewDrawer.css';
 
 // YAML frontmatter を GitHub 風の key/value テーブルとして表示する
@@ -57,23 +63,14 @@ function textOffsetIn(root, targetNode, targetOffset) {
   return -1;
 }
 
-// レンダリング後の各ブロック要素に、元 Markdown ソースの開始行を data-source-line として付ける。
-// これで「レンダリング表示のままどの行由来か」を特定でき、コメントの行マーカーを置ける。
-function rehypeSourceLine() {
-  return (tree) => {
-    const visit = (node) => {
-      if (node.type === 'element' && node.position?.start?.line) {
-        node.properties = node.properties || {};
-        node.properties['data-source-line'] = node.position.start.line;
-      }
-      (node.children || []).forEach(visit);
-    };
-    visit(tree);
-  };
-}
-
 function previewUrl(localPath) {
   return `/preview?path=${encodeURIComponent(localPath)}`;
+}
+
+// 行ピックで作る指摘の引用文。長すぎる行は切り、空行は行番号だけを残す
+function quoteForLine(text, line) {
+  const trimmed = (text || '').trim().slice(0, 120);
+  return trimmed || `L${line}`;
 }
 
 let commentIdSeq = 0;
@@ -126,6 +123,15 @@ export default function PreviewDrawer({
   const [lineMarkers, setLineMarkers] = useState([]);
   // クリックで開いている行マーカーのポップオーバー
   const [activeMarker, setActiveMarker] = useState(null);
+  // 行ピック中に「ここが対象」と出す行番号バッジ [{ line, top }]（Markdown プレビューのみ）
+  const [lineBadges, setLineBadges] = useState([]);
+  // ドロワー内のテキスト入力にフォーカスがあるか（数字キーが行ピックに吸われないようにする目印）
+  const [inputFocused, setInputFocused] = useState(false);
+  // 幅変更などで位置を測り直すためのカウンタ
+  const [layoutTick, setLayoutTick] = useState(0);
+  // iframe の contentDocument が差し替わったことを知るためのカウンタ
+  const [iframeDocTick, setIframeDocTick] = useState(0);
+  const drawerRef = useRef(null);
   const bodyRef = useRef(null);
   const iframeRef = useRef(null);
   // iframe 内のリスナから最新のソースを参照するための箱
@@ -194,12 +200,23 @@ export default function PreviewDrawer({
     [fileContent, lang, isText, isMarkdownFile],
   );
 
+  // コード/テキストは 1 行 1 要素にして、行番号ガターと行ピックの位置決めに使う
+  const isCodeView = !isMarkdownMode && isText && !isMarkdownFile;
+  const codeLinesHtml = useMemo(
+    () => (isCodeView && fileContent != null ? buildCodeLinesHtml(fileContent, highlightedHtml) : null),
+    [isCodeView, fileContent, highlightedHtml],
+  );
+
+  // 行ピック中かどうか。Escape の扱いを分けるため、ハンドラからは ref 越しに読む
+  // （ピック中の Escape はピックの取消だけで、ドロワーは閉じない）
+  const pickActiveRef = useRef(false);
+
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') {
         if (selectionPopup) {
           setSelectionPopup(null);
-        } else {
+        } else if (!pickActiveRef.current) {
           onClose();
         }
       }
@@ -432,6 +449,45 @@ export default function PreviewDrawer({
     window.getSelection()?.removeAllRanges();
   }, []);
 
+  // 選択せずに「送る」項目を追加する（ファイル全体への指摘用）。
+  // ReviewDraftPanel の「次の指摘欄を追加」と揃え、毎回マウス選択しなくても複数コメントを書けるようにする。
+  const addFreeItem = useCallback(() => {
+    addComment('', null, 'review');
+  }, [addComment]);
+
+  // Ctrl/Cmd+Shift+Enter（一括送信）はドロワーが開いていればフォーカス位置を問わず効かせる
+  // （欄にフォーカスが無いと何も起きず「動かない」と見えるため）。指摘欄の onKeyDown が先に処理した
+  // もの（defaultPrevented）は二重送信しない。HTML プレビューは iframe に描画されフォーカスも中に
+  // 入るので、contentDocument にも同じハンドラを張る（mouseup と同じ理由。同一オリジンなのでアクセスできる）。
+  const handleSubmitAllRef = useRef(null);
+  useEffect(() => {
+    const handler = (e) => {
+      if (!isSubmitAllShortcut(e) || e.defaultPrevented) return;
+      e.preventDefault();
+      handleSubmitAllRef.current?.();
+    };
+    document.addEventListener('keydown', handler);
+
+    const iframe = iframeRef.current;
+    let attached = null;
+    const attach = () => {
+      const doc = iframe?.contentDocument;
+      if (!doc || doc === attached) return;
+      attached?.removeEventListener('keydown', handler);
+      doc.addEventListener('keydown', handler);
+      attached = doc;
+    };
+    if (isHtml && iframe) {
+      attach();
+      iframe.addEventListener('load', attach);
+    }
+    return () => {
+      document.removeEventListener('keydown', handler);
+      iframe?.removeEventListener('load', attach);
+      attached?.removeEventListener('keydown', handler);
+    };
+  }, [isHtml, filePath]);
+
   // 「コメントに残す」: 送信せずセッションのコメントに保存（ファイルアンカー付き）。
   // 保存後も、このプレビューを開いている間は右ペインに表示し続ける。
   const saveComment = useCallback(
@@ -478,6 +534,10 @@ export default function PreviewDrawer({
 
     const target = filePath || 'preview';
     const formatted = items.map((item, i) => {
+      // 選択なし（addFreeItem 由来）はファイル全体への指摘として扱う
+      if (!item.selectedText) {
+        return `${i + 1}. ファイル全体 について:\n   ${item.comment}`;
+      }
       const head = `「${item.selectedText.slice(0, 80)}」`;
       const label = item.location?.label ? ` (${item.location.label})` : '';
       // 前後コンテキストで「同名トークンのどれを指すか」を Claude が一意に特定できるようにする
@@ -490,11 +550,14 @@ export default function PreviewDrawer({
     onReviewSubmit(target, formatted);
     setSubmitStatus(`${items.length}件送信しました`);
     setTimeout(() => setSubmitStatus(null), 3000);
-    // 送信済みを解決済みに
+    // 送信済みを解決済みに。Ctrl+Enter で増やした空の「選択なし」欄は片付ける
     setReviewItems((prev) =>
-      prev.map((item) => (item.comment.trim() && !item.resolved ? { ...item, resolved: true } : item)),
+      prev
+        .filter((item) => item.selectedText || item.comment.trim())
+        .map((item) => (item.comment.trim() && !item.resolved ? { ...item, resolved: true } : item)),
     );
   }, [reviewItems, filePath, onReviewSubmit]);
+  handleSubmitAllRef.current = handleSubmitAll;
 
   const markdownToRender = isMarkdownMode ? markdown : isMarkdownFile ? fileContent : null;
 
@@ -502,6 +565,184 @@ export default function PreviewDrawer({
   const { frontmatter, body: markdownBody } = useMemo(
     () => splitFrontmatter(markdownToRender || ''),
     [markdownToRender],
+  );
+
+  // ── 行ピック（数字キーで行を選んで指摘を書く）─────────────────────────────
+  // 対象の総数: コード/テキストはファイルの行数、Markdown は frontmatter を除いた本文の行数。
+  // HTML（iframe）・画像・PDF は行を指せないので 0（Alt+R → Enter の「全体への指摘」だけ使える）。
+  const pickMax = useMemo(() => {
+    if (isCodeView) return fileContent ? fileContent.split('\n').length : 0;
+    if (markdownToRender) return markdownBody ? markdownBody.split('\n').length : 0;
+    return 0;
+  }, [isCodeView, fileContent, markdownToRender, markdownBody]);
+
+  // HTML プレビューは iframe 内にフォーカスが入るとキーが親 document に来ないので、その document も渡す
+  const extraDocs = useMemo(
+    () => (isHtml ? [iframeRef.current?.contentDocument].filter(Boolean) : []),
+    // iframe の document は読み込みのたびに差し替わる（iframeDocTick で取り直す）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isHtml, filePath, iframeDocTick],
+  );
+
+  const handlePickLine = useCallback(
+    (line) => {
+      if (isCodeView) {
+        const src = fileContent || '';
+        addComment(
+          quoteForLine(src.split('\n')[line - 1], line),
+          { line, label: `L${line}`, contextBefore: '', contextAfter: '' },
+          'review',
+        );
+        return;
+      }
+      // Markdown はレンダリング後のブロックから引用を作る（ソース行だと記法が混ざって読みにくい）
+      const body = bodyRef.current;
+      const el = body ? blockForLine(collectSourceBlocks(body), line) : null;
+      const text = el ? el.textContent : (markdownBody || '').split('\n')[line - 1];
+      addComment(quoteForLine(text, line), { line, label: `L${line}` }, 'review');
+    },
+    [isCodeView, fileContent, markdownBody, addComment],
+  );
+
+  // ピック中の Ctrl+D / Ctrl+U: 対象行を半画面分先へ飛ばす（画面上の位置で決める）
+  const pickRef = useRef(null);
+  const handlePickKey = useCallback(
+    (e, { target }) => {
+      const direction = halfPageScrollKey(e);
+      if (!direction) return false;
+      const body = bodyRef.current;
+      if (!body) return true;
+      const half = body.clientHeight / 2;
+      let items;
+      if (isCodeView) {
+        items = [...body.querySelectorAll('pre.drawer-text [data-line]')].map((el) => ({
+          n: parseInt(el.getAttribute('data-line'), 10),
+          top: el.getBoundingClientRect().top,
+        }));
+      } else {
+        const seen = new Set();
+        items = collectSourceBlocks(body)
+          .filter(({ el, line }) => LEAF_BLOCKS.has(el.tagName) && !seen.has(line) && seen.add(line))
+          .map(({ el, line }) => ({ n: line, top: el.getBoundingClientRect().top }));
+      }
+      items.sort((a, b) => a.top - b.top);
+      const next = halfScreenJump({ items, current: target, half, direction });
+      if (next != null) pickRef.current?.setTarget(next);
+      return true;
+    },
+    [isCodeView],
+  );
+
+  const pick = useNumberPick({
+    max: pickMax,
+    allowBareDigits: true,
+    extraDocs,
+    onKey: handlePickKey,
+    onPick: handlePickLine,
+    onEmptyEnter: addFreeItem,
+  });
+  pickRef.current = pick;
+  pickActiveRef.current = pick.active;
+
+  // 打鍵中の対象を強調して、見えていなければスクロールで寄せる
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body || !pick.active || pick.target == null) return undefined;
+    const el = isCodeView
+      ? body.querySelector(`pre.drawer-text [data-line="${pick.target}"]`)
+      : blockForLine(collectSourceBlocks(body), pick.target);
+    if (!el) return undefined;
+    el.classList.add('line-pick-target');
+    el.scrollIntoView({ block: 'nearest' });
+    return () => el.classList.remove('line-pick-target');
+  }, [pick.active, pick.target, isCodeView, markdownToRender, fileContent]);
+
+  // Markdown はレンダリング表示に行が出ないので、ピックできる行の番号を左ガターにバッジで添える。
+  // 指摘欄に入力している間は数字キーがピックに行かない（＝押しても効かない）ので出さない。
+  useEffect(() => {
+    if (!markdownToRender || inputFocused) {
+      setLineBadges([]);
+      return undefined;
+    }
+    const body = bodyRef.current;
+    if (!body) return undefined;
+    const id = setTimeout(() => {
+      const bodyRect = body.getBoundingClientRect();
+      const byLine = new Map();
+      for (const { el, line } of collectSourceBlocks(body)) {
+        // 同一行に複数あれば DOM 順で後（＝より深い）の要素を採る
+        if (LEAF_BLOCKS.has(el.tagName)) byLine.set(line, el);
+      }
+      setLineBadges(
+        [...byLine.entries()].map(([line, el]) => ({
+          line,
+          top: Math.max(0, el.getBoundingClientRect().top - bodyRect.top + body.scrollTop),
+        })),
+      );
+    }, 60);
+    return () => clearTimeout(id);
+  }, [markdownToRender, markdownBody, inputFocused, width, lightMode, layoutTick]);
+
+  // 本文の幅が変わるとブロックの位置も変わるので測り直す（リサイズ・折り返しの変化）
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body || typeof ResizeObserver === 'undefined') return undefined;
+    let lastWidth = 0;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width || 0;
+      if (Math.abs(w - lastWidth) < 1) return;
+      lastWidth = w;
+      setLayoutTick((t) => t + 1);
+    });
+    ro.observe(body);
+    return () => ro.disconnect();
+  }, []);
+
+  // ドロワー内のテキスト入力にフォーカスが入っている間はバッジを畳む
+  useEffect(() => {
+    const el = drawerRef.current;
+    if (!el) return undefined;
+    const isEntry = (t) => !!t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable);
+    const onIn = (e) => isEntry(e.target) && setInputFocused(true);
+    const onOut = (e) => isEntry(e.target) && setInputFocused(false);
+    el.addEventListener('focusin', onIn);
+    el.addEventListener('focusout', onOut);
+    return () => {
+      el.removeEventListener('focusin', onIn);
+      el.removeEventListener('focusout', onOut);
+    };
+  }, []);
+
+  // iframe が読み込み直されたら contentDocument を取り直す（キーのリスナを張り替えるため）
+  useEffect(() => {
+    if (!isHtml) return undefined;
+    const iframe = iframeRef.current;
+    if (!iframe) return undefined;
+    const onLoad = () => setIframeDocTick((t) => t + 1);
+    iframe.addEventListener('load', onLoad);
+    return () => iframe.removeEventListener('load', onLoad);
+  }, [isHtml, filePath]);
+
+  // 開いた直後は本文にフォーカスを置く（そのまま数字キーで行を選べるように）
+  useEffect(() => {
+    bodyRef.current?.focus?.({ preventScroll: true });
+  }, []);
+
+  // 指摘欄を確定して本文へフォーカスを戻す（続けて次の行を数字で選べるように）
+  const blurToBody = useCallback(() => {
+    document.activeElement?.blur?.();
+    bodyRef.current?.focus?.({ preventScroll: true });
+  }, []);
+
+  // 欄の確定。「残す」は保存、「送る」は溜めたまま本文へ戻るだけ。
+  // Enter の空押しで作った「選択なし」の欄に何も書かなかった場合は、残っても意味がないので消す。
+  const confirmItem = useCallback(
+    (item) => {
+      if (item.kind === 'save') saveComment(item.id);
+      else if (!item.comment.trim() && !item.selectedText) removeItem(item.id);
+      blurToBody();
+    },
+    [saveComment, removeItem, blurToBody],
   );
 
   const unresolvedCount = reviewItems.filter((i) => i.kind !== 'save' && !i.resolved && i.comment.trim()).length;
@@ -544,42 +785,26 @@ export default function PreviewDrawer({
       const topOf = (el) => el.getBoundingClientRect().top - bodyRect.top + body.scrollTop;
 
       // 行番号 → { top(px), el } を返す関数を用意（el は markdown のとき該当ブロック）
-      // テーブル行・リスト項目・見出し(h1〜h6)も一意に当てたい。line と完全一致する要素のうち、
-      // 「末端ブロック」(tr/li/p/見出し等) を優先し、コンテナ(ul/ol/table/div) は避ける。
-      // 同一行に末端ブロックが複数（ネスト）あれば DOM 順で最も深い（後の）ものを選ぶ。
-      const LEAF_BLOCKS = new Set(['TR', 'LI', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'BLOCKQUOTE']);
-      const ANY_BLOCK = new Set([...LEAF_BLOCKS, 'TABLE', 'UL', 'OL', 'DL', 'DIV']);
       let resolve;
       if (isCode) {
         const pre = body.querySelector('pre.drawer-text');
         if (!pre) return;
+        // 行は 1 要素ずつ（.drawer-code-line）なので、その矩形から位置を取る。
+        // 折り返しのある行でも実際の描画位置に合う（行高の掛け算だとズレる）
         const cs = getComputedStyle(pre);
         const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
         const padTop = parseFloat(cs.paddingTop) || 0;
         const preTop = topOf(pre);
-        resolve = (line) => ({ top: preTop + padTop + (line - 1) * lh, el: null });
-      } else {
-        const els = [...body.querySelectorAll('[data-source-line]')]
-          .map((el) => ({ el, line: parseInt(el.getAttribute('data-source-line'), 10) }))
-          .filter((x) => x.line > 0)
-          .sort((a, b) => a.line - b.line);
         resolve = (line) => {
-          const exact = els.filter((x) => x.line === line);
-          if (exact.length) {
-            const leaves = exact.filter((x) => LEAF_BLOCKS.has(x.el.tagName));
-            // 末端ブロックがあれば最も深い（DOM 順で後ろ）ものを、無ければ任意のブロックを
-            const el = (
-              leaves.length ? leaves[leaves.length - 1] : exact.find((x) => ANY_BLOCK.has(x.el.tagName)) || exact[0]
-            ).el;
-            return { top: topOf(el), el };
-          }
-          // 完全一致が無ければ、その行を含む直近ブロック（line 以下で最大）
-          let chosen = els[0];
-          for (const x of els) {
-            if (x.line <= line) chosen = x;
-            else break;
-          }
-          return { top: chosen ? topOf(chosen.el) : 0, el: chosen?.el || null };
+          const el = pre.querySelector(`[data-line="${line}"]`);
+          // 行要素が無い（範囲外）ときだけ行高からの概算にフォールバックする
+          return { top: el ? topOf(el) : preTop + padTop + (line - 1) * lh, el: null };
+        };
+      } else {
+        const blocks = collectSourceBlocks(body);
+        resolve = (line) => {
+          const el = blockForLine(blocks, line);
+          return { top: el ? topOf(el) : 0, el };
         };
       }
 
@@ -617,6 +842,7 @@ export default function PreviewDrawer({
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div
+        ref={drawerRef}
         className={`drawer ${isHtml ? 'drawer-html' : ''} ${
           reviewItems.length > 0 || displaySaved.length > 0 || (responses && responses.length > 0)
             ? 'drawer-with-review'
@@ -662,10 +888,17 @@ export default function PreviewDrawer({
           </div>
         </div>
 
-        <div className="drawer-hint">テキストを選択してコメントを追加できます</div>
+        <div className="drawer-hint">
+          テキストを選択してコメントを追加できます（数字キー → Enter で行を指定・Alt+R で開始）
+        </div>
 
         <div className="drawer-content">
-          <div className={`drawer-body ${lightMode ? 'preview-light' : ''}`} ref={bodyRef} onMouseUp={handleMouseUp}>
+          <div
+            className={`drawer-body ${lightMode ? 'preview-light' : ''}`}
+            ref={bodyRef}
+            onMouseUp={handleMouseUp}
+            tabIndex={-1}
+          >
             {markdownToRender ? (
               <div className="drawer-markdown">
                 {frontmatter && <FrontmatterTable data={frontmatter} />}
@@ -696,12 +929,12 @@ export default function PreviewDrawer({
                     <pre className="drawer-text">読み込みに失敗しました</pre>
                   ) : fileContent == null ? (
                     <pre className="drawer-text">読み込み中...</pre>
-                  ) : highlightedHtml ? (
-                    <pre className="drawer-text hljs">
-                      <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
-                    </pre>
                   ) : (
-                    <pre className="drawer-text">{fileContent}</pre>
+                    // 行番号は .drawer-code-line::before で描く（textContent に入れないので
+                    // 選択範囲から行・列を出す計算はソースと一致したまま）
+                    <pre className={`drawer-text ${highlightedHtml ? 'hljs' : ''}`}>
+                      <code dangerouslySetInnerHTML={{ __html: codeLinesHtml || '' }} />
+                    </pre>
                   ))}
                 {!isImage && !isHtml && !isPdf && !isText && !isMarkdownMode && (
                   <div className="drawer-unsupported">
@@ -734,6 +967,17 @@ export default function PreviewDrawer({
                     コメントに残す（送らない）
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* 行ピック用の行番号バッジ（Markdown は表示に行が出ないため。入力中は畳む） */}
+            {lineBadges.length > 0 && (
+              <div className="comment-gutter line-pick-gutter">
+                {lineBadges.map((b) => (
+                  <span key={b.line} className="line-pick-badge" style={{ top: b.top }}>
+                    {b.line}
+                  </span>
+                ))}
               </div>
             )}
 
@@ -790,30 +1034,52 @@ export default function PreviewDrawer({
                         <span className="review-pane-num">
                           #{index + 1} {item.kind === 'save' ? '（残す）' : '（送る）'}
                         </span>
-                        <button className="review-pane-remove" onClick={() => removeItem(item.id)}>
+                        <button
+                          className="review-pane-remove"
+                          onClick={() => removeItem(item.id)}
+                          title="この指摘を削除（Ctrl+Shift+⌫）"
+                        >
                           x
                         </button>
                       </div>
-                      <div className="review-pane-selected">
-                        {item.selectedText.slice(0, 120)}
-                        {item.selectedText.length > 120 ? '...' : ''}
-                      </div>
+                      {item.selectedText ? (
+                        <div className="review-pane-selected">
+                          {item.selectedText.slice(0, 120)}
+                          {item.selectedText.length > 120 ? '...' : ''}
+                        </div>
+                      ) : (
+                        <div className="review-pane-selected empty">（選択なし・ファイル全体への指摘）</div>
+                      )}
                       <textarea
                         className="review-pane-input"
                         value={item.comment}
                         onChange={(e) => updateComment(item.id, e.target.value)}
                         onFocus={() => setEditingId(item.id)}
                         onKeyDown={(e) => {
-                          // Ctrl/Cmd+Enter でその欄のボタン相当（残す＝保存 / 送る＝全件送信）。通常の Enter は改行
-                          if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
-                          e.preventDefault();
-                          if (item.kind === 'save') saveComment(item.id);
-                          else handleSubmitAll();
+                          // Ctrl/Cmd+Enter = この欄を確定（送る＝本文へフォーカスを戻して次の行を選べる状態に /
+                          // 残す＝保存）。Ctrl/Cmd+Shift+Enter = 溜めた指摘を一括送信。通常の Enter は改行。
+                          // Escape も確定と同じ扱いにし、document の「ドロワーを閉じる」には届かせない。
+                          // Ctrl/Cmd+Shift+Backspace = この指摘欄ごと削除して本文へ戻る。
+                          if (isDeleteItemShortcut(e)) {
+                            e.preventDefault();
+                            removeItem(item.id);
+                            blurToBody();
+                          } else if (isSubmitAllShortcut(e)) {
+                            e.preventDefault();
+                            handleSubmitAll();
+                          } else if (isConfirmShortcut(e)) {
+                            e.preventDefault();
+                            confirmItem(item);
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            confirmItem(item);
+                          }
                         }}
                         placeholder={
                           item.kind === 'save'
                             ? 'コメントを書く（送信されません / Ctrl+Enterで保存）...'
-                            : '指摘を入力...（Ctrl+Enterで送信）'
+                            : '指摘を入力...（Ctrl+Enterで確定 / Ctrl+Shift+Enterで一括送信）'
                         }
                         rows={2}
                         autoFocus={editingId === item.id}
@@ -834,7 +1100,18 @@ export default function PreviewDrawer({
                 {unresolvedCount > 0 && (
                   <div className="review-pane-send-area">
                     {submitStatus && <div className="review-pane-status">{submitStatus}</div>}
-                    <button className="btn btn-primary review-pane-submit" onClick={handleSubmitAll}>
+                    <button
+                      className="btn review-pane-add"
+                      onClick={addFreeItem}
+                      title="選択なしで指摘欄を追加（本文で Enter）"
+                    >
+                      + 指摘を追加
+                    </button>
+                    <button
+                      className="btn btn-primary review-pane-submit"
+                      onClick={handleSubmitAll}
+                      title="溜めた指摘を一括送信（Ctrl+Shift+Enter）"
+                    >
                       {unresolvedCount}件送信
                     </button>
                   </div>
@@ -916,6 +1193,18 @@ export default function PreviewDrawer({
             </div>
           )}
         </div>
+
+        {/* 行ピックの打鍵中に「今どの行を指しているか」を出す */}
+        {pick.active && (
+          <div className="line-pick-hud">
+            <span
+              className={`line-pick-hud-value ${pick.target == null || Number(pick.buffer) !== pick.target ? 'invalid' : ''}`}
+            >
+              L {pick.buffer || '_'}
+            </span>
+            <span className="line-pick-hud-hint">Enter で指摘 / ↑↓ で移動 / Esc で取消</span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -665,6 +665,12 @@ body.light-mode .drawer-iframe,
   line-height: 1.4;
 }
 
+/* 選択なしで追加した項目（ファイル全体への指摘）は選択引用がないことを控えめに示す */
+.review-pane-selected.empty {
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .review-pane-input {
   width: 100%;
   background: var(--input-bg);
@@ -713,6 +719,10 @@ body.light-mode .drawer-iframe,
   padding: 8px 0;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .review-thread-sent {
@@ -744,12 +754,31 @@ body.light-mode .drawer-iframe,
 }
 
 .review-pane-submit {
-  width: 100%;
+  flex: 1;
   padding: 8px;
   font-size: 13px;
 }
 
+/* 送信ボタンの左隣に置く「選択なしで指摘欄を追加」ボタン。控えめな見た目で edit-btn と揃える */
+.review-pane-add {
+  flex: 0 0 auto;
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.review-pane-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .review-pane-status {
+  flex: 1 0 100%;
   font-size: 12px;
   color: var(--success);
   text-align: center;
@@ -820,4 +849,81 @@ body.light-mode .drawer-iframe,
   border-radius: 10px;
   padding: 1px 7px;
   vertical-align: middle;
+}
+
+/* 本文はキーボードで行を選べるようフォーカス可能にしてあるが、枠線は出さない */
+.drawer-body:focus {
+  outline: none;
+}
+
+/* コードプレビューの行番号。疑似要素なので選択もコピーもされず、textContent にも入らない
+   （選択範囲から行・列を出す計算がソースとズレないようにするため） */
+.drawer-code-line::before {
+  content: attr(data-line);
+  display: inline-block;
+  width: 3.5em;
+  margin-right: 1em;
+  text-align: right;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  user-select: none;
+}
+
+/* 行ピックで今指している行/ブロック */
+.line-pick-target {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* Markdown プレビューの左ガターに出すソース行番号（数字キーで指す先の目印） */
+.line-pick-gutter {
+  pointer-events: none;
+}
+
+.line-pick-badge {
+  position: absolute;
+  left: 0;
+  width: 24px;
+  text-align: right;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  opacity: 0.55;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+}
+
+/* 打鍵中の行番号を出す HUD（ドロワー下部中央） */
+.line-pick-hud {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+
+.line-pick-hud-value {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.line-pick-hud-value.invalid {
+  color: var(--accent-hover);
+}
+
+.line-pick-hud-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
