@@ -10,6 +10,7 @@ import InputBar from './components/InputBar.jsx';
 import ChoicePrompt from './components/ChoicePrompt.jsx';
 import TaskStrip from './components/TaskStrip.jsx';
 import SubagentDrawer from './components/SubagentDrawer.jsx';
+import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
 import NewSessionDialog from './components/NewSessionDialog.jsx';
 import PreviewDrawer from './components/PreviewDrawer.jsx';
 import FileExplorer from './components/FileExplorer.jsx';
@@ -32,6 +33,20 @@ import './App.css';
 const RUNNING_POLL_INTERVAL = 5000;
 // 作業中タブでサブエージェントのタスク一覧を取り直す間隔
 const SUBAGENT_POLL_INTERVAL = 5000;
+// 作業中タブで実行中シェル（Bash 出力）の一覧を取り直す間隔
+const SHELL_POLL_INTERVAL = 3000;
+// 一覧が空のときに毎レンダー新しい [] を渡すと子の memo 比較が外れるので共有の空配列を使う
+const EMPTY_TASKS = [];
+
+// ポーリングで届いた一覧が前回と同じ内容なら、state の参照を変えずに返す。
+// 参照が変わると App が再描画され、ChatView の memo 化されたメッセージまで作り直されてチラつく。
+// 一覧は数十件のフラットな配列なので JSON.stringify の比較で十分安い。
+function keepIfUnchanged(prev, sessionId, tasks) {
+  const next = tasks || EMPTY_TASKS;
+  const current = prev[sessionId];
+  if (current && JSON.stringify(current) === JSON.stringify(next)) return prev;
+  return { ...prev, [sessionId]: next };
+}
 
 export default function App() {
   const { send, on, connected } = useWebSocket();
@@ -61,11 +76,15 @@ export default function App() {
   const [choiceError, setChoiceError] = useState(null);
   // セッションが起動したサブエージェントのタスク一覧（bridgeSessionId -> tasks）
   const [subagentTasks, setSubagentTasks] = useState({});
+  // 実行中／終了済みの Bash 出力の一覧（bridgeSessionId -> tasks）
+  const [shellTasks, setShellTasks] = useState({});
   // 入力欄のスラッシュコマンド補完の候補（bridgeSessionId -> commands）。
   // セッションの cwd に依存するのでタブごとに 1 度だけ取る
   const [slashCommands, setSlashCommands] = useState({});
   // トランスクリプトを表示中のサブエージェント（null なら閉じている）
   const [subagentDrawer, setSubagentDrawer] = useState(null);
+  // 出力を表示中のシェルタスク（null なら閉じている）
+  const [shellDrawer, setShellDrawer] = useState(null);
   // 「未解決／続きをやる」印を付けた claudeSessionId（localStorage のみ）
   const [starredSessions, setStarredSessions] = useState(loadStarred);
   // 一覧取得時に添えるだけなので、star の変更で再取得は走らせない（JSONL 走査を避ける）
@@ -258,10 +277,40 @@ export default function App() {
     return on('choice_prompt_error', (msg) => setChoiceError(msg.message));
   }, [on]);
 
-  // サブエージェント（Agent ツール）の一覧。JSONL のファイル読みなので readonly でも来る
+  // サブエージェント（Agent ツール）の一覧。JSONL のファイル読みなので readonly でも来る。
+  // 数秒ごとのポーリングで毎回新しい配列を state に入れると App 全体が再描画され、
+  // ChatView の memo が崩れて本文がチラつくので、内容が同じなら前の参照を保つ
   useEffect(() => {
     return on('subagent_tasks', (msg) => {
-      setSubagentTasks((prev) => ({ ...prev, [msg.sessionId]: msg.tasks || [] }));
+      setSubagentTasks((prev) => keepIfUnchanged(prev, msg.sessionId, msg.tasks));
+    });
+  }, [on]);
+
+  // 実行中／終了済みの Bash 出力の一覧。こちらもファイル読みなので readonly でも来る
+  useEffect(() => {
+    return on('shell_tasks', (msg) => {
+      setShellTasks((prev) => keepIfUnchanged(prev, msg.sessionId, msg.tasks));
+    });
+  }, [on]);
+
+  // ドロワーで開いているシェルの出力。別の taskId のものは捨てる。
+  // 前景の Bash は終了すると出力ファイルごと消える（status: null + error で返る）ので、
+  // そのときは最後に読めた本文を残したまま 'gone' にしてポーリングを止める
+  useEffect(() => {
+    return on('shell_task_output', (msg) => {
+      setShellDrawer((prev) => {
+        if (!prev || prev.taskId !== msg.taskId) return prev;
+        if (msg.status === null || msg.status === undefined) {
+          return prev.status === 'running' ? { ...prev, status: 'gone' } : prev;
+        }
+        return {
+          ...prev,
+          text: msg.text || '',
+          truncated: !!msg.truncated,
+          status: msg.status,
+          exitCode: msg.exitCode ?? prev.exitCode,
+        };
+      });
     });
   }, [on]);
 
@@ -413,6 +462,15 @@ export default function App() {
     return () => clearInterval(timer);
   }, [showHome, activeSessionId, connected, send]);
 
+  // 実行中シェルの一覧も作業中タブを見ている間だけ取り直す（TUI のライブ表示に相当）
+  useEffect(() => {
+    if (showHome || !activeSessionId || !connected) return;
+    const request = () => send({ type: 'list_shell_tasks', sessionId: activeSessionId });
+    request();
+    const timer = setInterval(request, SHELL_POLL_INTERVAL);
+    return () => clearInterval(timer);
+  }, [showHome, activeSessionId, connected, send]);
+
   // 補完候補はセッションごとに 1 度だけ取る（サーバー側で 30 秒キャッシュされる）。
   // 取得済みかは ref で見て、候補の到着で effect が回らないようにする
   const slashRequestedRef = useRef(new Set());
@@ -430,6 +488,7 @@ export default function App() {
   // 別セッションのタスクを見せ続けないよう、タブ切替・ホーム表示でドロワーを閉じる
   useEffect(() => {
     setSubagentDrawer(null);
+    setShellDrawer(null);
   }, [activeSessionId, showHome]);
 
   const handleOpenSubagentTask = useCallback((task) => {
@@ -447,6 +506,26 @@ export default function App() {
     (agentId) => {
       if (!activeSessionId || !agentId) return;
       send({ type: 'get_subagent_transcript', sessionId: activeSessionId, agentId });
+    },
+    [send, activeSessionId],
+  );
+
+  const handleOpenShellTask = useCallback((task) => {
+    setShellDrawer({
+      taskId: task.taskId,
+      label: task.label || task.preview || task.taskId,
+      status: task.status,
+      exitCode: task.exitCode,
+      text: '',
+      truncated: false,
+    });
+  }, []);
+
+  // ドロワーからの取得要求（初回＋実行中のポーリング）
+  const handleRequestShellOutput = useCallback(
+    (taskId) => {
+      if (!activeSessionId || !taskId) return;
+      send({ type: 'get_shell_task_output', sessionId: activeSessionId, taskId });
     },
     [send, activeSessionId],
   );
@@ -1308,7 +1387,12 @@ export default function App() {
           </div>
 
           {sessionUiVisible && (
-            <TaskStrip tasks={subagentTasks[activeSessionId] || []} onOpenTask={handleOpenSubagentTask} />
+            <TaskStrip
+              tasks={subagentTasks[activeSessionId] || EMPTY_TASKS}
+              shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
+              onOpenTask={handleOpenSubagentTask}
+              onOpenShellTask={handleOpenShellTask}
+            />
           )}
 
           {activeChoice && (
@@ -1371,6 +1455,19 @@ export default function App() {
           onRequestTranscript={handleRequestTranscript}
           onOpenPreview={handleOpenPreview}
           onClose={() => setSubagentDrawer(null)}
+        />
+      )}
+
+      {shellDrawer && (
+        <ShellOutputDrawer
+          taskId={shellDrawer.taskId}
+          label={shellDrawer.label}
+          status={shellDrawer.status}
+          exitCode={shellDrawer.exitCode}
+          text={shellDrawer.text}
+          truncated={shellDrawer.truncated}
+          onRequestOutput={handleRequestShellOutput}
+          onClose={() => setShellDrawer(null)}
         />
       )}
 

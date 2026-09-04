@@ -16,6 +16,7 @@ import { enrichPanesWithSessionMeta, readStatusByPid } from './claude-session-me
 import { listRunningSessions } from './running-sessions.js';
 import { parseChoicePrompt } from './choice-prompt.js';
 import { listSubagentTasks, readSubagentTranscript } from './subagent-tasks.js';
+import { listShellTasks, readShellTaskOutput } from './shell-tasks.js';
 import { readRateLimits } from './rate-limits.js';
 import { listSlashCommands } from './slash-commands.js';
 import { getActivityHeatmap } from './activity-heatmap.js';
@@ -1221,6 +1222,65 @@ wss.on('connection', (ws) => {
             status: null,
             messages: [],
             error: `サブエージェントの会話を読み込めませんでした: ${e.message}`,
+          });
+        }
+        break;
+      }
+
+      // 実行中／終了済みの Bash 出力の一覧。情報源は tmp 配下の tasks/*.output なので
+      // subagent と同じく readonly でも動く。
+      case 'list_shell_tasks': {
+        try {
+          const target = resolveClaudeTarget(findSession(msg.sessionId));
+          const tasks = target ? await listShellTasks(target) : [];
+          sendTo(ws, { type: 'shell_tasks', sessionId: msg.sessionId, tasks });
+        } catch (e) {
+          console.error('list_shell_tasks failed:', e.message);
+          sendTo(ws, { type: 'shell_tasks', sessionId: msg.sessionId, tasks: [] });
+        }
+        break;
+      }
+
+      case 'get_shell_task_output': {
+        try {
+          const target = resolveClaudeTarget(findSession(msg.sessionId));
+          const output = target ? await readShellTaskOutput({ ...target, taskId: msg.taskId }) : null;
+          if (!output) {
+            sendTo(ws, {
+              type: 'shell_task_output',
+              sessionId: msg.sessionId,
+              taskId: msg.taskId,
+              status: null,
+              exitCode: null,
+              text: '',
+              truncated: false,
+              size: 0,
+              error: 'シェル出力を読み込めませんでした。',
+            });
+            break;
+          }
+          sendTo(ws, {
+            type: 'shell_task_output',
+            sessionId: msg.sessionId,
+            taskId: output.taskId,
+            status: output.status,
+            exitCode: output.exitCode,
+            text: output.text,
+            truncated: output.truncated,
+            size: output.size,
+          });
+        } catch (e) {
+          console.error('get_shell_task_output failed:', e.message);
+          sendTo(ws, {
+            type: 'shell_task_output',
+            sessionId: msg.sessionId,
+            taskId: msg.taskId,
+            status: null,
+            exitCode: null,
+            text: '',
+            truncated: false,
+            size: 0,
+            error: `シェル出力を読み込めませんでした: ${e.message}`,
           });
         }
         break;

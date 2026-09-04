@@ -32,6 +32,19 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await expect(strip.locator('a')).toHaveAttribute('href', artifactUrl);
   await expect(strip.locator('a')).toHaveAttribute('target', '_blank');
 
+  // 実行中／終了済みの Bash 出力はチップ列に出て、クリックするとドロワーで本文が読める
+  const taskStrip = page.locator('.task-strip');
+  await expect(taskStrip).toBeVisible();
+  const runningChip = taskStrip.locator('.task-chip-running', { hasText: 'transforming modules...' });
+  await expect(runningChip).toHaveCount(1);
+  await expect(taskStrip.locator('.task-chip-done', { hasText: 'tests 12 / pass 12 / fail 0' })).toHaveCount(1);
+  await runningChip.click();
+  const shellDrawer = page.locator('.shell-drawer');
+  await expect(shellDrawer).toBeVisible();
+  await expect(shellDrawer.locator('.shell-output-text')).toContainText('vite v5 building for production...');
+  await shellDrawer.locator('.shell-drawer-close').click();
+  await expect(shellDrawer).toHaveCount(0);
+
   // 開いたセッションはサイドバーのタブとしても残る
   const tab = page.locator('.tab', { hasText: FIXTURE_TITLE });
   await expect(tab).toHaveCount(1);

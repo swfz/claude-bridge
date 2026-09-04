@@ -36,6 +36,7 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - `jsonl-utils.js` -- 共通ユーティリティ。`extractTextContent`, `extractToolUses`, `CLAUDE_PROJECTS_DIR` 等。jsonl-watcher.js と claude-sessions.js から参照
 - `claude-sessions.js` -- Claude セッション一覧・履歴読み込み。`listRecentSessions()` はホーム下段用（mtime で直近 N 日を絞る）。「JSONL 文字列 → メッセージ配列」は `parseHistoryLines()` として切り出してあり、`loadSessionHistory()` とサブエージェントのトランスクリプト読み込みで共用する
 - `subagent-tasks.js` -- サブエージェント（Agent ツール）の一覧 `listSubagentTasks()` とトランスクリプト読み込み `readSubagentTranscript()`。親 JSONL の走査はモジュール内キャッシュで前回オフセット以降だけ読み足す。agentId は `/^[A-Za-z0-9_-]+$/` で検証
+- `shell-tasks.js` -- 実行中／終了済みの Bash 出力の一覧 `listShellTasks()` と本文読み込み `readShellTaskOutput()`。**データ源は Claude Code が Bash の出力をライブで書く `<os.tmpdir()>/claude-<uid>/<projectDir>/<claudeSessionId>/tasks/<taskId>.output`**（起点は `SHELL_TASKS_ROOT`。E2E 用に `CLAUDE_BRIDGE_SHELL_TASKS_ROOT` で差し替えられる）。**前景の Bash は実行中だけファイルが在り終了で消える／バックグラウンドは終了時に `[exited with code N]` のフッター行が付いて残る**ので、フッターの有無が `running` / `exited` の判定になる（判定と preview は末尾 4KB しか読まない）。ラベル（どの Bash か）は親 JSONL から拾う最善努力で、バックグラウンドは Bash の tool_result の冒頭の定型文 `Command running in background with ID: <taskId>` から taskId → tool_use を一意に引ける（出力先パスの文字列で判定すると、後続の別ツールの結果が同じパスを含んだときに上書きされてラベルが消える。最初の対応だけを信じる）が、**前景はファイルと tool_use を結ぶ手がかりが無いので「まだ tool_result の無い Bash」を出現順に、running のファイルを開始時刻順に並べて対応づける**（並列実行ではズレ得る）。親 JSONL の走査は subagent-tasks.js と同じくモジュール内キャッシュで前回オフセット以降だけ読み足す（`clearShellTasksCache()` で破棄）。taskId は `/^[A-Za-z0-9_-]+$/` で検証
 - `session-summary.js` -- JSONL からカード用サマリ（タイトル・冒頭の依頼・直近のやりとり・cwd・ブランチ）を抽出。先頭 40 行＋末尾 128KB のみ読み、mtime でキャッシュ。公開した Artifact の一覧（`artifacts`）だけは head/tail に収まらないので `session-artifacts.js` に委譲する
 - `session-artifacts.js` -- ホームのカード／行に出す「そのセッションで公開した Artifact」の生リスト `readSessionArtifacts(filePath, fileStat?)` → `[{url, title, path, timestamp}]`（出現順・重複排除なし）。publish のレコードは JSONL のどこにでも現れるので全文を見るしかないが、起動中一覧はホーム表示中 5 秒間隔でポーリングし JSONL は数十 MB になり得るので、**前回オフセット以降だけを読み足す**（`Map<filePath, {mtimeMs, size, offset, artifacts}>`。stat が前回と同じならキャッシュ返し、縮んでいたら先頭から読み直す）。オフセットはバイト数なのでストリームは encoding を付けず Buffer で受け、`indexOf(0x0a)` で切ってから `toString('utf-8')` する（末尾の書きかけ行は取り込まない）。JSON.parse の前に `line.includes('"toolUseResult"') && line.includes('claude.ai')` の安価なプリフィルタを通す。判定自体は `jsonl-utils.js` の `extractArtifactPublish()` と共通
 - `storage.js` -- `~/.claude-bridge/` への永続化。`appendInbox()` で agent への送信を inbox に書き込む
@@ -67,9 +68,10 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
   - 草と日別は横に長いのでこのブロックだけ横スクロールし、初期位置は右端（最新）。**左端の曜日ラベル／y 軸目盛りは `position: sticky; left: 0` で貼り付ける**（スクロールすると流れて消えるため。背景色を敷かないと升目が透ける）
 - `InputBar.jsx` -- 送信欄。書きかけは `key={draftKey}` の remount をまたぐようモジュールレベルの `drafts` Map に置く。**スラッシュコマンド補完**は `slashCommands` prop の候補を入力欄の直上にドロップダウンで出す。表示条件は `text` が `/^\/[A-Za-z0-9_:-]*$/`（先頭 `/` の 1 トークン目を打っている間）で、前方一致が 0 件なら部分一致にフォールバックし 50 件で打ち切る。表示中は ArrowUp/Down で選択、Tab/Enter で `/name ` に確定（**Enter は送信しない**）、Escape で畳む（次の入力で復帰）。`onSendEscape` が渡されたときだけ送信ボタンの左に `Esc` ボタンを出す（TUI で開いてしまったモーダルを閉じる用。**補完を畳む Escape キー操作とは別物**）
 - `ChoicePrompt.jsx` -- 選択肢プロンプトのカード（入力欄の直上）。選択肢ボタン＝キー送信で、状態は毎回サーバーが読み直した画面から来る（クライアントは選択状態を持たない）
-- `TaskStrip.jsx` -- サブエージェントタスクのチップ列（入力欄の直上、選択肢カードの上）。実行中は `⚙`、完了は `✓`。完了は 3 件を超えたら「✓ 他 N 件」に畳む
+- `TaskStrip.jsx` -- サブエージェントタスクと実行中シェルのチップ列（入力欄の直上、選択肢カードの上）。サブエージェントは実行中が `⚙`・完了が `✓`、シェルはその後ろに並べて実行中が `$`・終了は exit code 0 なら `✓`、それ以外は `✗`（`task-chip-failed`）。**終了済みは種別を混ぜて 1 つの折りたたみにまとめ**、3 件を超えたら「✓ 他 N 件」に畳む
 - `ArtifactStrip.jsx` -- そのセッションで `Artifact` ツールが公開した claude.ai のページ（アーティファクト）のリンク一覧。チャット最上部に sticky で貼り付け、URL ごとに 1 チップ（再デプロイは `×N`）。**データ源は JSONL の user レコードの `toolUseResult`**（publish 成功時だけ `{url, path, title}` を持つオブジェクト。失敗時は文字列＋`is_error`、`read`/`list` は `url` を持たない）。`jsonl-utils.js` の `extractArtifactPublish()` が判定し、`parseHistoryLines()` と `JsonlWatcher` が `role: 'artifact'` のメッセージ（`url`/`title`/`path`）として本文と同じ列に流す。`ChatMessage` はこの role を「🔗 Artifact を公開 <リンク>」の 1 行カードで描き、一覧は `utils/artifacts.js` の `collectArtifacts()`（URL で重複排除・最終 publish が先頭）が messages から作る。**`.chat-message` は `<div key>` でラップされていて flex item ではない**ので中央寄せは `align-self` ではなく `width: fit-content; margin: 0 auto`（既存の `.chat-message.system` の `align-self` は効いていない）。**ホーム画面のカード／行にも同じリンクを出す**（`HomeArtifactChips.jsx`）。こちらのデータ源はチャットのメッセージ列ではなく summary の `artifacts`（`server/session-artifacts.js`）で、URL ごとのまとめは `utils/artifacts.js` から切り出した `groupArtifactPublishes()` を共用する
 - `SubagentDrawer.jsx` -- サブエージェントの会話を見せる右サイドドロワー。本文は `ChatView.jsx` の `ChatMessage`（export 済み）を `readonly` で再利用する。スクロール追従も `useStickToBottom`（resetKey は `agentId`）で ChatView と同じ挙動
+- `ShellOutputDrawer.jsx` -- Bash の出力を見せる右サイドドロワー。`SubagentDrawer` と同じ構造だが本文はプレーンテキストなので `<pre class="shell-output-text">`（等幅・`pre-wrap`・`overflow-wrap: anywhere`）にそのまま流す。ヘッダに taskId・状態（実行中 / 終了 code N）・末尾だけ返ってきたときの「先頭を省略」バッジ。スクロール追従は `useStickToBottom`（resetKey は `taskId`）。CSS は共通化せず `shell-drawer-*` として複製してある
 
 ### サブエージェントタスクの一覧とトランスクリプト
 
@@ -79,6 +81,17 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - **完了判定は親 JSONL の tool_result**。サブエージェントが終わると親（`<claudeSessionId>.jsonl`）に meta の `toolUseId` を `tool_use_id` として持つ tool_result が書かれる。あれば `completed`、無ければ `running`。親 JSONL は数十 MB になり得るので `Map<jsonlPath, {offset, ids}>` に溜め、**追記分（前回オフセット以降）だけ読み足す**（末尾の書きかけ行は最後の改行までで打ち切る）。`toolUseId` を持たない古い meta は判定できないので completed 扱い
 - WS メッセージ: `list_subagent_tasks {sessionId}` → `subagent_tasks {tasks}` / `get_subagent_transcript {sessionId, agentId}` → `subagent_transcript {agentId, status, messages}`。読み先（`projectDir` / `claudeSessionId`）は `resolveClaudeTarget()` が readonly セッション自身か `jsonlWatcher.getSessionMeta()` から解決する（解決できなければ `tasks: []`）
 - 一覧は作業中タブを見ている間だけ 5 秒間隔でポーリング（ホーム表示中は止める）。ドロワーは開いている agent が `running` の間だけ 4 秒間隔で会話を取り直し、タブ切替・ホーム表示で閉じる
+
+### 実行中シェルの出力
+
+Claude Code の TUI で Bash 実行中に見えるライブ出力（バックグラウンドなら `/tasks` から辿れるもの）を、ブラウザからも同じチップ＋ドロワーで見せる。
+
+- **データ源は `<os.tmpdir()>/claude-<uid>/<projectDir>/<claudeSessionId>/tasks/<taskId>.output`**（`server/shell-tasks.js`）。JSONL ではなくファイルを読むだけなので **readonly セッションでも動く**（PTY 不要）
+- 前景の Bash は終了するとファイルごと消えるため、チップから消えるのが正常。バックグラウンドは `[exited with code N]` のフッター付きで残る
+- WS メッセージ: `list_shell_tasks {sessionId}` → `shell_tasks {sessionId, tasks}` / `get_shell_task_output {sessionId, taskId}` → `shell_task_output {sessionId, taskId, status, exitCode, text, truncated, size}`。読み先は subagent と同じ `resolveClaudeTarget()`。読めなければ `text: ''` + `error`
+- 一覧は作業中タブを見ている間だけ 3 秒間隔でポーリング（ホーム表示中は止める）。ドロワーは開いている taskId が `running` の間だけ 2 秒間隔で本文を取り直し、タブ切替・ホーム表示で閉じる
+- 本文は末尾 256KB までで、超えたら `truncated`（先頭の壊れた行は捨てる）。ANSI エスケープ（CSI / OSC）は落とし、フッター行は `text` から外して状態バッジに回す
+- ポーリングで届いた一覧は `App.jsx` の `keepIfUnchanged()` が内容比較して**同じなら前の参照を保つ**（毎回新しい配列を state に入れると App が再描画され、`ChatView` の memo が崩れて本文がチラつく）。`subagent_tasks` も同じ扱い
 
 ### スラッシュコマンド補完
 
