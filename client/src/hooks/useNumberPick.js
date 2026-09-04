@@ -77,105 +77,116 @@ export function useNumberPick({
     [subLimitOf],
   );
 
-  const handleKeyDown = useCallback((e) => {
-    const {
-      enabled: en,
-      max: maxN,
-      onPick: pick,
-      onEmptyEnter,
-      onCancel,
-      onKey,
-      allowBareDigits,
-      invertArrows,
-      allowSub,
-    } = optsRef.current;
-    if (e.defaultPrevented) return;
-    if (!(typeof en === 'function' ? en() : en !== false)) return;
+  const handleKeyDown = useCallback(
+    (e) => {
+      const {
+        enabled: en,
+        max: maxN,
+        onPick: pick,
+        onEmptyEnter,
+        onCancel,
+        onKey,
+        allowBareDigits,
+        invertArrows,
+        allowSub,
+      } = optsRef.current;
+      if (e.defaultPrevented) return;
+      if (!(typeof en === 'function' ? en() : en !== false)) return;
 
-    let { active, buffer, sub } = stateRef.current;
+      let { active, buffer, sub } = stateRef.current;
 
-    // Alt+R: 入力欄にフォーカスがあれば外してから開始する（続けて数字を打てるように）
-    if (isPickModeShortcut(e)) {
-      e.preventDefault();
-      textEntryOf(e)?.blur?.();
-      dispatch({ type: 'start' });
-      return;
-    }
-
-    // Alt+H/J/K/L は矢印キーの代わり（vim 風）。入力欄にフォーカスがあっても効き、
-    // ピック中でなければ開始してそのまま移動する（↓/J で最初の対象に着地する）。
-    // 以降は矢印キーとして処理するので、修飾キーを外した見かけのイベントに差し替える
-    const nav = vimNavKey(e);
-    if (nav) {
-      e.preventDefault();
-      if (!active) {
+      // Alt+R: 入力欄にフォーカスがあれば外してから開始する（続けて数字を打てるように）
+      if (isPickModeShortcut(e)) {
+        e.preventDefault();
         textEntryOf(e)?.blur?.();
         dispatch({ type: 'start' });
-        active = true;
-        buffer = '';
-        sub = null;
-      }
-      e = { key: nav, code: nav, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, preventDefault() {} };
-    }
-
-    if (!active) {
-      if (!allowBareDigits) return;
-      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-      if (textEntryOf(e)) return;
-      // 本文で Enter を空押し＝番号なしの確定（「全体への指摘」）。ピック開始を待たずに効かせる
-      if (isEnterKey(e)) {
-        e.preventDefault();
-        onEmptyEnter?.();
         return;
       }
-      if (!/^[0-9]$/.test(e.key)) return;
-      e.preventDefault();
-      dispatch({ type: 'digit', digit: e.key });
-      return;
-    }
 
-    const target = resolveTarget(buffer, maxN);
-    const subTarget = sub != null ? resolveTarget(sub, subLimitOf(target)) : null;
+      // Alt+H/J/K/L は矢印キーの代わり（vim 風）。入力欄にフォーカスがあっても効き、
+      // ピック中でなければ開始してそのまま移動する（↓/J で最初の対象に着地する）。
+      // 以降は矢印キーとして処理するので、修飾キーを外した見かけのイベントに差し替える
+      const nav = vimNavKey(e);
+      if (nav) {
+        e.preventDefault();
+        if (!active) {
+          textEntryOf(e)?.blur?.();
+          dispatch({ type: 'start' });
+          active = true;
+          buffer = '';
+          sub = null;
+        }
+        e = {
+          key: nav,
+          code: nav,
+          ctrlKey: false,
+          metaKey: false,
+          altKey: false,
+          shiftKey: false,
+          preventDefault() {},
+        };
+      }
 
-    // ピック中: Enter で確定、Escape で取消
-    if (isEnterKey(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-      e.preventDefault();
-      dispatch({ type: 'clear' });
-      // 2 段目に入っていても数字が未入力なら、1 段目だけで確定したものとして扱う
-      if (target != null) pick?.(target, subTarget);
-      else onEmptyEnter?.();
-      return;
-    }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      dispatch({ type: 'clear' });
-      onCancel?.();
-      return;
-    }
+      if (!active) {
+        if (!allowBareDigits) return;
+        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+        if (textEntryOf(e)) return;
+        // 本文で Enter を空押し＝番号なしの確定（「全体への指摘」）。ピック開始を待たずに効かせる
+        if (isEnterKey(e)) {
+          e.preventDefault();
+          onEmptyEnter?.();
+          return;
+        }
+        if (!/^[0-9]$/.test(e.key)) return;
+        e.preventDefault();
+        dispatch({ type: 'digit', digit: e.key });
+        return;
+      }
 
-    // 呼び出し側固有のキー（矢印の左右・文字キー等）。握ったら preventDefault して終わる
-    if (onKey?.(e, { target, subTarget })) {
-      e.preventDefault();
-      return;
-    }
+      const target = resolveTarget(buffer, maxN);
+      const subTarget = sub != null ? resolveTarget(sub, subLimitOf(target)) : null;
 
-    const action = keyToPickAction(e, { max: maxN });
-    if (!action) return;
-    // 2 段目に入れないとき（未対応・1 段目が未解決）は `.` を素通しする
-    if (action.type === 'sep' && (!allowSub || target == null)) return;
-    e.preventDefault();
-    if (action.type === 'step') {
-      // 2 段目（行）は上が小さい番号なので反転しない。反転は 1 段目にだけ効かせる
-      const inSub = sub != null;
-      dispatch({
-        ...action,
-        max: inSub ? subLimitOf(target) : maxN,
-        delta: !inSub && invertArrows ? -action.delta : action.delta,
-      });
-      return;
-    }
-    dispatch(action);
-  }, [subLimitOf]);
+      // ピック中: Enter で確定、Escape で取消
+      if (isEnterKey(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        dispatch({ type: 'clear' });
+        // 2 段目に入っていても数字が未入力なら、1 段目だけで確定したものとして扱う
+        if (target != null) pick?.(target, subTarget);
+        else onEmptyEnter?.();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        dispatch({ type: 'clear' });
+        onCancel?.();
+        return;
+      }
+
+      // 呼び出し側固有のキー（矢印の左右・文字キー等）。握ったら preventDefault して終わる
+      if (onKey?.(e, { target, subTarget })) {
+        e.preventDefault();
+        return;
+      }
+
+      const action = keyToPickAction(e, { max: maxN });
+      if (!action) return;
+      // 2 段目に入れないとき（未対応・1 段目が未解決）は `.` を素通しする
+      if (action.type === 'sep' && (!allowSub || target == null)) return;
+      e.preventDefault();
+      if (action.type === 'step') {
+        // 2 段目（行）は上が小さい番号なので反転しない。反転は 1 段目にだけ効かせる
+        const inSub = sub != null;
+        dispatch({
+          ...action,
+          max: inSub ? subLimitOf(target) : maxN,
+          delta: !inSub && invertArrows ? -action.delta : action.delta,
+        });
+        return;
+      }
+      dispatch(action);
+    },
+    [subLimitOf],
+  );
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
