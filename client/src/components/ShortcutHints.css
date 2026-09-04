@@ -1,0 +1,45 @@
+/* サイドバー最下部の「今使えるキー操作」カンペ。タブ一覧に押し出されないよう底に固定する */
+.shortcut-hints {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.shortcut-hints:hover {
+  opacity: 1;
+}
+
+.shortcut-hints-title {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+  opacity: 0.8;
+}
+
+.shortcut-hint {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.shortcut-hint kbd {
+  flex-shrink: 0;
+  font-family: monospace;
+  font-size: 10px;
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-primary);
+  white-space: nowrap;
+}
+
+/* サイドバーは狭いので説明は折り返す */
+.shortcut-hint-label {
+  min-width: 0;
+}
