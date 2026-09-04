@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { INITIAL_PICK_STATE, keyToPickAction, pickReducer, resolveTarget } from '../utils/numberPick.js';
-import { isEnterKey, isPickModeShortcut, vimNavKey } from '../utils/keys.js';
+import { isEnterKey, isPickModeShortcut, isFocusInputShortcut, vimNavKey } from '../utils/keys.js';
 
 // テキスト入力中かどうか。数字キーの素通し判定に使う
 function isTextEntry(el) {
@@ -90,6 +90,20 @@ export function useNumberPick({
         invertArrows,
         allowSub,
       } = optsRef.current;
+
+      // Alt+I: 送信欄へフォーカスを移すショートカット。ピック中なら取消してから譲る。
+      // フォーカス移動そのものは同じ document に張ってある useGlobalKeys 側の役目だが、
+      // App が先に・ChatView は後からマウントされる関係で向こうの handler が先に走り、
+      // e.preventDefault() 済みでここに届くことがある。それでもピック状態を残すと
+      // 送信欄への入力を数字キー等としてピックが奪い続けてしまうため、この判定だけは
+      // e.defaultPrevented / enabled を見ずに常に行う（preventDefault はしない）。
+      // ドロワー表示中は useGlobalKeys 側も何もしない（後ろの送信欄へ飛ばさない）ので、こちらも取消しない
+      if (stateRef.current.active && isFocusInputShortcut(e) && !document.querySelector('.drawer-overlay')) {
+        dispatch({ type: 'clear' });
+        onCancel?.();
+        return;
+      }
+
       if (e.defaultPrevented) return;
       if (!(typeof en === 'function' ? en() : en !== false)) return;
 

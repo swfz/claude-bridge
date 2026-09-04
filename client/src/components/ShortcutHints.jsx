@@ -42,6 +42,7 @@ const HINT_SETS = {
     ['Enter', '指摘欄を開く'],
     ['⌫', '戻る'],
     ['Esc', '取消'],
+    ['Alt+I', '取消して送信欄へ'],
   ],
   chatMsgPick: [
     ['0-9', 'メッセージ番号（最新が 1）'],
@@ -53,6 +54,7 @@ const HINT_SETS = {
     ['Tab', '別のファイル'],
     ['Enter', '指摘欄を開く'],
     ['Esc', '取消'],
+    ['Alt+I', '取消して送信欄へ'],
   ],
 };
 
@@ -62,6 +64,7 @@ const GLOBAL_HINTS = [
   ['Alt+Shift+J K', '次・前のタブ'],
   ['Alt+1-9 / 0', 'n 番目のタブ / ホーム'],
   ['Ctrl+D U', '半画面スクロール'],
+  ['Alt+I', '送信欄へ'],
 ];
 
 function detectMode() {
@@ -96,7 +99,8 @@ function detectMode() {
   if (inSendBox) hints.push(['Enter', '送信 / Shift+Enter 改行']);
   if (hasReviewPanel) hints.push(['Ctrl+Shift+Enter', '一括送信']);
   if (inSendBox) hints.push(['/', 'スラッシュコマンド補完']);
-  hints.push(...GLOBAL_HINTS);
+  // 送信欄に既にフォーカスがあるなら「送信欄へ」は出さない（GLOBAL_HINTS はホーム等と共用のため個別に除く）
+  hints.push(...GLOBAL_HINTS.filter(([key]) => key !== 'Alt+I' || !inSendBox));
   return { key: `chat:${inSendBox ? 1 : 0}:${hasReviewPanel ? 1 : 0}`, hints };
 }
 

@@ -8,6 +8,7 @@ import {
   isDeleteItemShortcut,
   halfPageScrollKey,
   tabNavKey,
+  isFocusInputShortcut,
 } from '../client/src/utils/keys.js';
 
 const ev = (o) => ({ key: '', code: '', ctrlKey: false, metaKey: false, shiftKey: false, isComposing: false, ...o });
@@ -86,6 +87,17 @@ describe('keys: halfPageScrollKey（Ctrl+D / Ctrl+U）', () => {
     assert.equal(halfPageScrollKey({ ...ctrl('KeyD', 'D'), shiftKey: true }), null);
     assert.equal(halfPageScrollKey({ key: 'd', code: 'KeyD', ctrlKey: false }), null);
   });
+});
+
+describe('keys: isFocusInputShortcut（Alt+I）', () => {
+  it('Alt+I は真', () => assert.equal(isFocusInputShortcut(ev({ key: 'i', code: 'KeyI', altKey: true })), true));
+  it('レイアウトで key が別文字でも code（KeyI）で拾う', () =>
+    assert.equal(isFocusInputShortcut(ev({ key: 'ˆ', code: 'KeyI', altKey: true })), true));
+  it('Ctrl+I（Alt なし）は偽', () =>
+    assert.equal(isFocusInputShortcut(ev({ key: 'i', code: 'KeyI', ctrlKey: true })), false));
+  it('Alt+Shift+I は偽', () =>
+    assert.equal(isFocusInputShortcut(ev({ key: 'i', code: 'KeyI', altKey: true, shiftKey: true })), false));
+  it('I 単体（Alt なし）は偽', () => assert.equal(isFocusInputShortcut(ev({ key: 'i', code: 'KeyI' })), false));
 });
 
 describe('keys: tabNavKey（Alt+Shift+J/K・Alt+数字）', () => {
