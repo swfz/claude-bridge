@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseCwd } from '../utils/cwdLabel.js';
+import ShortcutHints from './ShortcutHints.jsx';
 import './SessionTabs.css';
 
 const MIN_WIDTH = 160;
@@ -241,6 +242,8 @@ export default function SessionTabs({
             );
           })}
       </div>
+      {/* 折りたたみ中は幅が足りないので出さない */}
+      {!collapsed && <ShortcutHints />}
     </div>
   );
 }

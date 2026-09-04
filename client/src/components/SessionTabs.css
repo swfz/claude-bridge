@@ -58,7 +58,9 @@
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
-  flex: 1;
+  /* min-height: 0 が無いとタブが増えたときに縮まず、下のカンペを押し出す */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .tab {
