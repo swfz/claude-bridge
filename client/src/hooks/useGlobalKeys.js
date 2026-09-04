@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { halfPageScrollKey, tabNavKey } from '../utils/keys.js';
+import { halfPageScrollKey, tabNavKey, isFocusInputShortcut } from '../utils/keys.js';
 
 // テキスト入力中か（Ctrl+D/U はエディタ操作と衝突するので入力中は触らない）
 function isTextEntry(el) {
@@ -23,6 +23,7 @@ function scrollContainer() {
  * - Ctrl+D / Ctrl+U: 半画面スクロール（vim）。入力欄にフォーカスがあるときは素通し
  * - Alt+Shift+J / K: 次・前のタブ（ホームを 0 番目として巡回）
  * - Alt+1〜9: n 番目のタブへ、Alt+0: ホームへ。入力欄にフォーカスがあっても効く
+ * - Alt+I: 送信欄（`.input-textarea`）へフォーカス。ドロワー表示中は何もしない
  *
  * `tabs` はサイドバーと同じ並び・同じ絞り込み（共有モードで隠しているものを含めない）で渡す。
  */
@@ -33,6 +34,16 @@ export function useGlobalKeys({ tabs, activeId, onSelectTab, onHome }) {
   useEffect(() => {
     const handler = (e) => {
       if (e.defaultPrevented) return;
+
+      if (isFocusInputShortcut(e)) {
+        // ドロワー表示中は後ろに隠れている送信欄へ飛ばさない
+        if (document.querySelector('.drawer-overlay')) return;
+        const textarea = document.querySelector('.input-textarea');
+        if (!textarea) return; // ホーム表示中など送信欄が無い画面では何もしない
+        e.preventDefault();
+        textarea.focus();
+        return;
+      }
 
       const scroll = halfPageScrollKey(e);
       if (scroll) {
