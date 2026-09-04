@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useWebSocket } from './hooks/useWebSocket.js';
+import { useGlobalKeys } from './hooks/useGlobalKeys.js';
 import SessionTabs from './components/SessionTabs.jsx';
 import TerminalView from './components/TerminalView.jsx';
 import ChatView from './components/ChatView.jsx';
@@ -128,6 +129,9 @@ export default function App() {
   const [showThreadPanel, setShowThreadPanel] = useState(false);
   const [showCommentPanel, setShowCommentPanel] = useState(false);
   const [showReviewPanel, setShowReviewPanel] = useState(false);
+  // 数字キーで選んだメッセージを、レビューパネルの下書きに引用として渡すための箱
+  // （同じメッセージを続けて選べるよう nonce で更新を伝える）
+  const [incomingAnchor, setIncomingAnchor] = useState(null);
   // コメント一覧から本文へスクロールする際の対象メッセージ uuid
   const [jumpToUuid, setJumpToUuid] = useState(null);
   const [showFileExplorer, setShowFileExplorer] = useState(false);
@@ -873,6 +877,20 @@ export default function App() {
     handleSwitchSessionRef.current = handleSwitchSession;
   }, [handleSwitchSession]);
 
+  // 画面全体のキー操作（Ctrl+D/U の半画面スクロール、Alt+Shift+J/K・Alt+数字 のタブ移動）。
+  // タブの並びと絞り込みはサイドバー（SessionTabs）と同じにする（隠しているタブへ飛ばないように）
+  const keyboardTabIds = useMemo(
+    () =>
+      sessions.filter((s) => !(shareMode && s.claudeSessionId && sensitiveIds.has(s.claudeSessionId))).map((s) => s.id),
+    [sessions, shareMode, sensitiveIds],
+  );
+  useGlobalKeys({
+    tabs: keyboardTabIds,
+    activeId: showHome ? null : activeSessionId,
+    onSelectTab: handleSwitchSession,
+    onHome: () => setShowHome(true),
+  });
+
   const handleToggleNotify = useCallback(async () => {
     if (notifyEnabled) {
       setNotifyEnabled(false);
@@ -1009,6 +1027,14 @@ export default function App() {
     },
     [send, activeSessionId, sessionKey, reviewItems],
   );
+
+  // 数字キーでメッセージを選んだ → レビューパネルを開き、その引用を付けた指摘欄に入る。
+  // 本文はまだ空なので App の reviewItems（＝サーバー保存分）には載せず、パネルの下書きに渡す。
+  const handlePickMessageForReview = useCallback(({ anchor }) => {
+    if (!anchor) return;
+    setShowReviewPanel(true);
+    setIncomingAnchor({ anchor, nonce: Date.now() });
+  }, []);
 
   // 範囲選択 → コメントに残す。選択箇所を anchor に、本文は別に書いて保存（送信しない）。
   const handleAddAnchoredComment = useCallback(
@@ -1256,6 +1282,7 @@ export default function App() {
                     onOpenPreview={handleOpenPreview}
                     onPreviewMarkdown={handlePreviewMarkdown}
                     onOpenFileReview={handleOpenFileReview}
+                    onPickMessageForReview={handlePickMessageForReview}
                     readonly={isReadonly}
                     sessionId={activeSessionId}
                   />
@@ -1281,6 +1308,7 @@ export default function App() {
             {showReviewPanel && chatPanelsVisible && (
               <ReviewDraftPanel
                 items={reviewItems}
+                incomingAnchor={incomingAnchor}
                 readonly={isReadonly}
                 onSave={handleSaveReview}
                 onSubmit={handleSubmitReview}

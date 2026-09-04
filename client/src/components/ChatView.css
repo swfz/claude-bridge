@@ -780,3 +780,110 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* メッセージピック（Alt+R → 数字 → Enter）の番号バッジ。ヘッダの先頭に出す */
+.msg-pick-badge {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 5px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text-primary);
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* 打鍵中に指しているメッセージ */
+.chat-message.msg-pick-target {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* 打鍵中の番号を出す HUD（チャット下部中央・入力欄の上） */
+.msg-pick-hud {
+  position: sticky;
+  bottom: 8px;
+  align-self: center;
+  margin: 0 auto;
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  z-index: 6;
+}
+
+.msg-pick-hud-value {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.msg-pick-hud-value.invalid {
+  color: var(--accent-hover);
+}
+
+.msg-pick-hud-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 行ピック（#N.M）の 2 段目。対象メッセージだけ左に行番号バッジ用の余白を作る */
+.chat-message.msg-line-mode {
+  padding-left: 34px;
+}
+
+.chat-message-body.msg-line-mode {
+  position: relative;
+}
+
+/* 本文の各ブロックの左に出すソース行番号 */
+.msg-line-badge {
+  position: absolute;
+  left: -28px;
+  width: 24px;
+  text-align: right;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  opacity: 0.75;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* 打鍵中の行に対応するブロック */
+.msg-line-target {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* p / Tab で開く対象になっているファイルリンク */
+.msg-pick-file {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* HUD に出す「今 p で開くファイル」 */
+.msg-pick-hud-file {
+  font-size: 11px;
+  color: var(--text-primary);
+  border-left: 1px solid var(--border);
+  padding-left: 10px;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

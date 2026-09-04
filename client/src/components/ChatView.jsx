@@ -1,11 +1,16 @@
-import { createContext, memo, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
 import { EXT_TO_LANG, highlightLines } from '../highlight.js';
 import { PREVIEWABLE_EXTS, getExt } from '../utils/previewExts.js';
 import { useStickToBottom } from '../hooks/useStickToBottom.js';
+import { useNumberPick } from '../hooks/useNumberPick.js';
+import { halfScreenJump } from '../utils/pickJump.js';
+import { halfPageScrollKey } from '../utils/keys.js';
 import { collectArtifacts } from '../utils/artifacts.js';
+import { LEAF_BLOCKS, blockForLine, collectSourceBlocks } from '../utils/sourceBlocks.js';
+import { rehypeSourceLine } from '../utils/rehypeSourceLine.js';
 import FilePreview from './FilePreview.jsx';
 import CodeBlock from './CodeBlock.jsx';
 import ArtifactStrip from './ArtifactStrip.jsx';
@@ -166,6 +171,8 @@ function preprocessFileUrls(text) {
 // チップ⇄プレーン表示がチラつく）。ハンドラは要素の型に混ぜず context で渡す。
 const MarkdownHandlersContext = createContext({ sessionCwd: null, onOpenPreview: null, onOpenFileReview: null });
 const REMARK_PLUGINS = [remarkGfm, remarkAlert];
+// 行ピック（#N.M）で「表示中のどのブロックがソースの何行目か」を引けるようにする
+const REHYPE_PLUGINS = [rehypeSourceLine];
 const identityUrl = (url) => url;
 
 // react-markdown は hast の node も props で渡してくるので DOM に漏らさないよう抜く
@@ -219,7 +226,12 @@ function MarkdownContent({ content, sessionCwd, onOpenPreview, onOpenFileReview 
 
   return (
     <MarkdownHandlersContext.Provider value={handlers}>
-      <Markdown remarkPlugins={REMARK_PLUGINS} urlTransform={identityUrl} components={MARKDOWN_COMPONENTS}>
+      <Markdown
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
+        urlTransform={identityUrl}
+        components={MARKDOWN_COMPONENTS}
+      >
         {processed}
       </Markdown>
     </MarkdownHandlersContext.Provider>
@@ -243,6 +255,10 @@ export const ChatMessage = memo(function ChatMessage({
   onPreviewMarkdown,
   onOpenFileReview,
   readonly,
+  pickNumber,
+  pickTarget,
+  pickLine,
+  expandCmd,
 }) {
   const [expanded, setExpanded] = useState(false);
   // 範囲選択時に出すアクションメニュー（レビューに追加 / コメントに残す / スレッド）
@@ -251,6 +267,47 @@ export const ChatMessage = memo(function ChatMessage({
   const [noteDraft, setNoteDraft] = useState(null);
   // 💬 マーカーのインラインコメント一覧の開閉
   const [showInlineComments, setShowInlineComments] = useState(false);
+  // 行ピックの 2 段目（#N.M）で出す、本文左のソース行番号バッジ [{line, top}]
+  const bodyRef = useRef(null);
+  const [lineBadges, setLineBadges] = useState([]);
+  // pickLine が undefined なら行モードではない（null は「行モードだが行が未確定」）
+  const lineMode = pickLine !== undefined;
+
+  // ピック中の →← で全文表示／折りたたみを切り替える。同じ値を続けて送れるよう nonce で発火する
+  useEffect(() => {
+    if (!expandCmd) return;
+    setExpanded(expandCmd.expanded);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandCmd?.nonce]);
+
+  // 行モードのあいだ、末端ブロックごとに行番号バッジの位置を測る。
+  // 同じ行に複数のブロックがあれば DOM 順で後ろ（＝より深い方）を採る
+  useEffect(() => {
+    if (!lineMode) {
+      setLineBadges((prev) => (prev.length ? [] : prev));
+      return;
+    }
+    const body = bodyRef.current;
+    if (!body) return;
+    const bodyTop = body.getBoundingClientRect().top;
+    const byLine = new Map();
+    for (const { el, line } of collectSourceBlocks(body)) {
+      if (LEAF_BLOCKS.has(el.tagName)) byLine.set(line, el);
+    }
+    setLineBadges([...byLine.entries()].map(([line, el]) => ({ line, top: el.getBoundingClientRect().top - bodyTop })));
+  }, [lineMode, expanded, message.content]);
+
+  // 打鍵中の行に対応するブロックを強調して画面内に寄せる。クラスは cleanup で外す
+  useEffect(() => {
+    if (!lineMode || pickLine == null) return;
+    const body = bodyRef.current;
+    if (!body) return;
+    const el = blockForLine(collectSourceBlocks(body), pickLine);
+    if (!el) return;
+    el.classList.add('msg-line-target');
+    el.scrollIntoView({ block: 'nearest' });
+    return () => el.classList.remove('msg-line-target');
+  }, [lineMode, pickLine, message.content]);
 
   // メニュー表示中は外側クリック・スクロールで閉じる
   useEffect(() => {
@@ -315,7 +372,8 @@ export const ChatMessage = memo(function ChatMessage({
   );
 
   const isLong = (message.content || '').length > COLLAPSE_THRESHOLD;
-  const shouldCollapse = isLong && !expanded;
+  // 行を指しているあいだは折りたたまない（隠れた行のバッジを打っても見えないため）
+  const shouldCollapse = isLong && !expanded && !lineMode;
 
   // 範囲選択したら、選択範囲の上にアクションメニューを出す（即 Thread 化はしない）
   const handleTextSelect = () => {
@@ -363,10 +421,17 @@ export const ChatMessage = memo(function ChatMessage({
 
   return (
     <div
-      className={`chat-message ${isHuman ? 'human' : 'assistant'} ${isHistory ? 'history' : ''}`}
+      className={`chat-message ${isHuman ? 'human' : 'assistant'} ${isHistory ? 'history' : ''} ${
+        pickTarget ? 'msg-pick-target' : ''
+      } ${lineMode ? 'msg-line-mode' : ''}`}
       data-message-uuid={message.uuid || undefined}
     >
       <div className="chat-message-header">
+        {pickNumber != null && (
+          <span className="msg-pick-badge" title="この番号を打って Enter でレビュー対象にする">
+            {pickNumber}
+          </span>
+        )}
         <span className="chat-role">{isHuman ? 'You' : 'Claude'}</span>
         <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
         {messageComments.length > 0 && (
@@ -439,9 +504,16 @@ export const ChatMessage = memo(function ChatMessage({
       )}
       {message.content && (
         <div
-          className={`chat-message-body ${shouldCollapse ? 'collapsed' : ''}`}
+          ref={bodyRef}
+          className={`chat-message-body ${shouldCollapse ? 'collapsed' : ''} ${lineMode ? 'msg-line-mode' : ''}`}
           onMouseUp={!isHuman ? handleTextSelect : undefined}
         >
+          {lineMode &&
+            lineBadges.map((b) => (
+              <span key={b.line} className="msg-line-badge" style={{ top: b.top }}>
+                {b.line}
+              </span>
+            ))}
           <MarkdownContent
             content={message.content}
             sessionCwd={sessionCwd}
@@ -541,6 +613,7 @@ export default function ChatView({
   onOpenPreview,
   onPreviewMarkdown,
   onOpenFileReview,
+  onPickMessageForReview,
   readonly,
   sessionId,
 }) {
@@ -549,6 +622,187 @@ export default function ChatView({
 
   // このセッションで公開した Artifact（URL ごとに 1 件）
   const artifacts = useMemo(() => collectArtifacts(messages), [messages]);
+
+  // ── メッセージピック（Alt+R → 数字 → Enter でレビュー対象にする）─────────────
+  // 番号は「新しいものが 1」。目に入るのは最新側なので、そこから数えられる方が探しやすい。
+  const pickable = useMemo(
+    () => messages.filter((m) => m.uuid && (m.role === 'human' || m.role === 'assistant')),
+    [messages],
+  );
+  const pickNumbers = useMemo(() => {
+    const map = new Map();
+    pickable.forEach((m, i) => map.set(m.uuid, pickable.length - i));
+    return map;
+  }, [pickable]);
+
+  // →← の全文表示／折りたたみ指示（対象メッセージへ nonce 付きで送る）
+  const [expandCmd, setExpandCmd] = useState(null);
+  // p / Tab で開くファイルリンクの選択位置と、HUD に出すファイル名
+  const [pickFileIndex, setPickFileIndex] = useState(0);
+  const [pickFiles, setPickFiles] = useState([]);
+  const pickRef = useRef(null);
+
+  // 番号 n のメッセージ要素（DOM）を引く
+  const messageElOf = useCallback(
+    (n) => {
+      const msg = pickable[pickable.length - n];
+      if (!msg?.uuid) return null;
+      return scrollRef.current?.querySelector(`[data-message-uuid="${msg.uuid}"]`) || null;
+    },
+    [pickable, scrollRef],
+  );
+
+  const handlePickMessage = useCallback(
+    (n, line) => {
+      const msg = pickable[pickable.length - n];
+      if (!msg || !onPickMessageForReview) return;
+      // 行が指定されていれば、そのソース行に対応する表示ブロックの文を引用にする
+      let quote = '';
+      if (line != null) {
+        const body = messageElOf(n)?.querySelector('.chat-message-body');
+        const block = body ? blockForLine(collectSourceBlocks(body), line) : null;
+        quote = (block?.textContent || (msg.content || '').split('\n')[line - 1] || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 80);
+      } else {
+        quote = (msg.content || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      }
+      if (!quote) quote = msg.role === 'human' ? 'You' : 'Claude';
+      const anchor = { type: 'message', messageUuid: msg.uuid, quote };
+      if (line != null) anchor.line = line;
+      onPickMessageForReview({ anchor });
+    },
+    [pickable, onPickMessageForReview, messageElOf],
+  );
+
+  // ピック中の Ctrl+D / Ctrl+U: 対象を半画面分先のメッセージ（2 段目なら行）へ飛ばす。
+  // 番号ではなく画面上の位置で決める（長いメッセージが混ざると「n 件先」では移動量がぶれる）
+  const jumpHalfScreen = useCallback(
+    (direction, { target, subTarget }) => {
+      const container = scrollRef.current;
+      if (!container) return;
+      const half = container.clientHeight / 2;
+      let items;
+      let current;
+      if (pickRef.current?.sub != null && target != null) {
+        const body = messageElOf(target)?.querySelector('.chat-message-body');
+        items = body
+          ? collectSourceBlocks(body)
+              .filter(({ el }) => LEAF_BLOCKS.has(el.tagName))
+              .map(({ el, line }) => ({ n: line, top: el.getBoundingClientRect().top }))
+          : [];
+        current = subTarget;
+      } else {
+        items = pickable
+          .map((m) => {
+            const el = container.querySelector(`[data-message-uuid="${m.uuid}"]`);
+            return el ? { n: pickNumbers.get(m.uuid), top: el.getBoundingClientRect().top } : null;
+          })
+          .filter(Boolean);
+        current = target;
+      }
+      // 同じ番号が並ぶ（同一行に複数ブロック）ことがあるので番号で重複排除し、画面上の並びに揃える
+      const seen = new Set();
+      items = items.filter((it) => it.n != null && !seen.has(it.n) && seen.add(it.n)).sort((a, b) => a.top - b.top);
+      const next = halfScreenJump({ items, current, half, direction });
+      if (next != null) pickRef.current?.setTarget(next);
+    },
+    [pickable, pickNumbers, messageElOf, scrollRef],
+  );
+
+  // ピック中の呼び出し側固有キー。→← は折りたたみ、Tab / p はファイルリンク、Ctrl+D/U は半画面ジャンプ
+  const handlePickKey = useCallback(
+    (e, { target, subTarget }) => {
+      const scroll = halfPageScrollKey(e);
+      if (scroll) {
+        jumpHalfScreen(scroll, { target, subTarget });
+        return true;
+      }
+      if (target == null) return false;
+      const msg = pickable[pickable.length - target];
+      if (!msg?.uuid) return false;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        setExpandCmd({ uuid: msg.uuid, expanded: e.key === 'ArrowRight', nonce: Date.now() });
+        return true;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return false;
+      const links = [...(messageElOf(target)?.querySelectorAll('.file-link') || [])];
+      if (e.key === 'Tab' && !e.shiftKey) {
+        // リンクが 1 つ以下でも握る（フォーカスがチャットの外へ飛ぶのを防ぐ）
+        if (links.length > 1) setPickFileIndex((i) => (i + 1) % links.length);
+        return true;
+      }
+      // 行を打っている最中の p は行番号の入力ではないので、1 段目のときだけプレビューを開く
+      if (e.key === 'p' && pickRef.current?.sub == null) {
+        if (links.length) {
+          links[Math.min(pickFileIndex, links.length - 1)].click();
+          pickRef.current?.clear();
+        }
+        return true;
+      }
+      return false;
+    },
+    [pickable, messageElOf, pickFileIndex, jumpHalfScreen],
+  );
+
+  const pick = useNumberPick({
+    // プレビューのドロワーが開いている間はそちらの行ピックが対象なので譲る
+    enabled: useCallback(() => !document.querySelector('.drawer-overlay'), []),
+    max: pickable.length,
+    // 入力欄に打った数字を誤って拾わないよう、チャットでは Alt+R での開始を必須にする
+    allowBareDigits: false,
+    // 上に行くほど番号が大きいので、↑ で番号を増やす（2 段目の行には効かせない）
+    invertArrows: true,
+    // `.` で 2 段目（メッセージ内の行）へ。上限は本文の行数
+    allowSub: true,
+    subMax: (n) => (pickable[pickable.length - n]?.content || '').split('\n').length,
+    onKey: handlePickKey,
+    onPick: handlePickMessage,
+  });
+  pickRef.current = pick;
+
+  // 打鍵中の対象が画面外なら寄せる
+  useEffect(() => {
+    if (!pick.active || pick.target == null) return;
+    messageElOf(pick.target)?.scrollIntoView({ block: 'nearest' });
+  }, [pick.active, pick.target, messageElOf]);
+
+  // `.` で 2 段目に入った瞬間だけ、対象を全文表示にする（隠れた行は指せないため）
+  const prevSubRef = useRef(null);
+  useEffect(() => {
+    const prev = prevSubRef.current;
+    prevSubRef.current = pick.sub;
+    if (prev != null || pick.sub !== '' || pick.target == null) return;
+    const msg = pickable[pickable.length - pick.target];
+    if (msg?.uuid) setExpandCmd({ uuid: msg.uuid, expanded: true, nonce: Date.now() });
+  }, [pick.sub, pick.target, pickable]);
+
+  // 対象メッセージ内のファイルリンクを拾い、選択中の 1 つを強調する。
+  // ChatMessage の memo を崩さないよう className ではなく DOM 直接操作で付け外しする
+  useEffect(() => {
+    if (!pick.active || pick.target == null) {
+      setPickFiles((prev) => (prev.length ? [] : prev));
+      return;
+    }
+    const links = [...(messageElOf(pick.target)?.querySelectorAll('.file-link') || [])];
+    setPickFiles(links.map((el) => el.textContent || ''));
+    if (!links.length) return;
+    const link = links[Math.min(pickFileIndex, links.length - 1)];
+    link.classList.add('msg-pick-file');
+    return () => link.classList.remove('msg-pick-file');
+  }, [pick.active, pick.target, pickFileIndex, messageElOf, expandCmd]);
+
+  // ピックを抜けたらファイル選択位置を戻す
+  useEffect(() => {
+    if (!pick.active) setPickFileIndex(0);
+  }, [pick.active]);
+
+  // 打鍵中の数字が範囲外（丸められた）なら HUD を赤くする。2 段目に入っていればそちらを見る
+  const pickHudInvalid =
+    pick.sub == null
+      ? pick.target == null || Number(pick.buffer) !== pick.target
+      : pick.subTarget == null || Number(pick.sub) !== pick.subTarget;
 
   // コメント一覧から指定の messageUuid へスクロール（ベストエフォート）
   useEffect(() => {
@@ -585,6 +839,15 @@ export default function ChatView({
                 onPreviewMarkdown={onPreviewMarkdown}
                 onOpenFileReview={onOpenFileReview}
                 readonly={readonly}
+                // ピック中だけ番号を渡す（それ以外は undefined のままで memo を効かせる）
+                pickNumber={pick.active ? (pickNumbers.get(msg.uuid) ?? null) : undefined}
+                pickTarget={pick.active && pick.target != null && pickNumbers.get(msg.uuid) === pick.target}
+                pickLine={
+                  pick.active && pick.sub != null && pickNumbers.get(msg.uuid) === pick.target
+                    ? pick.subTarget
+                    : undefined
+                }
+                expandCmd={expandCmd?.uuid === msg.uuid ? expandCmd : undefined}
               />
               {showDivider && <div className="history-divider">--- 過去の会話 / ここから新規 ---</div>}
             </div>
@@ -596,6 +859,28 @@ export default function ChatView({
         <button className="scroll-to-latest" onClick={scrollToBottom}>
           ↓ 新しいメッセージ
         </button>
+      )}
+
+      {/* メッセージピックの打鍵中に「今どのメッセージを指しているか」を出す */}
+      {pick.active && (
+        <div className="msg-pick-hud" data-mode={pick.sub == null ? 'message' : 'line'}>
+          <span className={`msg-pick-hud-value ${pickHudInvalid ? 'invalid' : ''}`}>
+            #{pick.buffer || '_'}
+            {pick.sub != null && `.${pick.sub || '_'}`}
+          </span>
+          {pickFiles.length > 0 && (
+            <span className="msg-pick-hud-file">
+              📄 {pickFiles[Math.min(pickFileIndex, pickFiles.length - 1)]} (
+              {Math.min(pickFileIndex, pickFiles.length - 1) + 1}/{pickFiles.length})
+              {pickFiles.length > 1 && ' · Tab で切替'}
+            </span>
+          )}
+          <span className="msg-pick-hud-hint">
+            {pick.sub == null
+              ? 'Enter 指摘 / . 行を指定 / ↑↓ 移動 / →← 全文表示 / p プレビュー / Esc 取消'
+              : '行番号を打つ / Enter 指摘 / ↑↓ 行を移動 / ⌫ 戻る'}
+          </span>
+        </div>
       )}
     </div>
   );
