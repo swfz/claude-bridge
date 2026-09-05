@@ -617,7 +617,7 @@
 .home-rows-header,
 .home-row {
   grid-template-columns:
-    18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 160px)
+    18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 160px) 44px
     62px;
 }
 
@@ -688,6 +688,14 @@
   gap: 3px;
   align-items: center;
   overflow: hidden;
+}
+
+/* コンテキスト使用率。色でだけ濃淡を付け、内訳は tooltip に逃がす */
+.home-row-ctx {
+  text-align: right;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* 右端は「経過時間」か、タブで開いていればその印（＝左帯の色の言い換え） */

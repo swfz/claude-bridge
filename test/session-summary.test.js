@@ -97,6 +97,45 @@ describe('summarizeTail', () => {
     assert.equal(tail.lastAssistantMessage, '新しい返事');
     assert.equal(tail.lastTimestamp, '2026-08-17T05:01:00.000Z');
   });
+
+  it('末尾の usage 付き assistant からコンテキスト使用量を取る', () => {
+    const lines = jsonl([
+      userRecord('依頼'),
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: '古い返事' }], usage: { input_tokens: 1 } },
+      },
+      {
+        type: 'assistant',
+        message: {
+          model: 'claude-sonnet-4-5',
+          content: [{ type: 'text', text: '新しい返事' }],
+          usage: { input_tokens: 10, cache_creation_input_tokens: 20, cache_read_input_tokens: 70 },
+        },
+      },
+    ]).split('\n');
+    const tail = summarizeTail(lines);
+    assert.equal(tail.contextUsage.contextTokens, 100);
+    assert.equal(tail.contextUsage.contextWindow, 200_000);
+  });
+
+  it('usage の無い末尾レコードは飛ばして直近の usage 付き assistant を使う', () => {
+    const lines = jsonl([
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: '返事' }], usage: { input_tokens: 5 } },
+      },
+      // API エラー等で usage を持たない assistant
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'エラー' }] } },
+      userRecord('次の依頼'),
+    ]).split('\n');
+    assert.equal(summarizeTail(lines).contextUsage.contextTokens, 5);
+  });
+
+  it('usage がどこにも無ければ null', () => {
+    const lines = jsonl([userRecord('依頼')]).split('\n');
+    assert.equal(summarizeTail(lines).contextUsage, null);
+  });
 });
 
 describe('readLastLines', () => {

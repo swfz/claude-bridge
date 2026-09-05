@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseCwd } from '../utils/cwdLabel.js';
+import { contextColorFor, contextPercent, formatTokens } from '../utils/contextUsage.js';
 import ShortcutHints from './ShortcutHints.jsx';
 import './SessionTabs.css';
 
@@ -37,6 +38,7 @@ export default function SessionTabs({
   attentionIds,
   sensitiveIds,
   starredIds,
+  contextBySession,
   shareMode,
   onHome,
   onSelect,
@@ -125,6 +127,9 @@ export default function SessionTabs({
             const isStarredTab = Boolean(session.claudeSessionId && starredIds?.has(session.claudeSessionId));
             const isSensitiveTab = Boolean(session.claudeSessionId && sensitiveIds?.has(session.claudeSessionId));
             const className = `tab ${session.id === activeSessionId ? 'active' : ''} ${!session.alive ? 'dead' : ''} ${hasAttention ? 'tab-attention' : ''}`;
+            // コンテキスト使用率は展開表示のみ（折りたたみ時は幅が足りない）
+            const contextUsage = contextBySession?.get(session.id) || null;
+            const contextPct = contextUsage ? contextPercent(contextUsage) : 0;
 
             if (collapsed) {
               // 折りたたみ時はアイコン相当（頭文字＋状態）だけ。詳細は tooltip に逃がす
@@ -237,6 +242,16 @@ export default function SessionTabs({
                     {project}
                   </span>
                   {worktree && <span className="tab-cwd-worktree">⎇ {worktree}</span>}
+                  {/* コンテキスト使用率。狭いので % だけ出し、内訳は tooltip に逃がす */}
+                  {contextUsage && (
+                    <span
+                      className="tab-context"
+                      style={{ color: contextColorFor(contextPct) }}
+                      title={`コンテキスト ${formatTokens(contextUsage.contextTokens)} / ${formatTokens(contextUsage.contextWindow)}`}
+                    >
+                      {contextPct}%
+                    </span>
+                  )}
                 </span>
               </div>
             );

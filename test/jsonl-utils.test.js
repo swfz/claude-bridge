@@ -1,6 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { cwdToProjectDir, extractArtifactPublish, extractTextContent, extractToolUses } from '../server/jsonl-utils.js';
+import {
+  contextWindowFor,
+  cwdToProjectDir,
+  extractArtifactPublish,
+  extractContextUsage,
+  extractTextContent,
+  extractToolUses,
+} from '../server/jsonl-utils.js';
 
 describe('extractTextContent', () => {
   it('returns empty for null/undefined', () => {
@@ -256,5 +263,82 @@ describe('cwdToProjectDir', () => {
       '-home-user-gh-claude-bridge--claude-worktrees-feat-x',
     );
     assert.equal(cwdToProjectDir('/tmp/my_dir.v2'), '-tmp-my-dir-v2');
+  });
+});
+
+describe('contextWindowFor', () => {
+  it('[1m] 付きのモデルは 1M', () => {
+    assert.equal(contextWindowFor('claude-sonnet-4-5[1m]'), 1_000_000);
+  });
+  it('opus 4.6 以降・opus 5・fable / mythos は表記なしでも 1M', () => {
+    assert.equal(contextWindowFor('claude-opus-4-6'), 1_000_000);
+    assert.equal(contextWindowFor('claude-opus-4-8'), 1_000_000);
+    assert.equal(contextWindowFor('claude-opus-5'), 1_000_000);
+    assert.equal(contextWindowFor('claude-fable-5-1'), 1_000_000);
+    assert.equal(contextWindowFor('claude-mythos-5-1'), 1_000_000);
+  });
+  it('sonnet / haiku / opus 4.5 以前 / 不明は 200k', () => {
+    assert.equal(contextWindowFor('claude-sonnet-4-5'), 200_000);
+    assert.equal(contextWindowFor('claude-haiku-4-5-20251001'), 200_000);
+    assert.equal(contextWindowFor('claude-opus-4-5'), 200_000);
+    assert.equal(contextWindowFor(undefined), 200_000);
+  });
+  it('実測の文脈量が 200k を超えていれば 1M に繰り上げる', () => {
+    assert.equal(contextWindowFor('claude-sonnet-4-5', 250_000), 1_000_000);
+    assert.equal(contextWindowFor('claude-sonnet-4-5', 150_000), 200_000);
+  });
+});
+
+describe('extractContextUsage', () => {
+  const assistant = (usage, model = 'claude-sonnet-4-5') => ({
+    type: 'assistant',
+    message: { role: 'assistant', model, usage },
+  });
+
+  it('assistant の usage から 3 つの和をコンテキスト量として返す', () => {
+    const result = extractContextUsage(
+      assistant({
+        input_tokens: 100,
+        cache_creation_input_tokens: 2000,
+        cache_read_input_tokens: 30000,
+        output_tokens: 500,
+      }),
+    );
+    assert.deepEqual(result, {
+      inputTokens: 100,
+      cacheCreationTokens: 2000,
+      cacheReadTokens: 30000,
+      outputTokens: 500,
+      contextTokens: 32100,
+      contextWindow: 200_000,
+      model: 'claude-sonnet-4-5',
+    });
+  });
+
+  it('欠けているフィールドは 0 として扱う', () => {
+    const result = extractContextUsage(assistant({ input_tokens: 10 }));
+    assert.equal(result.contextTokens, 10);
+    assert.equal(result.cacheReadTokens, 0);
+  });
+
+  it('[1m] モデルは窓を 1M にする', () => {
+    const result = extractContextUsage(assistant({ input_tokens: 10 }, 'claude-opus-5[1m]'));
+    assert.equal(result.contextWindow, 1_000_000);
+    assert.equal(result.model, 'claude-opus-5[1m]');
+  });
+
+  it('usage が全部 0 の合成レコード（<synthetic>）は null', () => {
+    assert.equal(
+      extractContextUsage(
+        assistant({ input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }, '<synthetic>'),
+      ),
+      null,
+    );
+  });
+
+  it('usage が無い assistant・assistant 以外・不正入力は null', () => {
+    assert.equal(extractContextUsage({ type: 'assistant', message: { role: 'assistant' } }), null);
+    assert.equal(extractContextUsage({ type: 'user', message: { usage: { input_tokens: 1 } } }), null);
+    assert.equal(extractContextUsage(null), null);
   });
 });

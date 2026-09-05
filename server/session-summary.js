@@ -2,7 +2,7 @@ import { createReadStream } from 'fs';
 import { stat } from 'fs/promises';
 import { createInterface } from 'readline';
 import { join } from 'path';
-import { CLAUDE_PROJECTS_DIR, cwdToProjectDir, extractTextContent } from './jsonl-utils.js';
+import { CLAUDE_PROJECTS_DIR, cwdToProjectDir, extractContextUsage, extractTextContent } from './jsonl-utils.js';
 import { readSessionArtifacts } from './session-artifacts.js';
 
 // カードに出す「どんなセッションか」の情報を JSONL から取り出す。
@@ -115,19 +115,24 @@ export function summarizeTail(lines) {
   let lastUserMessage = '';
   let lastAssistantMessage = '';
   let lastTimestamp = '';
+  // 今のコンテキスト量は「usage のある直近の assistant」から取る。
+  // API エラー等で usage を持たないレコードが末尾に来ることがあるので遡って探す。
+  let contextUsage = null;
   for (let i = records.length - 1; i >= 0; i--) {
     const record = records[i];
     if (!lastTimestamp && record.timestamp) lastTimestamp = record.timestamp;
     if (!lastAssistantMessage && record.type === 'assistant') {
       lastAssistantMessage = snippetText(extractTextContent(record.message, 0));
     }
+    if (!contextUsage) contextUsage = extractContextUsage(record);
     if (!lastUserMessage) lastUserMessage = userPrompt(record);
-    if (lastUserMessage && lastAssistantMessage && lastTimestamp) break;
+    if (lastUserMessage && lastAssistantMessage && lastTimestamp && contextUsage) break;
   }
   return {
     lastUserMessage: lastUserMessage.slice(0, TEXT_MAX),
     lastAssistantMessage: lastAssistantMessage.slice(0, TEXT_MAX),
     lastTimestamp,
+    contextUsage,
   };
 }
 
@@ -139,6 +144,7 @@ const EMPTY_SUMMARY = {
   lastUserMessage: '',
   lastAssistantMessage: '',
   lastTimestamp: '',
+  contextUsage: null,
   artifacts: [],
 };
 

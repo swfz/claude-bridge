@@ -147,6 +147,14 @@
   line-height: 16px;
 }
 
+/* コンテキスト使用率。cwd 行の右端に寄せ、幅が足りなくても最初に潰れないよう縮ませない */
+.tab-context {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* tmux タブは rename されていないこともあるため cwd を識別子として強調 */
 .tab-cwd-strong {
   font-size: 12px;

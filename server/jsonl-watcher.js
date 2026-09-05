@@ -4,6 +4,7 @@ import {
   CLAUDE_PROJECTS_DIR,
   cwdToProjectDir,
   extractArtifactPublish,
+  extractContextUsage,
   extractTextContent,
   extractToolUses,
 } from './jsonl-utils.js';
@@ -232,12 +233,15 @@ export class JsonlWatcher {
           const text = extractTextContent(record.message);
           const toolUses = extractToolUses(record.message);
           if (text || toolUses.length > 0) {
+            // コンテキスト使用量は usage のある assistant にだけ付ける（クライアントが末尾から探す）
+            const contextUsage = extractContextUsage(record);
             state.onMessage({
               type: 'chat_message',
               bridgeSessionId: state.bridgeSessionId,
               role: 'assistant',
               content: text,
               toolUses: toolUses.length > 0 ? toolUses : undefined,
+              contextUsage: contextUsage || undefined,
               uuid: record.uuid,
               timestamp: record.timestamp || '',
             });

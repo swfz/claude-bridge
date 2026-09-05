@@ -1,7 +1,13 @@
 import { readdirSync, statSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import { CLAUDE_PROJECTS_DIR, extractArtifactPublish, extractTextContent, extractToolUses } from './jsonl-utils.js';
+import {
+  CLAUDE_PROJECTS_DIR,
+  extractArtifactPublish,
+  extractContextUsage,
+  extractTextContent,
+  extractToolUses,
+} from './jsonl-utils.js';
 import { readFirstLines, readSessionSummary } from './session-summary.js';
 
 // セッション JSONL から最初のユーザーメッセージを抽出
@@ -177,10 +183,13 @@ export function parseHistoryLines(content) {
         const text = extractTextContent(record.message, 0);
         const toolUses = extractToolUses(record.message);
         if (text || toolUses.length > 0) {
+          // コンテキスト使用量は usage のある assistant にだけ付ける（クライアントが末尾から探す）
+          const contextUsage = extractContextUsage(record);
           messages.push({
             role: 'assistant',
             content: text,
             toolUses: toolUses.length > 0 ? toolUses : undefined,
+            contextUsage: contextUsage || undefined,
             uuid: record.uuid,
             timestamp: record.timestamp || record.updatedAt || '',
           });

@@ -12,6 +12,7 @@ import { parseCwd } from '../utils/cwdLabel.js';
 import { filterBySearch, collectProjects, filterByProject } from '../utils/sessionSearch.js';
 import ActivityPanel from './ActivityPanel.jsx';
 import HomeArtifactChips from './HomeArtifactChips.jsx';
+import { contextColorFor, contextPercent, formatTokens } from '../utils/contextUsage.js';
 import './HomeView.css';
 
 // 「その他の開いているタブ」は name/cwd しか持たないので検索対象をこの2つに絞る
@@ -100,6 +101,22 @@ function Meta({ items, title }) {
         </span>
       ))}
     </div>
+  );
+}
+
+// コンテキスト使用量のツールチップ（内訳）。カード・行で共用する。
+function contextTitle(usage) {
+  return `コンテキスト ${formatTokens(usage.contextTokens)} / ${formatTokens(usage.contextWindow)}\ninput ${formatTokens(usage.inputTokens)} · cache 作成 ${formatTokens(usage.cacheCreationTokens)} · cache 読み込み ${formatTokens(usage.cacheReadTokens)}`;
+}
+
+// 行リストの Ctx 列。使用率だけを色付きで出し、内訳は tooltip に逃がす。
+function ContextCell({ usage }) {
+  if (!usage) return <span className="home-row-ctx" />;
+  const pct = contextPercent(usage);
+  return (
+    <span className="home-row-ctx" style={{ color: contextColorFor(pct) }} title={contextTitle(usage)}>
+      {pct}%
+    </span>
   );
 }
 
@@ -351,7 +368,13 @@ export default function HomeView({
                 </div>
 
                 <Meta
-                  items={[openLabel(r.openTab), r.kind !== 'interactive' && r.kind, formatElapsed(r.updatedAt), sub]}
+                  items={[
+                    openLabel(r.openTab),
+                    r.kind !== 'interactive' && r.kind,
+                    r.contextUsage && `ctx ${contextPercent(r.contextUsage)}%`,
+                    formatElapsed(r.updatedAt),
+                    sub,
+                  ]}
                   title={[`pid ${r.pid}`, r.tmuxTarget && `tmux ${r.tmuxTarget}`, r.status].filter(Boolean).join(' · ')}
                 />
 
@@ -444,6 +467,7 @@ export default function HomeView({
               <span>直近の指示</span>
               <span>応答</span>
               <span>Artifact</span>
+              <span>Ctx</span>
               <span className="home-row-time">更新</span>
             </div>
             {filteredRecent.map((s) => {
@@ -476,6 +500,7 @@ export default function HomeView({
                   <span className="home-row-artifacts">
                     <HomeArtifactChips artifacts={s.artifacts} compact />
                   </span>
+                  <ContextCell usage={s.contextUsage} />
                   <span className="home-row-time" title={`${Math.round((s.size || 0) / 1024)} KB · ${s.sessionId}`}>
                     {openLabel(s.openTab) || formatElapsed(s.updatedAt)}
                   </span>
