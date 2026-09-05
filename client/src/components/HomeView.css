@@ -349,6 +349,29 @@
   color: #fff;
 }
 
+/* 活動グラフの棒・升目で選んだ期間。プリセットと同じトーンで隣に並べる */
+.home-period-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 9px;
+  border-radius: 5px;
+  background: var(--accent-secondary);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.home-period-clear {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* カードの Artifact チップ。無いカードでは要素自体が空になるので隙間を作らない */
 .home-card-artifacts:empty {
   display: none;

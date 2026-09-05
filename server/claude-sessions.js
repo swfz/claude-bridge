@@ -85,14 +85,18 @@ export async function listRecentSessions({
   dir = CLAUDE_PROJECTS_DIR,
   now = Date.now(),
   includeSessionIds = [],
+  sessionIds = null,
 } = {}) {
   const since = now - days * 24 * 60 * 60 * 1000;
   // Star を付けたセッションは「続きをやる」印なので、期間外でも limit で切らずに必ず返す
   const pinned = new Set(includeSessionIds);
   const files = collectSessionFiles(dir);
+  // 活動グラフの棒で期間を選んだときは ID の集合で絞る。mtime は「最後に更新した日」
+  // でしかなく、その日に活動して後日また続けたセッションが漏れるため使わない
+  const inRange = sessionIds ? (c) => sessionIds.has(c.sessionId) : (c) => c.mtimeMs >= since;
   const top = [
     ...files.filter((c) => pinned.has(c.sessionId)),
-    ...files.filter((c) => !pinned.has(c.sessionId) && c.mtimeMs >= since).slice(0, limit),
+    ...files.filter((c) => !pinned.has(c.sessionId) && inRange(c)).slice(0, limit),
   ].sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   return Promise.all(

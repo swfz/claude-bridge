@@ -1,5 +1,5 @@
 import { readdirSync, statSync, createReadStream, readFileSync, writeFileSync, renameSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, relative, sep } from 'path';
 import { CLAUDE_PROJECTS_DIR } from './jsonl-utils.js';
 import { DATA_DIR } from './storage.js';
 
@@ -229,7 +229,17 @@ async function refreshDaily({ dir, cacheFile }) {
       for (let i = 0; i < CELL_SIZE; i++) target[i] += cell[i];
     }
   }
-  return { totals, scannedFiles, fileCount: files.length };
+  return { totals, files: nextFiles, scannedFiles, fileCount: files.length };
+}
+
+// 走査は重いので、同時に来た要求は 1 回の走査を共有する
+function sharedRefresh({ dir, cacheFile }) {
+  if (!inflight) {
+    inflight = refreshDaily({ dir, cacheFile }).finally(() => {
+      inflight = null;
+    });
+  }
+  return inflight;
 }
 
 // ホーム画面のヒートマップ用。直近 days 日の日別集計を返す。
@@ -239,12 +249,7 @@ export async function getActivityHeatmap({
   cacheFile = CACHE_FILE,
   now = Date.now(),
 } = {}) {
-  if (!inflight) {
-    inflight = refreshDaily({ dir, cacheFile }).finally(() => {
-      inflight = null;
-    });
-  }
-  const { totals, scannedFiles, fileCount } = await inflight;
+  const { totals, scannedFiles, fileCount } = await sharedRefresh({ dir, cacheFile });
 
   const range = buildDateRange(days, now);
   const cells = range.map((date) => toDay(date, totals[date] || emptyCell()));
@@ -275,6 +280,39 @@ export async function getActivityHeatmap({
   );
 
   return { days: cells, total, generatedAt: new Date(now).toISOString(), scannedFiles, fileCount };
+}
+
+// JSONL のパスからセッション ID を取る。
+// <projectDir>/<sessionId>.jsonl か、サブエージェントの
+// <projectDir>/<sessionId>/subagents/agent-*.jsonl（活動は親セッションに帰属させる）。
+function sessionIdFromPath(dir, path) {
+  const parts = relative(dir, path).split(sep);
+  if (parts.length < 2) return null;
+  const second = parts[1];
+  return second.endsWith('.jsonl') ? second.slice(0, -'.jsonl'.length) : second;
+}
+
+// 期間（ローカル日付 YYYY-MM-DD の from〜to）に活動があったセッション ID の集合。
+// ホームの「直近のセッション」を活動グラフの棒でクリック絞り込みするためのデータ源。
+// JSONL の mtime ではなくこの日別集計を使うのは、mtime は「最後に更新した日」でしかなく、
+// その日に活動して後日また続けたセッションが期間から漏れるため。棒グラフと同じ集計で
+// 絞れば「その棒に数えられたセッション」と一覧が一致する。
+export async function listActiveSessionIds({ from, to, dir = CLAUDE_PROJECTS_DIR, cacheFile = CACHE_FILE } = {}) {
+  const { files } = await sharedRefresh({ dir, cacheFile });
+  const ids = new Set();
+  for (const [path, entry] of Object.entries(files)) {
+    const sessionId = sessionIdFromPath(dir, path);
+    if (!sessionId || ids.has(sessionId)) continue;
+    for (const [date, cell] of Object.entries(entry.daily)) {
+      // 日付キーは固定長の YYYY-MM-DD なので文字列比較で範囲判定できる
+      if (date < from || date > to) continue;
+      if (cell[PROMPTS] + cell[REPLIES] > 0) {
+        ids.add(sessionId);
+        break;
+      }
+    }
+  }
+  return ids;
 }
 
 // テスト用（モジュールキャッシュをまたいだ状態を残さない）

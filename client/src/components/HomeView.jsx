@@ -127,6 +127,8 @@ export default function HomeView({
   recentSessions,
   recentDays,
   onChangeRecentDays,
+  recentPeriod,
+  onChangeRecentPeriod,
   starred,
   onToggleStar,
   sensitive,
@@ -249,7 +251,13 @@ export default function HomeView({
   return (
     <div className="home-view">
       {/* 草は一覧のどのセクションにも属さないので、見出しより前・画面の最上段に置く */}
-      <ActivityPanel data={heatmap} loading={heatmapLoading} onRefresh={onRefreshHeatmap} />
+      <ActivityPanel
+        data={heatmap}
+        loading={heatmapLoading}
+        onRefresh={onRefreshHeatmap}
+        selectedPeriod={recentPeriod}
+        onSelectPeriod={onChangeRecentPeriod}
+      />
 
       <div className="home-header">
         <h2 className="home-title">起動中の Claude セッション</h2>
@@ -397,19 +405,40 @@ export default function HomeView({
 
       <div className="home-section">
         <div className="home-header">
-          <h3 className="home-subtitle">直近のセッション（起動していないもの）</h3>
+          <h3 className="home-subtitle">
+            {recentPeriod
+              ? `直近のセッション（${recentPeriod.label} に活動）`
+              : '直近のセッション（起動していないもの）'}
+          </h3>
           <div className="home-header-actions">
             <div className="home-days">
+              {/* 期間で絞っている間は日数モードではないのでプリセットを光らせない。
+                  押されたら絞り込みを解除して日数モードへ戻す */}
               {DAY_PRESETS.map((d) => (
                 <button
                   key={d}
-                  className={`home-day ${d === recentDays ? 'active' : ''}`}
-                  onClick={() => onChangeRecentDays(d)}
+                  className={`home-day ${!recentPeriod && d === recentDays ? 'active' : ''}`}
+                  onClick={() => {
+                    onChangeRecentDays(d);
+                    onChangeRecentPeriod(null);
+                  }}
                 >
                   {d}日
                 </button>
               ))}
             </div>
+            {recentPeriod && (
+              <span className="home-period-chip">
+                {recentPeriod.label}
+                <button
+                  className="home-period-clear"
+                  onClick={() => onChangeRecentPeriod(null)}
+                  title="期間の絞り込みを解除"
+                >
+                  ×
+                </button>
+              </span>
+            )}
             <span className="home-count">
               {isFiltering ? `${filteredRecent.length} / ${recent.length} 件` : `${recent.length} 件`}
             </span>
@@ -420,7 +449,11 @@ export default function HomeView({
           <p className="home-empty">
             {recentLoading
               ? '読み込み中...'
-              : emptyMessageFor(`直近 ${recentDays} 日に動いていたセッションはありません`)}
+              : emptyMessageFor(
+                  recentPeriod
+                    ? `${recentPeriod.label} に活動したセッションはありません`
+                    : `直近 ${recentDays} 日に動いていたセッションはありません`,
+                )}
           </p>
         ) : (
           // 直近は「見比べる」より「探す」一覧なので、カードではなく列の揃った行で出す

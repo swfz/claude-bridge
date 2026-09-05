@@ -19,7 +19,7 @@ import { listSubagentTasks, readSubagentTranscript } from './subagent-tasks.js';
 import { listShellTasks, readShellTaskOutput } from './shell-tasks.js';
 import { readRateLimits } from './rate-limits.js';
 import { listSlashCommands } from './slash-commands.js';
-import { getActivityHeatmap } from './activity-heatmap.js';
+import { getActivityHeatmap, listActiveSessionIds } from './activity-heatmap.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -278,6 +278,16 @@ function clampDays(days) {
 // 30 日を選んでも 7 日分しか見えなくなるため、期間に比例させる（1 日あたり 10 件・下限 50・上限 500）
 function recentSessionLimit(days) {
   return Math.min(500, Math.max(50, days * 10));
+}
+
+// 活動グラフの棒・升目で選んだ期間（ローカル日付の from〜to）。
+// 形式が違うものは絞り込みなし（従来どおり日数で）に倒す
+function sanitizePeriod(period) {
+  const from = period?.from;
+  const to = period?.to;
+  const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!isDate(from) || !isDate(to) || from > to) return null;
+  return { from, to };
 }
 
 // ヒートマップの期間。1 年分の升目が既定で、指定は 28〜730 日に丸める
@@ -1019,9 +1029,17 @@ wss.on('connection', (ws) => {
         // 起動中セッションとの重複除去はクライアント側で行う。
         const days = clampDays(msg.days);
         const starred = sanitizeSessionIds(msg.starred);
-        listRecentSessions({ days, limit: recentSessionLimit(days), includeSessionIds: starred })
+        const period = sanitizePeriod(msg.period);
+        // 期間指定のときは活動グラフと同じ日別集計で「その期間に動いたセッション」を出し、
+        // mtime の期間フィルタの代わりに使う（既に絞り込み済みなので上限だけ掛ける）
+        const load = period
+          ? listActiveSessionIds(period).then((sessionIds) =>
+              listRecentSessions({ days, limit: 500, includeSessionIds: starred, sessionIds }),
+            )
+          : listRecentSessions({ days, limit: recentSessionLimit(days), includeSessionIds: starred });
+        load
           .then((recent) => {
-            ws.send(JSON.stringify({ type: 'recent_sessions', days, sessions: recent }));
+            ws.send(JSON.stringify({ type: 'recent_sessions', days, ...(period ? { period } : {}), sessions: recent }));
           })
           .catch((err) => {
             ws.send(
