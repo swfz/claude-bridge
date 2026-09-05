@@ -106,3 +106,50 @@ function shortPath(p) {
   const parts = p.split('/');
   return parts.length > 2 ? '.../' + parts.slice(-2).join('/') : p;
 }
+
+// コンテキスト窓の上限。JSONL には窓サイズが書かれないので、モデル ID からのヒューリスティック。
+// - `[1m]` 付き（Claude Code の 1M 設定）は 1M
+// - opus 4.6 以降・opus 5 以降・fable / mythos 系は 1M（この環境の JSONL で `[1m]` 表記なしに
+//   700k〜900k の文脈量が実測されたため。200k にすると常時 100% にクランプされて意味を失う）
+// - sonnet / haiku / それ以外（不明）は 200k
+// さらに実測の文脈量が窓を超えていれば 1M に繰り上げる（表が古くなっても 100% 張り付きにはならない）。
+const CONTEXT_WINDOW_DEFAULT = 200_000;
+const CONTEXT_WINDOW_1M = 1_000_000;
+const MODELS_1M = /claude-(opus-4-(?:[6-9]|[1-9]\d)|opus-(?:[5-9]|[1-9]\d)|fable|mythos)/;
+
+export function contextWindowFor(model, contextTokens = 0) {
+  const id = typeof model === 'string' ? model : '';
+  if (id.includes('[1m]') || MODELS_1M.test(id)) return CONTEXT_WINDOW_1M;
+  return contextTokens > CONTEXT_WINDOW_DEFAULT ? CONTEXT_WINDOW_1M : CONTEXT_WINDOW_DEFAULT;
+}
+
+// assistant レコードから「今そのセッションが使っているコンテキスト量」を取り出す。
+// Claude Code の statusline と同じ考え方で、直近の assistant の
+// input + cache_creation + cache_read が現在の文脈量（output は次ターンの入力になるまで含まれない）。
+// usage を持たないレコード（API エラー等）は null を返すので、呼び出し側が末尾から遡って探す。
+export function extractContextUsage(record) {
+  if (!record || record.type !== 'assistant') return null;
+
+  const usage = record.message?.usage;
+  if (!usage || typeof usage !== 'object') return null;
+
+  const num = (v) => (Number.isFinite(v) ? v : 0);
+  const inputTokens = num(usage.input_tokens);
+  const cacheCreationTokens = num(usage.cache_creation_input_tokens);
+  const cacheReadTokens = num(usage.cache_read_input_tokens);
+  const outputTokens = num(usage.output_tokens);
+  const model = typeof record.message?.model === 'string' ? record.message.model : '';
+  const contextTokens = inputTokens + cacheCreationTokens + cacheReadTokens;
+  // 全部 0 は API を呼んでいない合成レコード（`<synthetic>` のエラー表示等）。文脈量としては無効
+  if (contextTokens === 0) return null;
+
+  return {
+    inputTokens,
+    cacheCreationTokens,
+    cacheReadTokens,
+    outputTokens,
+    contextTokens,
+    contextWindow: contextWindowFor(model, contextTokens),
+    model,
+  };
+}

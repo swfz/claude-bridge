@@ -281,6 +281,31 @@ describe('parseHistoryLines (loadSessionHistory との共通化)', () => {
     assert.equal(messages[0].timestamp, 't1');
   });
 
+  it('usage のある assistant には contextUsage が付く（無い側には付かない）', () => {
+    const content = [
+      JSON.stringify({
+        type: 'assistant',
+        uuid: 'a1',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'usage 無し' }] },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        uuid: 'a2',
+        message: {
+          role: 'assistant',
+          model: 'claude-sonnet-4-5',
+          content: [{ type: 'text', text: 'usage あり' }],
+          usage: { input_tokens: 10, cache_creation_input_tokens: 20, cache_read_input_tokens: 70 },
+        },
+      }),
+    ].join('\n');
+
+    const messages = parseHistoryLines(content);
+    assert.equal(messages[0].contextUsage, undefined);
+    assert.equal(messages[1].contextUsage.contextTokens, 100);
+    assert.equal(messages[1].contextUsage.contextWindow, 200_000);
+  });
+
   it('loadSessionHistory returns [] for a missing file', async () => {
     assert.deepEqual(await loadSessionHistory('no-such-session', '-no-such-project'), []);
   });
