@@ -18,6 +18,7 @@ import FileExplorer from './components/FileExplorer.jsx';
 import AgentSidePanel from './components/AgentSidePanel.jsx';
 import HomeView from './components/HomeView.jsx';
 import RateLimitMeter from './components/RateLimitMeter.jsx';
+import ContextMeter from './components/ContextMeter.jsx';
 import { loadStarred, saveStarred, toggleStarred } from './utils/starredSessions.js';
 import {
   loadSensitive,
@@ -28,6 +29,7 @@ import {
 } from './utils/sensitiveSessions.js';
 import { statusMapOf, updateAttention } from './utils/attention.js';
 import { pickNotifyTargets } from './utils/notifications.js';
+import { latestContextUsage } from './utils/contextUsage.js';
 import './App.css';
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
@@ -353,6 +355,8 @@ export default function App() {
         role: msg.role,
         content: msg.content,
         toolUses: msg.toolUses,
+        // コンテキスト使用量（usage のある assistant にだけ入る）
+        contextUsage: msg.contextUsage,
         // Artifact の公開先（role: 'artifact' のときだけ入る）
         url: msg.url,
         title: msg.title,
@@ -623,6 +627,8 @@ export default function App() {
         role: m.role,
         content: m.content,
         toolUses: m.toolUses,
+        // コンテキスト使用量（usage のある assistant にだけ入る）
+        contextUsage: m.contextUsage,
         // Artifact の公開先（role: 'artifact' のときだけ入る）
         url: m.url,
         title: m.title,
@@ -1159,6 +1165,17 @@ export default function App() {
   }, []);
   const handleJumpDone = useCallback(() => setJumpToUuid(null), []);
 
+  // サイドバーのタブに出すコンテキスト使用率。SessionTabs は memo 対象ではないが、
+  // props の参照が毎描画で変わると無駄な再描画になるので messagesBySession の変化時だけ作り直す
+  const contextBySession = useMemo(() => {
+    const map = new Map();
+    for (const [id, msgs] of Object.entries(messagesBySession)) {
+      const usage = latestContextUsage(msgs);
+      if (usage) map.set(id, usage);
+    }
+    return map;
+  }, [messagesBySession]);
+
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -1270,6 +1287,7 @@ export default function App() {
               {notifyEnabled ? '🔔' : '🔕'}
             </button>
           )}
+          {sessionUiVisible && <ContextMeter usage={latestContextUsage(messages)} />}
           <RateLimitMeter rateLimits={rateLimits} />
           <div className="connection-status">
             <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
@@ -1286,6 +1304,7 @@ export default function App() {
           attentionIds={attentionIds}
           sensitiveIds={sensitiveIds}
           starredIds={starredIds}
+          contextBySession={contextBySession}
           shareMode={shareMode}
           onHome={() => setShowHome(true)}
           onSelect={handleSwitchSession}
