@@ -9,8 +9,12 @@ import {
   monthLabels,
   weekdayOf,
   weekdayTotals,
-  dayMonthTicks,
   barRatio,
+  bucketDays,
+  bucketTicks,
+  bucketTooltip,
+  barWidthFor,
+  periodEquals,
 } from '../client/src/utils/heatmap.js';
 
 const day = (date, extra = {}) => ({
@@ -185,17 +189,6 @@ describe('weekdayTotals', () => {
   });
 });
 
-describe('dayMonthTicks', () => {
-  it('marks the first day of each month by index', () => {
-    const days = range('2026-08-30', 5); // 8/30, 8/31, 9/1, 9/2, 9/3
-    assert.deepEqual(dayMonthTicks(days), [{ index: 2, label: '9月' }]);
-  });
-
-  it('never marks index 0 (there is no previous day to compare with)', () => {
-    assert.deepEqual(dayMonthTicks(range('2026-09-01', 3)), []);
-  });
-});
-
 describe('barRatio', () => {
   it('scales linearly against the max', () => {
     assert.equal(barRatio(0, 100), 0);
@@ -206,5 +199,132 @@ describe('barRatio', () => {
   it('stays at zero when there is no max (all-empty range)', () => {
     assert.equal(barRatio(0, 0), 0);
     assert.equal(barRatio(5, 0), 0);
+  });
+});
+
+describe('bucketDays', () => {
+  it('keeps one bucket per day for the day granularity', () => {
+    const buckets = bucketDays(range('2026-09-01', 3), 'day');
+    assert.deepEqual(
+      buckets.map((b) => [b.key, b.from, b.to, b.days]),
+      [
+        ['2026-09-01', '2026-09-01', '2026-09-01', 1],
+        ['2026-09-02', '2026-09-02', '2026-09-02', 1],
+        ['2026-09-03', '2026-09-03', '2026-09-03', 1],
+      ],
+    );
+    assert.match(buckets[0].label, /^9\/1（/);
+  });
+
+  it('groups weeks starting on Monday and lets the edges be partial', () => {
+    // 2026-09-02 は水曜。先頭の週は水〜日の 5 日、末尾は月・火の 2 日だけになる
+    const buckets = bucketDays(range('2026-09-02', 14), 'week');
+    assert.deepEqual(
+      buckets.map((b) => [b.from, b.to, b.days]),
+      [
+        ['2026-09-02', '2026-09-06', 5],
+        ['2026-09-07', '2026-09-13', 7],
+        ['2026-09-14', '2026-09-15', 2],
+      ],
+    );
+    assert.deepEqual(
+      buckets.map((b) => b.label),
+      ['9/2〜9/6', '9/7〜9/13', '9/14〜9/15'],
+    );
+    // キーは実際に含まれる先頭の日（週の頭ではない）
+    assert.equal(buckets[0].key, '2026-09-02');
+  });
+
+  it('groups months and labels them with the year', () => {
+    const buckets = bucketDays(range('2026-08-30', 5), 'month');
+    assert.deepEqual(
+      buckets.map((b) => [b.key, b.from, b.to, b.days, b.label]),
+      [
+        ['2026-08', '2026-08-30', '2026-08-31', 2, '2026年8月'],
+        ['2026-09', '2026-09-01', '2026-09-03', 3, '2026年9月'],
+      ],
+    );
+  });
+
+  it('sums the metrics and counts only the days with activity', () => {
+    const days = range('2026-09-07', 7).map((d, i) => ({
+      ...d,
+      prompts: i,
+      replies: i,
+      messages: i === 0 ? 0 : i * 2,
+      tokens: i * 100,
+      inputTokens: i * 10,
+    }));
+    const [week] = bucketDays(days, 'week');
+    assert.equal(week.days, 7);
+    assert.equal(week.activeDays, 6); // 先頭の 1 日だけ活動なし
+    assert.equal(week.messages, 42);
+    assert.equal(week.prompts, 21);
+    assert.equal(week.tokens, 2100);
+    assert.equal(week.inputTokens, 210);
+  });
+
+  it('returns no buckets for an empty range', () => {
+    assert.deepEqual(bucketDays([], 'week'), []);
+  });
+});
+
+describe('bucketTicks', () => {
+  it('marks the week where the month changes', () => {
+    // 2026-08-24（月）から 4 週。3 週目の頭が 9 月に入る
+    const buckets = bucketDays(range('2026-08-24', 28), 'week');
+    assert.deepEqual(bucketTicks(buckets, 'week'), [{ index: 2, label: '9月' }]);
+  });
+
+  it('labels every month bucket and adds the year to the first bucket and January', () => {
+    const buckets = bucketDays(range('2025-12-01', 70), 'month');
+    assert.deepEqual(bucketTicks(buckets, 'month'), [
+      { index: 0, label: '12月', year: '2025' },
+      { index: 1, label: '1月', year: '2026' },
+      { index: 2, label: '2月' },
+    ]);
+  });
+
+  it('marks the first day of each month for the day granularity', () => {
+    const days = range('2026-08-30', 5); // 8/30, 8/31, 9/1, 9/2, 9/3
+    assert.deepEqual(bucketTicks(bucketDays(days, 'day'), 'day'), [{ index: 2, label: '9月' }]);
+  });
+
+  it('never marks index 0 (there is no previous bucket to compare with)', () => {
+    assert.deepEqual(bucketTicks(bucketDays(range('2026-09-01', 3), 'day'), 'day'), []);
+  });
+});
+
+describe('bucketTooltip', () => {
+  it('shows the period, the breakdown and the number of active days', () => {
+    const days = range('2026-09-07', 7).map((d, i) => ({ ...d, messages: i === 0 ? 0 : 2, prompts: 1, replies: 1 }));
+    const text = bucketTooltip(bucketDays(days, 'week')[0], 'week');
+    assert.match(text, /^9\/7〜9\/13（7 日）/);
+    assert.match(text, /メッセージ 12/);
+    assert.match(text, /稼働 6 日/);
+  });
+
+  it('says nothing happened for an empty period', () => {
+    assert.match(bucketTooltip(bucketDays(range('2026-09-07', 7), 'week')[0], 'week'), /活動なし/);
+  });
+
+  it('falls back to the day tooltip for the day granularity', () => {
+    const [bucket] = bucketDays([day('2026-09-01', { messages: 1, prompts: 1 })], 'day');
+    assert.equal(bucketTooltip(bucket, 'day'), cellTooltip(day('2026-09-01', { messages: 1, prompts: 1 })));
+  });
+});
+
+describe('barWidthFor / periodEquals', () => {
+  it('widens the bars as the buckets get longer', () => {
+    assert.equal(barWidthFor('day'), '3px');
+    assert.equal(barWidthFor('week'), '10px');
+    assert.equal(barWidthFor('month'), '28px');
+  });
+
+  it('compares periods by their range only', () => {
+    assert.ok(periodEquals({ from: 'a', to: 'b', label: 'x' }, { from: 'a', to: 'b', label: 'y' }));
+    assert.ok(!periodEquals({ from: 'a', to: 'b' }, { from: 'a', to: 'c' }));
+    assert.ok(!periodEquals(null, { from: 'a', to: 'b' }));
+    assert.ok(!periodEquals({ from: 'a', to: 'b' }, null));
   });
 });

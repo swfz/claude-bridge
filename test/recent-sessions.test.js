@@ -134,6 +134,36 @@ describe('listRecentSessions', () => {
     assert.equal((await listRecentSessions({ days: 7, limit: 2, dir })).length, 2);
   });
 
+  it('filters by the given session ids instead of the mtime when a period is selected', async () => {
+    const dir = await makeProjects([
+      { projectDir: '-home-me-a', sessionId: 'in-period', daysAgo: 100 },
+      { projectDir: '-home-me-a', sessionId: 'recent-but-out', daysAgo: 0.5 },
+    ]);
+    const result = await listRecentSessions({
+      days: 7,
+      dir,
+      sessionIds: new Set(['in-period']),
+    });
+    assert.deepEqual(
+      result.map((s) => s.sessionId),
+      ['in-period'],
+    );
+  });
+
+  it('still pins starred sessions when filtering by session ids', async () => {
+    const dir = await makeProjects([
+      { projectDir: '-home-me-a', sessionId: 'in-period', daysAgo: 100 },
+      { projectDir: '-home-me-b', sessionId: 'starred-out', daysAgo: 300 },
+    ]);
+    const result = await listRecentSessions({
+      days: 7,
+      dir,
+      sessionIds: new Set(['in-period']),
+      includeSessionIds: ['starred-out'],
+    });
+    assert.deepEqual(result.map((s) => s.sessionId).sort(), ['in-period', 'starred-out']);
+  });
+
   it('returns an empty list when the directory does not exist', async () => {
     const result = await listRecentSessions({
       days: 7,

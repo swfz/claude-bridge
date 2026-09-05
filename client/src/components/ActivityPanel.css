@@ -1,4 +1,4 @@
-/* ホーム画面の活動パネル。草 / 日別の棒 / 曜日別の 3 ビューが同じ枠を共有する。 */
+/* ホーム画面の活動パネル。草 / 日別・週別・月別の棒 / 曜日別の 5 ビューが同じ枠を共有する。 */
 .activity {
   --cell: 11px;
   --cell-gap: 3px;
@@ -166,15 +166,34 @@
   gap: var(--cell-gap);
 }
 
+/* 升目はクリックでその 1 日を選ぶボタン。button の既定の枠・余白は消す
+   （凡例では同じクラスを div のまま使うので、指定は div でも無害なものに限る） */
 .activity-cell {
   width: var(--cell);
   height: var(--cell);
+  padding: 0;
+  border: none;
   border-radius: 2px;
   background: var(--heat-0);
 }
 
+/* 押せるのは草の升目（button）だけ。凡例の div にはカーソルを付けない */
+button.activity-cell {
+  cursor: pointer;
+}
+
 .activity-cell.empty {
   background: transparent;
+}
+
+.activity-cell:disabled {
+  cursor: default;
+}
+
+/* 選択中の升目は塗りを変えると濃淡が読めなくなるので、枠で示す */
+.activity-cell.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .activity-cell.level-1 {
@@ -190,7 +209,7 @@
   background: var(--heat-4);
 }
 
-/* --- 日別の棒 --- */
+/* --- 日別・週別・月別の棒 --- */
 
 .activity-daily {
   display: flex;
@@ -236,11 +255,16 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* ホバー領域を棒の高さに関わらず一定にするため、スロットで受ける */
+/* ホバー領域を棒の高さに関わらず一定にするため、スロットで受ける。
+   クリックでその期間を選ぶボタンなので、button の既定の枠・余白・背景は消す */
 .activity-bar-slot {
   display: flex;
   align-items: flex-end;
   height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
 }
 
 .activity-bar {
@@ -254,18 +278,30 @@
   background: var(--heat-4);
 }
 
+.activity-bar-slot.selected .activity-bar {
+  background: var(--accent);
+}
+
 /* 活動のない日も「その日があった」ことは見せる（軸上の点） */
 .activity-bar.zero {
   height: 1px !important;
   background: var(--heat-0);
 }
 
+/* 月別は年の行が付くことがあるので高さは下限だけ決める */
 .activity-daily-months {
-  height: 12px;
+  min-height: 12px;
 }
 
 .activity-daily-months .activity-month {
   width: auto;
+}
+
+/* 月別の目盛りに添える年。月名と連ならないよう 2 行目に落とす */
+.activity-month-year {
+  display: block;
+  font-size: 8px;
+  opacity: 0.8;
 }
 
 /* --- 曜日別 --- */
@@ -333,6 +369,29 @@
   margin-left: 10px;
   font-size: 10px;
   color: var(--text-secondary);
+}
+
+/* 選択中の期間。凡例の右に出して「今どこで絞っているか」を示す */
+.activity-period-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 1px 4px 1px 8px;
+  border-radius: 10px;
+  background: var(--accent-secondary);
+  color: #fff;
+  font-size: 10px;
+}
+
+.activity-period-clear {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 /* 凡例が草の升目だけのときは左余白を作らない */

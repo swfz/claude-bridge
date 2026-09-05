@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, appendFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { getActivityHeatmap, resetActivityHeatmapState } from '../server/activity-heatmap.js';
+import { getActivityHeatmap, listActiveSessionIds, resetActivityHeatmapState } from '../server/activity-heatmap.js';
 
 const jsonl = (records) => records.map((r) => JSON.stringify(r)).join('\n') + '\n';
 
@@ -206,5 +206,63 @@ describe('getActivityHeatmap', () => {
     assert.equal(result.days.length, 14);
     assert.equal(result.total.messages, 0);
     assert.equal(result.total.tokens, 0);
+  });
+});
+
+describe('listActiveSessionIds', () => {
+  beforeEach(() => resetActivityHeatmapState());
+
+  it('returns only the sessions that were active inside the period', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    const now = Date.now();
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    await mkdir(join(dir, '-home-me-b'), { recursive: true });
+    await writeFile(join(dir, '-home-me-a', 'today.jsonl'), jsonl([prompt(noonIso(0, now))]));
+    await writeFile(join(dir, '-home-me-b', 'old.jsonl'), jsonl([prompt(noonIso(10, now))]));
+
+    const today = dateKey(new Date(now));
+    const ids = await listActiveSessionIds({ from: today, to: today, dir, cacheFile });
+    assert.deepEqual([...ids], ['today']);
+  });
+
+  it('attributes subagent activity to the parent session', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    const now = Date.now();
+    await mkdir(join(dir, '-home-me-a', 'parent', 'subagents'), { recursive: true });
+    await writeFile(
+      join(dir, '-home-me-a', 'parent', 'subagents', 'agent-abc.jsonl'),
+      jsonl([prompt(noonIso(0, now))]),
+    );
+
+    const today = dateKey(new Date(now));
+    const ids = await listActiveSessionIds({ from: today, to: today, dir, cacheFile });
+    assert.deepEqual([...ids], ['parent']);
+  });
+
+  it('includes a session that was active on any day of the period', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    const now = Date.now();
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    // 期間の外（今日）にも活動があるが、期間内（3 日前）の活動で拾われる
+    await writeFile(
+      join(dir, '-home-me-a', 'spanning.jsonl'),
+      jsonl([prompt(noonIso(3, now)), prompt(noonIso(0, now))]),
+    );
+
+    const from = dateKey(new Date(now - 4 * 86400000));
+    const to = dateKey(new Date(now - 2 * 86400000));
+    const ids = await listActiveSessionIds({ from, to, dir, cacheFile });
+    assert.deepEqual([...ids], ['spanning']);
+  });
+
+  it('returns an empty set when nothing happened in the period', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    const now = Date.now();
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    await writeFile(join(dir, '-home-me-a', 's1.jsonl'), jsonl([prompt(noonIso(0, now))]));
+
+    const past = dateKey(new Date(now - 30 * 86400000));
+    const ids = await listActiveSessionIds({ from: past, to: past, dir, cacheFile });
+    assert.equal(ids.size, 0);
   });
 });
