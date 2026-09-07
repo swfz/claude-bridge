@@ -5,11 +5,23 @@
 // JSONL には回答が終わるまで書かれないため（tool_use は回答後にまとめて記録される）、
 // 待っている間に選択肢の中身を知る手段は画面テキストだけ。ここではその画面をパースする。
 //
+// permission プロンプトでは、質問文（"Do you want to ...?"）の上に `─`/`━` の罫線で
+// 囲まれた「ツール詳細」（コマンド本文・diff・説明・注記）が描かれる。この罫線から質問文までを
+// `detail` として切り出し、各行の左ガター（`│`）は剥がして返す。
+//
 // 純粋関数なので入力は capture-pane 等で取った文字列。tmux でも内蔵 PTY でも同じものを使う。
 
 const OPTION_RE = /^(\s*)(❯\s+)?(\d+)\.\s?(.*)$/;
 const CHECKBOX_RE = /^\[([ x✔✓X])\]\s*(.*)$/;
 const RULE_RE = /^[─━—╌┄┈\-=]{10,}$/;
+// permission のツール詳細ボックスの上端。diff 区切り（╌ 等）と違い会話の他の罫線にも
+// 使われるので、ここでは `─`/`━` だけを見る（RULE_RE より狭い）
+const TOOL_RULE_RE = /^[─━]{10,}$/;
+// permission の detail 抽出を打ち切る会話ログの目印（安全弁）
+const DETAIL_STOP_RE = /^([●⏺✻✽·]|❯\s|>\s)/;
+const MAX_DETAIL_LINES = 40;
+// TUI の操作案内（ブラウザからは無意味なので detail から落とす）
+const TIP_RE = /^Tip: /;
 // 選択待ちの画面に必ず出るフッター。AskUserQuestion / trust は "Enter to select|confirm"、
 // permission プロンプトは "Esc to cancel · Tab to amend" だけで Enter 行が無い。
 const FOOTER_RE = /(Enter to (select|confirm|submit)|Esc to (cancel|reject)|Tab to amend)/;
@@ -101,10 +113,14 @@ function collectDescription(lines, from, to) {
   return parts.join(' ');
 }
 
-// 選択肢ブロックより上にある質問文（複数行ありうる）を遡って集める
+// 選択肢ブロックより上にある質問文（複数行ありうる）を遡って集める。
+// 戻り値の topLine / bottomLine は質問文の先頭行・末尾行（画面上の行番号）。質問が 1 行も
+// 集まらなければどちらも blockStart（選択肢ブロックの先頭行）。
 function collectQuestion(lines, blockStart) {
   const collected = [];
   let blanks = 0;
+  let topLine = blockStart;
+  let bottomLine = blockStart;
   for (let i = blockStart - 1; i >= 0 && collected.length < MAX_QUESTION_LINES; i--) {
     const text = lines[i].trim();
     if (!text) {
@@ -116,8 +132,44 @@ function collectQuestion(lines, blockStart) {
     if (FOOTER_RE.test(text)) continue;
     blanks = 0;
     collected.push(text);
+    if (collected.length === 1) bottomLine = i;
+    topLine = i;
   }
-  return collected.reverse().join('\n');
+  return { text: collected.reverse().join('\n'), topLine, bottomLine };
+}
+
+// permission プロンプトの「ツール詳細」（コマンド本文・diff・説明・注記）を、質問行（"Do you want ...?"）
+// から上へ遡って切り出す。`─`/`━` だけの罫線（ツール詳細ボックスの上端）に当たったら打ち切り、
+// 罫線が見つからないまま画面先頭や行数上限に達したときはそこまでの分を採用する。
+function extractPermissionDetail(lines, startLine) {
+  const collected = [];
+  for (let i = startLine - 1; i >= 0 && collected.length < MAX_DETAIL_LINES; i--) {
+    const raw = lines[i].trim();
+    if (TOOL_RULE_RE.test(raw)) break;
+    if (DETAIL_STOP_RE.test(raw)) break;
+    if (isRule(raw)) continue; // diff 区切り（╌ 等）は行ごと捨てる
+    if (FOOTER_RE.test(raw) || TIP_RE.test(raw)) continue;
+    collected.push(raw.replace(/^│\s?/, ''));
+  }
+  collected.reverse();
+
+  // 先頭・末尾の空行を落とし、連続する空行は 1 行に潰す
+  const out = [];
+  for (const line of collected) {
+    if (line === '' && (out.length === 0 || out[out.length - 1] === '')) continue;
+    out.push(line);
+  }
+  while (out.length > 0 && out[out.length - 1] === '') out.pop();
+  return out.join('\n');
+}
+
+// permission プロンプトでは、質問は最後の 1 行（"Do you want to proceed?"）だけにし、
+// その上（1 行コマンドのように `│` ガターが無く collectQuestion が質問として拾ってしまう行も含む）は
+// 罫線まで遡って detail にする。
+function splitPermissionQuestion(lines, { text, bottomLine }) {
+  const qLines = text ? text.split('\n') : [];
+  const question = qLines.length > 0 ? qLines[qLines.length - 1] : '';
+  return { question, detail: extractPermissionDetail(lines, bottomLine) };
 }
 
 /**
@@ -125,7 +177,9 @@ function collectQuestion(lines, blockStart) {
  *
  * @param {string} screen capture-pane 等で取った画面テキスト
  * @returns {null | {
+ *   kind: 'question' | 'permission' | 'other',
  *   question: string,
+ *   detail: string,
  *   options: Array<{index:number,label:string,description:string,checked:boolean|null,cursor:boolean,freeText:boolean}>,
  *   multiSelect: boolean,
  *   tabs: null | {items:Array<{label:string,checked:boolean}>,hasSubmit:boolean,canPrev:boolean,canNext:boolean},
@@ -173,10 +227,14 @@ export function parseChoicePrompt(screen) {
   });
 
   const footer = footerLine ? footerLine.trim() : '';
-  const question = collectQuestion(lines, block[0].line);
+  const collected = collectQuestion(lines, block[0].line);
+  const kind = detectKind({ question: collected.text, tabs, footer });
+  const { question, detail } =
+    kind === 'permission' ? splitPermissionQuestion(lines, collected) : { question: collected.text, detail: '' };
   return {
-    kind: detectKind({ question, tabs, footer }),
+    kind,
     question,
+    detail,
     options,
     multiSelect: options.some((o) => o.checked !== null),
     tabs,
