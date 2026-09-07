@@ -43,6 +43,21 @@
   color: var(--text-secondary);
 }
 
+.choice-prompt-detail {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 30vh;
+  overflow-y: auto;
+  color: var(--text-primary);
+}
+
 .choice-prompt-question {
   font-size: 14px;
   font-weight: 600;

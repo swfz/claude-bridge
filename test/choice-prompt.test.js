@@ -101,6 +101,56 @@ ${'╌'.repeat(60)}
  Esc to cancel · Tab to amend
 `;
 
+// Bash 許可プロンプト（v2.1.259 実測）。コマンド本文・説明・注記が `│` の左ガター付きで描かれ、
+// 罫線の上には会話ログ（◐ / ⎿）が残っている画面。罫線で detail の切り出しが止まることを確認する。
+const BASH_PERMISSION_PROMPT = `
+❯ conditionFilter の型と grouping の実装を調べて
+
+◐ Investigating grouping implementation
+  ⎿  $ cd /home/project && ls
+
+● Bash(cd /home/project && echo "types")
+${RULE}
+ Bash command
+
+   │ cd /home/... && echo "=== conditionFilter types ==="; grep -n foo
+   │ bar; echo "=== apply impl ==="; grep -rl baz
+   │ qux | cut -c1-140 | head -14
+   Read filter rule shape and operator set used by grouping
+
+ │ grep on 'frontend/src/types/conditionFilter.ts' after a cd would search a directory that cannot be determined here, and a Read(...
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+
+ Esc to cancel · Tab to amend
+`;
+
+// 1 行コマンドの Bash 許可（v2.1.263 実測）。`│` ガターが無いので collectQuestion が
+// ツール詳細まで質問として拾ってしまう形。質問は最後の行だけ、上は detail に回る
+const BASH_ONELINE_PERMISSION_PROMPT = `
+  Fetching HTTP response headers from example.com
+  ⎿  $ curl -sI https://example.com | head -3
+
+${'─'.repeat(60)}
+ Bash command
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below
+
+   curl -sI https://example.com | head -3
+   Fetch HTTP response headers from example.com
+
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: curl -sI https://example.com
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you
+   4. No
+
+ Esc to cancel · Tab to amend
+`;
+
 const IDLE_SCREEN = `
 ● 実行結果です。以下の3点でした。
 
@@ -211,12 +261,56 @@ describe('parseChoicePrompt', () => {
     assert.equal(prompt.multiSelect, false);
     assert.equal(prompt.canCancel, true);
     assert.equal(prompt.tabs, null);
+    assert.match(prompt.detail, /Create file/);
+    assert.match(prompt.detail, /perm-check\.txt/);
+    assert.match(prompt.detail, /1 hello/);
+    assert.doesNotMatch(prompt.detail, /╌/);
+  });
+
+  it('extracts the tool detail (command/notes) of a Bash permission prompt, stopping at the rule', () => {
+    const prompt = parseChoicePrompt(BASH_PERMISSION_PROMPT);
+
+    assert.ok(prompt);
+    assert.equal(prompt.kind, 'permission');
+    assert.equal(prompt.question, 'Do you want to proceed?');
+    assert.deepEqual(
+      prompt.options.map((o) => o.label),
+      ['Yes', 'No'],
+    );
+    assert.match(prompt.detail, /^Bash command/);
+    assert.match(prompt.detail, /cd \/home\/\.\.\. && echo "=== conditionFilter types ==="; grep -n foo/);
+    assert.match(prompt.detail, /Read filter rule shape and operator set used by grouping/);
+    assert.match(prompt.detail, /grep on 'frontend\/src\/types\/conditionFilter\.ts'/);
+    assert.doesNotMatch(prompt.detail, /│/);
+    assert.doesNotMatch(prompt.detail, /❯/);
+    assert.doesNotMatch(prompt.detail, /⎿/);
+  });
+
+  it('keeps only the last line as the question for a one-line Bash permission prompt', () => {
+    const prompt = parseChoicePrompt(BASH_ONELINE_PERMISSION_PROMPT);
+
+    assert.ok(prompt);
+    assert.equal(prompt.kind, 'permission');
+    assert.equal(prompt.question, 'Do you want to proceed?');
+    assert.equal(prompt.options.length, 4);
+    assert.ok(prompt.detail.startsWith('Bash command'));
+    assert.ok(prompt.detail.includes('curl -sI https://example.com | head -3'));
+    assert.ok(prompt.detail.includes('This command requires approval'));
+    assert.ok(!prompt.detail.includes('Tip:'));
+    assert.ok(!prompt.detail.includes('Do you want to proceed?'));
+    assert.ok(!prompt.detail.includes('⎿'));
   });
 
   it('reports kind for question and trust prompts', () => {
     assert.equal(parseChoicePrompt(SINGLE_SELECT).kind, 'question');
     assert.equal(parseChoicePrompt(MULTI_SELECT).kind, 'question');
     assert.equal(parseChoicePrompt(TRUST_PROMPT).kind, 'other');
+  });
+
+  it('leaves detail empty for non-permission prompts', () => {
+    assert.equal(parseChoicePrompt(SINGLE_SELECT).detail, '');
+    assert.equal(parseChoicePrompt(MULTI_SELECT).detail, '');
+    assert.equal(parseChoicePrompt(TRUST_PROMPT).detail, '');
   });
 
   it('returns null when no prompt is on screen', () => {
