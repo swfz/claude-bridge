@@ -75,6 +75,8 @@ export default function ChoicePrompt({ prompt, waitingFor, error, onAnswer, onRe
         )}
       </div>
 
+      {prompt.detail && <pre className="choice-prompt-detail">{prompt.detail}</pre>}
+
       {prompt.question && <div className="choice-prompt-question">{prompt.question}</div>}
 
       <div className="choice-prompt-options">

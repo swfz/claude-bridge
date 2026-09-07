@@ -160,6 +160,7 @@ TUI に出る「番号つきの選択肢」をブラウザから選べるよう�
 - **画面フォーマットの差**（パーサが吸収している）
   - AskUserQuestion は選択肢の上に `☐ 見出し`（複数選択・複数質問では `←  ☒ 見出し  ✔ Submit  →`）のタブ行が出る。multiSelect は各選択肢が `[ ]` / `[✔]`
   - permission プロンプトのフッターは `Esc to cancel · Tab to amend` で **`Enter to select` 行が無い**。上に diff（`╌` の破線）が出る
+  - permission プロンプトはコマンド本文・diff・注記を `│` の左ガター付きで描く（v2.1.259 以降）。質問文から `─`/`━` の罫線までを `detail` として切り出し、`│` ガターを剥がしてカードに出す（`parseChoicePrompt` の `detail`）
   - Tab 後の確認画面（`Ready to submit your answers?`）には**フッター行が一切出ない**。そのため「フッター or `❯` カーソル or タブ行のどれかがある」を検出条件にしている
 - WS メッセージ: `get_choice_prompt {sessionId}` / `answer_choice_prompt {sessionId, keys, text}` → `choice_prompt {prompt, waitingFor}` / `choice_prompt_error`。`prompt: null` が「待っていない」の意味
 - **画面を読むのは待ち状態のときだけ**（`get_choice_prompt` も `refreshSessionStatus()` してから読む）。入力欄に番号付きリストを書いている最中を選択肢と誤認しないため
