@@ -65,13 +65,10 @@
   background: var(--bg-surface);
 }
 
+/* プレビュー非対応の拡張子（テキストとして開くフォールバックに載る）。
+   クリックはできるので、控えめな色だけで「専用の表示は無い」と示す */
 .explorer-node.disabled {
   color: var(--text-secondary);
-  cursor: default;
-}
-
-.explorer-node.disabled:hover {
-  background: none;
 }
 
 .explorer-caret {

@@ -59,7 +59,7 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 - `SessionTabs.jsx` -- 左サイドバーのタブリスト。**Star（★）とセンシティブ指定（🔒）は表示専用**で、付け外しはホーム側だけ（キーはホームと同じ `claudeSessionId`）。折りたたみ時は状態ドットが右上なので印は左下に重ね、下地（`background: inherit`）を敷いて頭文字と重なっても読めるようにする
 - `hooks/useGlobalKeys.js` -- 画面全体で効くキー（半画面スクロール・タブ移動）。App で 1 回だけ呼ぶ
 - `ShortcutHints.jsx` -- サイドバー最下部の「今使えるキー操作」カンペ。状態は DOM の目印から判定する（詳細は「レビューのキーボード操作（ピックモード）」の節）
-- `FileExplorer.jsx` -- ファイラ。**ルート（起点）は cwd 固定ではなく切り替えられる**（`cwd` / `~/tmp` / `~` / `/tmp` / 手入力の履歴）。候補と `~` 展開に必要な home は `/roots` から取り、クライアントは絶対パスだけを扱う（表示ラベルだけ `~` に畳む）。ロジックは `utils/filerRoots.js` の純粋関数、選択と手入力履歴は localStorage（`filerRoot` / `filerCustomRoots`）。ツリーも `/search` も選択中のルート配下。**どこまで開けるかを決めているのはサーバー側のサンドボックス（home か `/tmp` 配下のみ）**なので、ルートを増やしてもクライアント側に権限判断は持たせない
+- `FileExplorer.jsx` -- ファイラ。**ルート（起点）は cwd 固定ではなく切り替えられる**（`cwd` / `~/tmp` / `~` / `/tmp` / 手入力の履歴）。候補と `~` 展開に必要な home は `/roots` から取り、クライアントは絶対パスだけを扱う（表示ラベルだけ `~` に畳む）。ロジックは `utils/filerRoots.js` の純粋関数、選択と手入力履歴は localStorage（`filerRoot` / `filerCustomRoots`）。ツリーも `/search` も選択中のルート配下。**どこまで開けるかを決めているのはサーバー側のサンドボックス（home か `/tmp` 配下のみ）**なので、ルートを増やしてもクライアント側に権限判断は持たせない。**`isPreviewable()` が偽のファイル（未知の拡張子・拡張子なし）も薄い表示のままクリックできる**（`PreviewDrawer` がテキストとして開くフォールバックを持つため。`disabled` 属性は付けない）
 - `HomeView.jsx` -- ホーム画面（起動中セッション＋直近セッション）。`utils/runningSessions.js` の純粋関数で突合・整形
 - `HomeArtifactChips.jsx` -- ホームのカード／行に出す Artifact リンクのチップ列。`artifacts`（publish の生リスト）を `groupArtifactPublishes()` で URL ごとにまとめ、既定 3 件＋溢れは `+N`。`compact` は行用で、タイトルは先頭のチップだけに出して残りはアイコンにし列幅（160px）に収める。**チップの `onClick` で伝播を止める**（止めないとカード／行のクリックでセッションが開く）
 - `RateLimitMeter.jsx` -- ヘッダー右側の 5h/7d レート制限メーター。`rate_limits` メッセージを表示するだけの純表示コンポーネント（データが無ければ非表示）。バー色は使用率で `--success` / `--warning` / `--accent`、ツールチップにリセット時刻・残り時間・モデル別 weekly・取得時刻。`fetchedAt` が 10 分より古い（statusline 連携が止まっている＝セッション非稼働の疑い）と `stale` クラスで薄く表示し、ツールチップにも注記する（60 秒間隔の内部 tick で再判定するだけで、データ自体はサーバー push 任せ）
@@ -184,6 +184,14 @@ TUI に出る「番号つきの選択肢」をブラウザから選べるよう�
 - 既読位置は `inbox/<sessionId>.offset` で管理（サーバーは書くだけ、offset 更新はフック側）
 - **claude-bridge の介入範囲（誤解防止）**: bridge が会話に作用するのは Stop hook（`bridge-check-inbox.js`）による**注入のみ**。注入文には必ず `[claude-bridge]` マーカーが付き、「UI 由来のユーザーメッセージでツール実行結果ではない」と明記される。注入の事実は `~/.claude-bridge/delivery.log`（JSONL: `ts`/`sessionId`/`count`/`texts`）に全文記録される。**Bash 等のツールの標準出力には一切介入しない（構造上できない）**。ツール出力の不整合を bridge のせいと疑う前に、まず `delivery.log` を確認すること（該当セッションの注入記録が無ければ bridge は無関係）
 - テスト時は `CLAUDE_BRIDGE_DIR` 環境変数で inbox の位置を上書きできる
+
+### ファイルプレビューの種別（PreviewDrawer）
+
+拡張子ごとの描き分けは `client/src/utils/previewExts.js` の配列が唯一の定義で、`PreviewDrawer` はそれを見て `isImage` / `isHtml` / `isPdf` / `isVideo` / `isText` / `isMarkdownFile` / `isTable` を決める。
+
+- **動画**（`VIDEO_EXTS`）は `<video controls preload="metadata">` に `/preview` の URL を渡すだけ。**サイズ上限だけ別扱い**で、`server/index.js` の `maxPreviewSizeFor(ext)` が既定 100MB に対して動画は 2GB を返す（`res.sendFile` が Range に応じるので丸ごと読まれない）。テキストの fetch は走らせず、行ピックの対象にもしない（`pickMax` は 0）
+- **CSV / TSV**（`TABLE_EXTS`）は表とテキストを切り替えられる（ヘッダのトグル・localStorage `previewTableMode`・既定は表）。分解は `client/src/utils/delimited.js` の `parseDelimited(text, delimiter)`（RFC 4180 相当の引用対応・CRLF 両対応・上限 `MAX_TABLE_ROWS`＝2000 行）で、**各行はソース上の開始行番号を持つ**（引用内に改行があるレコードは複数行を占めるので、行ピックが指すのは開始行）。表モードでも行ピックは効くが、**目印は `pre.drawer-text [data-line]` ではなく `.drawer-table [data-line]`**（`tr`）になるので、`isCodeView` を使う箇所は `showTable` で選択子を切り替える。マウス選択は列位置に対応づけられないので `computeLocation` は null を返し、行だけ `tr` の `data-line` から拾う。💬 の行マーカーは `pre` が無いので表モードでは出さない
+- **既知の種別が無いファイル**（拡張子なしを含む）は**テキストとして読む**（`isFallbackText`）。描画・行ピック・選択位置の計算はコードと同じ経路（ハイライトは言語不明なのでプレーン）。この経路だけ、`Content-Length` が 5MB を超えるなら本文を読まずに案内を出し、読んだ後も `client/src/utils/binaryText.js` の `looksBinary()`（先頭 8KB に NUL、または置換文字が 5% 超）でバイナリなら本文を出さない
 
 ### レビューのキーボード操作（ピックモード）
 

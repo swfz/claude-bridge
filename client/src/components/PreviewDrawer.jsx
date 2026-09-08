@@ -4,7 +4,18 @@ import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
 import { EXT_TO_LANG, highlightCode } from '../highlight.js';
 import { splitFrontmatter } from '../frontmatter.js';
-import { IMAGE_EXTS, HTML_EXTS, PDF_EXTS, TEXT_EXTS, MARKDOWN_EXTS, getExt } from '../utils/previewExts.js';
+import {
+  IMAGE_EXTS,
+  HTML_EXTS,
+  PDF_EXTS,
+  VIDEO_EXTS,
+  TEXT_EXTS,
+  MARKDOWN_EXTS,
+  TABLE_EXTS,
+  getExt,
+} from '../utils/previewExts.js';
+import { MAX_TABLE_ROWS, delimiterFor, parseDelimited } from '../utils/delimited.js';
+import { looksBinary } from '../utils/binaryText.js';
 import CodeBlock from './CodeBlock.jsx';
 import {
   buildLocationInfo,
@@ -63,6 +74,11 @@ function textOffsetIn(root, targetNode, targetOffset) {
   return -1;
 }
 
+// プレビュー種別が無いファイルをテキストとして読むときの上限。
+// ここだけ小さいのは「表示できるか分からないものを丸ごとブラウザに載せる」経路なので、
+// 巨大なログやダンプで画面が固まらないようにするため（超えたら本文を読まずに案内を出す）。
+const FALLBACK_MAX_BYTES = 5 * 1024 * 1024;
+
 function previewUrl(localPath) {
   return `/preview?path=${encodeURIComponent(localPath)}`;
 }
@@ -103,10 +119,17 @@ export default function PreviewDrawer({
   const isImage = IMAGE_EXTS.includes(ext);
   const isHtml = HTML_EXTS.includes(ext);
   const isPdf = PDF_EXTS.includes(ext);
+  const isVideo = VIDEO_EXTS.includes(ext);
   const isText = TEXT_EXTS.includes(ext);
   const isMarkdownFile = MARKDOWN_EXTS.includes(ext);
+  const isTable = TABLE_EXTS.includes(ext);
+  // 既知の種別がないファイル（拡張子なしを含む）はテキストとして読んでみる。
+  // ファイラからはこれらもクリックできるので、「非対応」で何も見えない状態にはしない。
+  const isFallbackText = !isMarkdownMode && !!filePath && !(isImage || isHtml || isPdf || isVideo || isText);
   const [fileContent, setFileContent] = useState(null);
   const [loadError, setLoadError] = useState(false);
+  // フォールバック経路で本文を出さなかった理由（'binary' | 'too-large'）
+  const [fallbackNotice, setFallbackNotice] = useState(null);
   const draftKey = reviewDraftKey(filePath, title);
   const [reviewItems, setReviewItems] = useState(() => (draftKey && reviewDrafts.get(draftKey)) || []);
   // 項目が変わるたびに下書きへ写す（空になったら消す）
@@ -146,6 +169,15 @@ export default function PreviewDrawer({
     });
   }, []);
 
+  // CSV/TSV を表として描くか、テキストとして描くか。選択は localStorage で記憶する（既定は表）
+  const [tableMode, setTableMode] = useState(() => localStorage.getItem('previewTableMode') !== 'text');
+  const toggleTableMode = useCallback(() => {
+    setTableMode((v) => {
+      localStorage.setItem('previewTableMode', v ? 'text' : 'table');
+      return !v;
+    });
+  }, []);
+
   // ユーザーがドラッグで指定した幅(px)。null の間はクラスベースの既定幅を使う
   const [width, setWidth] = useState(null);
   const widthRef = useRef(width);
@@ -178,33 +210,71 @@ export default function PreviewDrawer({
     document.addEventListener('mouseup', onUp);
   }, []);
 
-  // HTML は iframe で描画するが、コメントの行・前後文脈を出すためにソースも読む
+  // HTML は iframe で描画するが、コメントの行・前後文脈を出すためにソースも読む。
+  // 種別のないファイル（isFallbackText）もテキストとして読むが、こちらだけは
+  // サイズ上限とバイナリ判定を通してから本文に載せる。
   useEffect(() => {
-    if (!isMarkdownMode && filePath && (isText || isMarkdownFile || isHtml)) {
-      setFileContent(null);
-      setLoadError(false);
-      fetch(previewUrl(filePath))
-        .then((r) => r.text())
-        .then((text) => setFileContent(text))
-        .catch(() => setLoadError(true));
-    }
-  }, [filePath, isText, isMarkdownFile, isHtml, isMarkdownMode]);
+    if (isMarkdownMode || !filePath) return undefined;
+    if (!(isText || isMarkdownFile || isHtml || isFallbackText)) return undefined;
+    setFileContent(null);
+    setLoadError(false);
+    setFallbackNotice(null);
+    let cancelled = false;
+    fetch(previewUrl(filePath))
+      .then(async (res) => {
+        // 上限超えは本文を読まずに案内だけ出す（Content-Length が無ければ読んで判断するしかない）
+        const size = Number(res.headers.get('Content-Length'));
+        if (isFallbackText && Number.isFinite(size) && size > FALLBACK_MAX_BYTES) {
+          if (!cancelled) setFallbackNotice('too-large');
+          return;
+        }
+        const text = await res.text();
+        if (cancelled) return;
+        if (isFallbackText && looksBinary(text)) {
+          setFallbackNotice('binary');
+          return;
+        }
+        setFileContent(text);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, isText, isMarkdownFile, isHtml, isFallbackText, isMarkdownMode]);
 
   useEffect(() => {
     fileContentRef.current = fileContent;
   }, [fileContent]);
 
+  // 行ピック・選択位置の計算がソースの行番号を前提にする「テキストの本文」かどうか。
+  // 表モード（CSV/TSV）も同じソースの行を指すので isCodeView に含め、
+  // 実際に pre で描くか table で描くかは showCode / showTable で分ける。
+  const isCodeView = !isMarkdownMode && ((isText && !isMarkdownFile) || isFallbackText);
+  const showTable = isCodeView && isTable && tableMode;
+  const showCode = isCodeView && !showTable;
+
   const lang = ext ? EXT_TO_LANG[ext.slice(1)] : null;
   const highlightedHtml = useMemo(
-    () => (isText && !isMarkdownFile && fileContent != null ? highlightCode(fileContent, lang) : null),
-    [fileContent, lang, isText, isMarkdownFile],
+    () => (showCode && fileContent != null ? highlightCode(fileContent, lang) : null),
+    [fileContent, lang, showCode],
   );
 
   // コード/テキストは 1 行 1 要素にして、行番号ガターと行ピックの位置決めに使う
-  const isCodeView = !isMarkdownMode && isText && !isMarkdownFile;
   const codeLinesHtml = useMemo(
-    () => (isCodeView && fileContent != null ? buildCodeLinesHtml(fileContent, highlightedHtml) : null),
-    [isCodeView, fileContent, highlightedHtml],
+    () => (showCode && fileContent != null ? buildCodeLinesHtml(fileContent, highlightedHtml) : null),
+    [showCode, fileContent, highlightedHtml],
+  );
+
+  // 表モードで描く行。列数が不揃いなら足りないセルは空で埋めるので、最大列数も出す
+  const table = useMemo(
+    () => (showTable && fileContent != null ? parseDelimited(fileContent, delimiterFor(ext)) : null),
+    [showTable, fileContent, ext],
+  );
+  const tableColumnCount = useMemo(
+    () => (table ? table.rows.reduce((max, row) => Math.max(max, row.cells.length), table.header.length) : 0),
+    [table],
   );
 
   // 行ピック中かどうか。Escape の扱いを分けるため、ハンドラからは ref 越しに読む
@@ -254,6 +324,8 @@ export default function PreviewDrawer({
         sourceText = isMarkdownMode ? markdown : fileContent;
         kind = 'markdown';
       } else {
+        // 表モード（CSV/TSV）はセルの中の選択なのでソース上の行・列に対応づけられない。
+        // HTML の iframe と同じ扱いで、引用文だけの指摘になる（行だけは tr から拾う）。
         return null;
       }
 
@@ -313,6 +385,11 @@ export default function PreviewDrawer({
     if (block) {
       const v = parseInt(block.getAttribute('data-source-line'), 10);
       if (v > 0) line = v;
+    } else if (showTable) {
+      // 表モードは列位置を出せないが、行は選択された tr の data-line から分かる
+      const row = startEl?.closest?.('.drawer-table [data-line]');
+      const v = row ? parseInt(row.getAttribute('data-line'), 10) : 0;
+      if (v > 0) line = v;
     } else {
       // コード/テキストプレビュー: pre 内のテキストオフセットから行を算出
       const pre = bodyRef.current.querySelector('pre.drawer-text');
@@ -328,7 +405,7 @@ export default function PreviewDrawer({
       top: rect.bottom - bodyRect.top + bodyRef.current.scrollTop,
       left: rect.left - bodyRect.left,
     });
-  }, [computeLocation, fileContent]);
+  }, [computeLocation, fileContent, showTable]);
 
   // HTML プレビューは iframe 内に描画されるため、親の mouseup では選択を拾えない。
   // /preview は同一オリジンなので contentDocument に直接リスナを張り、
@@ -615,7 +692,8 @@ export default function PreviewDrawer({
       const half = body.clientHeight / 2;
       let items;
       if (isCodeView) {
-        items = [...body.querySelectorAll('pre.drawer-text [data-line]')].map((el) => ({
+        const selector = showTable ? '.drawer-table [data-line]' : 'pre.drawer-text [data-line]';
+        items = [...body.querySelectorAll(selector)].map((el) => ({
           n: parseInt(el.getAttribute('data-line'), 10),
           top: el.getBoundingClientRect().top,
         }));
@@ -630,7 +708,7 @@ export default function PreviewDrawer({
       if (next != null) pickRef.current?.setTarget(next);
       return true;
     },
-    [isCodeView],
+    [isCodeView, showTable],
   );
 
   const pick = useNumberPick({
@@ -649,13 +727,15 @@ export default function PreviewDrawer({
     const body = bodyRef.current;
     if (!body || !pick.active || pick.target == null) return undefined;
     const el = isCodeView
-      ? body.querySelector(`pre.drawer-text [data-line="${pick.target}"]`)
+      ? body.querySelector(
+          showTable ? `.drawer-table [data-line="${pick.target}"]` : `pre.drawer-text [data-line="${pick.target}"]`,
+        )
       : blockForLine(collectSourceBlocks(body), pick.target);
     if (!el) return undefined;
     el.classList.add('line-pick-target');
     el.scrollIntoView({ block: 'nearest' });
     return () => el.classList.remove('line-pick-target');
-  }, [pick.active, pick.target, isCodeView, markdownToRender, fileContent]);
+  }, [pick.active, pick.target, isCodeView, showTable, markdownToRender, fileContent]);
 
   // Markdown はレンダリング表示に行が出ないので、ピックできる行の番号を左ガターにバッジで添える。
   // 指摘欄に入力している間は数字キーがピックに行かない（＝押しても効かない）ので出さない。
@@ -773,7 +853,8 @@ export default function PreviewDrawer({
       setLineMarkers([]);
       return;
     }
-    const isCode = !markdownToRender && isText && !isMarkdownFile;
+    // 表モードは pre を描かないので行マーカーは出さない（テキスト表示に切り替えれば出る）
+    const isCode = showCode;
     const source = markdownToRender ? markdownBody : isCode ? fileContent : null;
     if (!source || displaySaved.length === 0) {
       setLineMarkers([]);
@@ -837,7 +918,61 @@ export default function PreviewDrawer({
       clearTimeout(id);
       body.querySelectorAll('.comment-anchored').forEach((e) => e.classList.remove('comment-anchored'));
     };
-  }, [displaySaved, markdownToRender, markdownBody, fileContent, isText, isMarkdownFile, width, lightMode]);
+  }, [displaySaved, markdownToRender, markdownBody, fileContent, showCode, width, lightMode]);
+
+  // テキスト系（コード・表・種別なしのフォールバック）の本文。読み込み状態で描き分ける
+  const renderTextBody = () => {
+    if (loadError) return <pre className="drawer-text">読み込みに失敗しました</pre>;
+    if (fallbackNotice) {
+      return (
+        <div className="drawer-unsupported">
+          <p>
+            {fallbackNotice === 'binary'
+              ? 'バイナリファイルのためテキスト表示できません（別タブで開く）'
+              : '5MB を超えるためテキスト表示しません（別タブで開く）'}
+          </p>
+        </div>
+      );
+    }
+    if (fileContent == null) return <pre className="drawer-text">読み込み中...</pre>;
+    if (showTable && table) {
+      const columns = Array.from({ length: tableColumnCount }, (_, i) => i);
+      return (
+        <div className="drawer-table-wrap">
+          <table className="drawer-table">
+            <thead>
+              <tr data-line="1">
+                <th className="drawer-table-ln">1</th>
+                {columns.map((i) => (
+                  <th key={i}>{table.header[i] ?? ''}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row) => (
+                <tr key={row.line} data-line={row.line}>
+                  <td className="drawer-table-ln">{row.line}</td>
+                  {columns.map((i) => (
+                    <td key={i}>{row.cells[i] ?? ''}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {table.truncated && (
+            <div className="drawer-table-note">先頭 {MAX_TABLE_ROWS} 行のみ表示（全体はテキスト表示で）</div>
+          )}
+        </div>
+      );
+    }
+    // 行番号は .drawer-code-line::before で描く（textContent に入れないので
+    // 選択範囲から行・列を出す計算はソースと一致したまま）
+    return (
+      <pre className={`drawer-text ${highlightedHtml ? 'hljs' : ''}`}>
+        <code dangerouslySetInnerHTML={{ __html: codeLinesHtml || '' }} />
+      </pre>
+    );
+  };
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
@@ -872,6 +1007,15 @@ export default function PreviewDrawer({
             >
               {lightMode ? '🌙 ダーク' : '☀ ライト'}
             </button>
+            {isTable && (
+              <button
+                className="drawer-btn"
+                onClick={toggleTableMode}
+                title={tableMode ? 'テキストとして表示する' : '表として表示する'}
+              >
+                {tableMode ? '≡ テキスト' : '⊞ 表'}
+              </button>
+            )}
             {unresolvedCount > 0 && (
               <button className="drawer-btn drawer-btn-submit" onClick={handleSubmitAll}>
                 {unresolvedCount}件送信
@@ -923,24 +1067,8 @@ export default function PreviewDrawer({
                   />
                 )}
                 {isPdf && <iframe src={previewUrl(filePath)} className="drawer-iframe" title={fileName} />}
-                {isText &&
-                  !isMarkdownFile &&
-                  (loadError ? (
-                    <pre className="drawer-text">読み込みに失敗しました</pre>
-                  ) : fileContent == null ? (
-                    <pre className="drawer-text">読み込み中...</pre>
-                  ) : (
-                    // 行番号は .drawer-code-line::before で描く（textContent に入れないので
-                    // 選択範囲から行・列を出す計算はソースと一致したまま）
-                    <pre className={`drawer-text ${highlightedHtml ? 'hljs' : ''}`}>
-                      <code dangerouslySetInnerHTML={{ __html: codeLinesHtml || '' }} />
-                    </pre>
-                  ))}
-                {!isImage && !isHtml && !isPdf && !isText && !isMarkdownMode && (
-                  <div className="drawer-unsupported">
-                    <p>プレビュー非対応の形式です</p>
-                  </div>
-                )}
+                {isVideo && <video controls preload="metadata" src={previewUrl(filePath)} className="drawer-video" />}
+                {isCodeView && renderTextBody()}
               </>
             )}
 

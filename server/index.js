@@ -44,9 +44,26 @@ const MIME_MAP = {
   '.md': 'text/markdown',
   '.txt': 'text/plain',
   '.csv': 'text/csv',
+  '.tsv': 'text/tab-separated-values',
   '.sql': 'text/plain; charset=utf-8',
   '.sqlx': 'text/plain; charset=utf-8',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  // .mov は ISO BMFF なので mp4 として配る（Firefox は Content-Type を厳密に見るため video/quicktime だと再生を拒む）
+  '.mov': 'video/mp4',
+  '.m4v': 'video/x-m4v',
+  '.ogv': 'video/ogg',
 };
+
+// プレビューを許すファイルサイズの上限。動画だけ緩めるのは、<video> が Range で
+// 必要な範囲だけ取りに来る（res.sendFile が Range に応じる）＝丸ごと読み込まないため。
+const MAX_PREVIEW_SIZE = 100 * 1024 * 1024;
+const MAX_VIDEO_PREVIEW_SIZE = 2 * 1024 * 1024 * 1024;
+const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov', '.m4v', '.ogv']);
+
+function maxPreviewSizeFor(ext) {
+  return VIDEO_EXTS.has(ext) ? MAX_VIDEO_PREVIEW_SIZE : MAX_PREVIEW_SIZE;
+}
 
 // パスのサンドボックスチェック（home/tmp 配下のみ許可）
 function validateSafePath(filePath) {
@@ -81,8 +98,8 @@ function validatePreviewPath(filePath) {
     if (!lstat.isFile()) {
       return { status: 400, error: 'Not a file' };
     }
-    // 100MB 上限
-    if (lstat.size > 100 * 1024 * 1024) {
+    // サイズ上限（既定 100MB・動画は 2GB）
+    if (lstat.size > maxPreviewSizeFor(extname(safe.canonical).toLowerCase())) {
       return { status: 413, error: 'File too large' };
     }
     return { status: 200, canonical: safe.canonical, lstat };
@@ -107,7 +124,7 @@ app.get('/preview', (req, res) => {
 });
 
 // ファイル存在確認 (プレビューボタンを出すべきかの判定用)
-// プレビュー可能条件 (homeもしくは/tmp配下の実ファイル, 100MB以下, 非シンボリックリンク) を満たす場合のみ ok
+// プレビュー可能条件 (homeもしくは/tmp配下の実ファイル, サイズ上限内, 非シンボリックリンク) を満たす場合のみ ok
 app.get('/file-exists', (req, res) => {
   const result = validatePreviewPath(req.query.path);
   res.setHeader('Cache-Control', 'no-cache');
