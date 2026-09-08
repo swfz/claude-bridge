@@ -728,9 +728,7 @@ export default function PreviewDrawer({
     if (!body || !pick.active || pick.target == null) return undefined;
     const el = isCodeView
       ? body.querySelector(
-          showTable
-            ? `.drawer-table [data-line="${pick.target}"]`
-            : `pre.drawer-text [data-line="${pick.target}"]`,
+          showTable ? `.drawer-table [data-line="${pick.target}"]` : `pre.drawer-text [data-line="${pick.target}"]`,
         )
       : blockForLine(collectSourceBlocks(body), pick.target);
     if (!el) return undefined;
@@ -1069,9 +1067,7 @@ export default function PreviewDrawer({
                   />
                 )}
                 {isPdf && <iframe src={previewUrl(filePath)} className="drawer-iframe" title={fileName} />}
-                {isVideo && (
-                  <video controls preload="metadata" src={previewUrl(filePath)} className="drawer-video" />
-                )}
+                {isVideo && <video controls preload="metadata" src={previewUrl(filePath)} className="drawer-video" />}
                 {isCodeView && renderTextBody()}
               </>
             )}
