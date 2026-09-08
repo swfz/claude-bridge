@@ -114,9 +114,9 @@ function FileNode({ path, name, depth, onOpenPreview, subPath }) {
       type="button"
       className={`explorer-node file ${canPreview ? '' : 'disabled'}`}
       style={{ paddingLeft: 4 + depth * 12 }}
-      onClick={() => canPreview && onOpenPreview(path)}
-      disabled={!canPreview}
-      title={canPreview ? path : `${path} (プレビュー非対応)`}
+      // 未対応の拡張子もテキストとして開けるのでクリックは常に通す（薄い表示だけ残す）
+      onClick={() => onOpenPreview(path)}
+      title={canPreview ? path : `${path} (テキストとして表示)`}
     >
       <span className="explorer-caret" />
       <span className="explorer-icon">

@@ -349,6 +349,63 @@ body.light-mode .drawer-iframe,
   word-break: break-all;
 }
 
+.drawer-video {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* CSV/TSV の表表示。列幅は内容任せにして、はみ出しはこの枠の中で横スクロールさせる */
+.drawer-table-wrap {
+  overflow: auto;
+  max-height: 100%;
+  padding: 8px;
+}
+
+.drawer-table {
+  border-collapse: collapse;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.drawer-table th,
+.drawer-table td {
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  text-align: left;
+  vertical-align: top;
+  /* セル内の改行（引用フィールド内の改行）はそのまま見せる */
+  white-space: pre;
+}
+
+.drawer-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-weight: 600;
+  /* sticky で本文の上に重なるので、透過させず下地を敷く
+     （--bg-secondary は preview-light でも差し替わるので明暗の両方で読める） */
+  background: var(--bg-secondary);
+}
+
+/* 行番号列。選択テキストに行番号が混ざらないように選択不可にする */
+.drawer-table-ln {
+  color: var(--text-secondary);
+  text-align: right;
+  user-select: none;
+  opacity: 0.7;
+}
+
+.drawer-table-note {
+  padding: 8px 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .drawer-unsupported {
   display: flex;
   flex-direction: column;
@@ -875,6 +932,12 @@ body.light-mode .drawer-iframe,
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-radius: 3px;
+}
+
+/* 表モードの行（tr）は outline が描かれない環境があるので、セルの背景でも示す */
+.drawer-table tr.line-pick-target > th,
+.drawer-table tr.line-pick-target > td {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 /* Markdown プレビューの左ガターに出すソース行番号（数字キーで指す先の目印） */

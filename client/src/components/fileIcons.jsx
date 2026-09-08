@@ -13,7 +13,15 @@ import {
   SiSvg,
   SiYaml,
 } from 'react-icons/si';
-import { VscFile, VscFileMedia, VscFolder, VscFolderOpened, VscRootFolderOpened } from 'react-icons/vsc';
+import {
+  VscDeviceCameraVideo,
+  VscFile,
+  VscFileMedia,
+  VscFolder,
+  VscFolderOpened,
+  VscRootFolderOpened,
+  VscTable,
+} from 'react-icons/vsc';
 import { FaRegFilePdf } from 'react-icons/fa6';
 
 // フォルダはニュートラルな寒色グレーで統一し、ファイルの色付きロゴを引き立てる
@@ -44,6 +52,13 @@ const ICON_BY_EXT = {
   '.gif': { Icon: VscFileMedia, color: '#9aa0c0' },
   '.webp': { Icon: VscFileMedia, color: '#9aa0c0' },
   '.pdf': { Icon: FaRegFilePdf, color: '#e0524b' },
+  '.mp4': { Icon: VscDeviceCameraVideo, color: '#9aa0c0' },
+  '.webm': { Icon: VscDeviceCameraVideo, color: '#9aa0c0' },
+  '.mov': { Icon: VscDeviceCameraVideo, color: '#9aa0c0' },
+  '.m4v': { Icon: VscDeviceCameraVideo, color: '#9aa0c0' },
+  '.ogv': { Icon: VscDeviceCameraVideo, color: '#9aa0c0' },
+  '.csv': { Icon: VscTable, color: '#8fbf7f' },
+  '.tsv': { Icon: VscTable, color: '#8fbf7f' },
 };
 
 const DEFAULT_ICON = { Icon: VscFile, color: '#8a8a9a' };
