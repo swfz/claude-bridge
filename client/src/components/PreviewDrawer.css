@@ -19,8 +19,8 @@
 
 .drawer {
   position: relative;
-  width: 60%;
-  max-width: 1000px;
+  width: 75%;
+  max-width: 1400px;
   min-width: 400px;
   height: 100%;
   background: var(--bg-primary);
@@ -47,20 +47,20 @@
 }
 
 .drawer-with-review {
-  width: 85%;
-  max-width: 1400px;
+  width: 90%;
+  max-width: 1800px;
 }
 
-/* HTML は iframe にページがそのまま描画されるので、既定幅を 200px 広く取る
+/* HTML は iframe にページがそのまま描画されるので、既定幅をさらに広く取る
    （ドラッグでリサイズすると inline style が優先されるので、ここは初期値だけ） */
 .drawer-html {
-  width: 70%;
-  max-width: 1200px;
+  width: 85%;
+  max-width: 1600px;
 }
 
 .drawer-html.drawer-with-review {
-  width: 90%;
-  max-width: 1600px;
+  width: 95%;
+  max-width: 2000px;
 }
 
 @keyframes drawer-slide-in {
