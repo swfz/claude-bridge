@@ -52,11 +52,20 @@ export function validateSessionName(name) {
   }
 }
 
+// 本文を送ってから確定用の Enter を送るまでの間隔。
+// 本文（複数行や末尾の \r を含む）と Enter を続けて送ると Claude Code の TUI が
+// 一連の入力を「貼り付け」として扱い、Enter まで改行として入力欄に残る（送信されない）。
+// session.js の ENTER_DELAY_MS と同じ理由で、Enter だけ少し遅らせる
+const ENTER_DELAY_MS = 120;
+
 export async function sendKeysToPane(paneId, text) {
   validatePaneId(paneId);
   try {
-    const escaped = escapeForShell(text);
-    await execAsync(`tmux send-keys -t ${paneId} -l ${escaped} && tmux send-keys -t ${paneId} Enter`);
+    // 末尾の改行は確定用の Enter に置き換える（呼び出し側が body + '\r' で渡してくる）
+    const body = String(text).replace(/[\r\n]+$/, '');
+    await execAsync(`tmux send-keys -t ${paneId} -l ${escapeForShell(body)}`);
+    await delay(ENTER_DELAY_MS);
+    await execAsync(`tmux send-keys -t ${paneId} Enter`);
   } catch (e) {
     console.error(`Failed to send keys to pane ${paneId}:`, e.message);
   }
