@@ -89,26 +89,36 @@ describe('sendKeysToPane', () => {
     execError = null;
   });
 
-  it('sends text and Enter in a single command', async () => {
+  it('sends text first, then Enter as a separate command', async () => {
     await sendKeysToPane('%0', 'hello world');
 
-    assert.equal(execCalls.length, 1);
+    assert.equal(execCalls.length, 2);
     assert.ok(execCalls[0].includes('tmux send-keys -t %0 -l'));
     assert.ok(execCalls[0].includes('hello world'));
-    assert.ok(execCalls[0].includes('&& tmux send-keys -t %0 Enter'));
+    assert.ok(!execCalls[0].includes('Enter'));
+    assert.equal(execCalls[1], 'tmux send-keys -t %0 Enter');
+  });
+
+  it('strips trailing newlines from the body (Enter is sent separately)', async () => {
+    await sendKeysToPane('%0', '[レビュー 2件]\n1. foo\n2. bar\r');
+
+    assert.equal(execCalls.length, 2);
+    assert.ok(execCalls[0].includes("-l '[レビュー 2件]\n1. foo\n2. bar'"));
+    assert.ok(!execCalls[0].includes('\r'));
+    assert.equal(execCalls[1], 'tmux send-keys -t %0 Enter');
   });
 
   it('escapes single quotes in text', async () => {
     await sendKeysToPane('%0', "it's a test");
 
-    assert.equal(execCalls.length, 1);
+    assert.equal(execCalls.length, 2);
     assert.ok(execCalls[0].includes("it'\\''s a test"));
   });
 
   it('handles empty text', async () => {
     await sendKeysToPane('%0', '');
 
-    assert.equal(execCalls.length, 1);
+    assert.equal(execCalls.length, 2);
     assert.ok(execCalls[0].includes("tmux send-keys -t %0 -l ''"));
   });
 

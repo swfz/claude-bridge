@@ -29,7 +29,7 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 
 - `index.js` -- エントリポイント。メッセージルーティング。ヘルパー `findSession()` / `broadcastSessionList()` でセッション操作を集約。`ws.on("message")` は async（選択肢プロンプトの読み取りで await する）なので、各 case は自分で try/catch する
 - `session.js` -- node-pty セッション管理 (`Session`, `SessionManager`)。生の ANSI 出力は `@xterm/headless` の端末にも流し、`getScreenText()` で「今の画面」を復元できる（選択肢プロンプトのパース用）。**`write()` は本文と末尾の確定用 Enter を分けて送る**（一括で書くと Claude Code の TUI が「複数行入力の改行」と扱って送信されず、入力欄に残ったままになる）
-- `tmux-session.js` -- tmux ペイン接続 (`TmuxSession`, `TmuxSessionManager`) と、新しい window で `claude --resume` を起こす `resumeInTmuxWindow()`。paneId は `%<数字>` 形式のバリデーション必須。画面取得は `capturePane()`、選択肢の操作は `sendChoiceKeysToPane()` / `sendChoiceTextToPane()`（`sendKeysToPane()` と違い Enter を付けない）
+- `tmux-session.js` -- tmux ペイン接続 (`TmuxSession`, `TmuxSessionManager`) と、新しい window で `claude --resume` を起こす `resumeInTmuxWindow()`。paneId は `%<数字>` 形式のバリデーション必須。画面取得は `capturePane()`、選択肢の操作は `sendChoiceKeysToPane()` / `sendChoiceTextToPane()`（`sendKeysToPane()` と違い Enter を付けない）。**`sendKeysToPane()` も `Session.write()` と同じく末尾の改行を剥がした本文を `-l` で送り、120ms 空けてから Enter を別コマンドで送る**（`&&` で続けて送ると TUI が Enter まで貼り付けの改行として取り込み、複数行のレビュー一括送信などが入力欄に残って送信されない）
 - `choice-prompt.js` -- 画面テキストから選択肢プロンプトを構造化する純粋関数 `parseChoicePrompt()`
 - `choice-keys.js` -- 選択肢操作のキー表現。抽象キー名のホワイトリスト（`assertValidChoiceKeys`）と PTY 用シーケンス変換（`toPtySequence`）、自由入力の整形（`sanitizeChoiceText`）
 - `jsonl-watcher.js` -- JSONL ファイルの監視。`attachExisting` モードで既存セッションにも接続可能
