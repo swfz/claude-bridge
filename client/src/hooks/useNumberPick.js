@@ -141,6 +141,15 @@ export function useNumberPick({
         };
       }
 
+      // ピック中に入力欄へフォーカスが移っていた（マウスでクリックした等）ら、ピックは取り消して
+      // 打鍵をそのまま入力欄に渡す。残したままだと数字・Backspace・Enter を横取りして
+      // 「入力欄で Delete が効かない」ように見える（Alt+R / Alt+HJKL は上で処理済み）
+      if (active && textEntryOf(e)) {
+        dispatch({ type: 'clear' });
+        onCancel?.();
+        return;
+      }
+
       if (!active) {
         if (!allowBareDigits) return;
         if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
@@ -206,6 +215,17 @@ export function useNumberPick({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
+
+  // 入力欄にフォーカスが入ったらピックは終わり（HUD を残さない）。keydown 側の判定と対になる
+  useEffect(() => {
+    const onFocusIn = (e) => {
+      if (!stateRef.current.active || !isTextEntry(e.target)) return;
+      dispatch({ type: 'clear' });
+      optsRef.current.onCancel?.();
+    };
+    document.addEventListener('focusin', onFocusIn);
+    return () => document.removeEventListener('focusin', onFocusIn);
+  }, []);
 
   // iframe の contentDocument は差し替わるので、毎レンダー貼り直す（リスナは 1 つずつなので軽い）
   useEffect(() => {
