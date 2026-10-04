@@ -141,6 +141,9 @@ export default function HomeView({
   heatmap,
   heatmapLoading,
   onRefreshHeatmap,
+  calendar,
+  calendarLoading,
+  onRequestCalendar,
   error,
   onDismissError,
   onRefresh,
@@ -234,6 +237,20 @@ export default function HomeView({
     else openReadonly(r);
   };
 
+  // カレンダーの帯のクリック。カードと同じく「開いていればそのタブ / tmux ペインがあれば接続 /
+  // 無ければ閲覧」の順で開く（起動中かどうかは running_sessions で引く）
+  const handleCalendarOpen = (seg) => {
+    const openTab = (sessions || []).find((t) => t.alive && t.claudeSessionId === seg.sessionId);
+    if (openTab) return onSelectTab(openTab.id);
+    const running = (runningSessions || []).find((r) => r.sessionId === seg.sessionId);
+    if (running?.paneId) return openTmux({ ...running, title: running.title || seg.title });
+    openReadonly({ sessionId: seg.sessionId, title: seg.title, cwd: seg.cwd, projectDir: seg.projectDir });
+  };
+
+  // 共有モードではセンシティブ指定のセッションを帯にも出さない（タイトル・パスが見えるため）
+  const calendarData =
+    shareMode && calendar ? { ...calendar, sessions: splitSensitive(calendar.sessions, sensitive).visible } : calendar;
+
   // 左の縦帯（レール）は「ブリッジとの関係」だけを表す。
   // プロセスの状態（busy / idle）はタイトル左のドットが持つので、色を二重に使わない。
   const railClass = (r) => {
@@ -257,6 +274,10 @@ export default function HomeView({
         onRefresh={onRefreshHeatmap}
         selectedPeriod={recentPeriod}
         onSelectPeriod={onChangeRecentPeriod}
+        calendar={calendarData}
+        calendarLoading={calendarLoading}
+        onRequestCalendar={onRequestCalendar}
+        onOpenSession={handleCalendarOpen}
       />
 
       <div className="home-header">

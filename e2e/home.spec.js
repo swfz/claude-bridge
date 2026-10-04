@@ -100,4 +100,37 @@ test.describe('ホーム画面', () => {
     await expect(page.locator('.home-period-chip')).toHaveCount(0);
     await expect(page.locator('.home-row', { hasText: FIXTURE_SECOND_TITLE })).toBeVisible();
   });
+
+  // 帯のクリックは readonly セッションを開く（サーバーにセッションが残る）ので、このファイルの最後に置く
+  test('カレンダービューで fixture の活動が帯として出て、クリックで閲覧が開く', async ({ page }) => {
+    // fixture は 2026-08-10 の活動。どの TZ でもその週が「今週」になる時刻に固定する
+    await page.clock.setFixedTime(new Date('2026-08-10T09:30:00.000Z'));
+    await page.goto('/');
+
+    const activity = page.locator('.activity');
+    await activity.getByRole('button', { name: 'カレンダー' }).click();
+
+    // 1 週間 = 7 列。メトリック切替はカレンダーでは出さない
+    await expect(activity.locator('.cal-day')).toHaveCount(7);
+    await expect(activity.getByRole('button', { name: 'トークン' })).toHaveCount(0);
+
+    const segment = activity.locator(`.cal-seg[title*="${FIXTURE_TITLE}"]`);
+    await expect(segment).toHaveCount(1, { timeout: 30_000 });
+    await expect(segment).toHaveAttribute('title', /fixture-project/);
+    // 発言のあった枠は左端に濃淡が付く
+    await expect(segment.locator('.cal-density')).not.toHaveCount(0);
+    await expect(activity.locator('.cal-legend')).toContainText('fixture-project');
+
+    // 前の週には fixture の活動が無い
+    await activity.getByRole('button', { name: '◀' }).click();
+    await expect(activity.locator('.cal-count')).toHaveText('0 セッション');
+    await activity.getByRole('button', { name: '今週' }).click();
+    await expect(segment).toHaveCount(1);
+
+    await segment.click();
+    await expect(page.locator('.chat-view')).toBeVisible();
+    await expect(page.locator('.chat-message.human').first()).toContainText(
+      'claude-bridge の E2E テスト用 fixture です',
+    );
+  });
 });
