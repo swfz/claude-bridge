@@ -137,6 +137,8 @@ export async function listRunningSessions({ dir = SESSIONS_DIR, livePids, projec
       ...(await readSessionSummaryFor(m.cwd, m.sessionId, projectsDir)),
       // cwd はセッションメタ側が正（JSONL 由来で上書きしない）
       cwd: m.cwd,
+      // セッション詳細（ターン詳細）を開くときに JSONL の場所を指すのに使う
+      projectDir: m.cwd ? cwdToProjectDir(m.cwd) : null,
       completion: m.cwd
         ? await readSessionCompletion({
             filePath: join(projectsDir, cwdToProjectDir(m.cwd), `${m.sessionId}.jsonl`),

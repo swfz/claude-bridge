@@ -77,6 +77,8 @@ export default function App() {
   const [heatmap, setHeatmap] = useState(null);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
   const [calendar, setCalendar] = useState(null);
+  // ホームの「セッション詳細」に出すターン詳細（開いている 1 件分だけ持つ）
+  const [sessionTurns, setSessionTurns] = useState(null);
   const [calendarLoading, setCalendarLoading] = useState(false);
   // 最後に要求した週。週送りを連打したとき、古い週の応答で上書きしないために使う
   const calendarRequestRef = useRef(null);
@@ -460,6 +462,12 @@ export default function App() {
   }, [on]);
 
   useEffect(() => {
+    return on('session_turns', (msg) => {
+      setSessionTurns({ sessionId: msg.sessionId, turns: msg.turns, totals: msg.totals, error: msg.error });
+    });
+  }, [on]);
+
+  useEffect(() => {
     return on('activity_calendar', (msg) => {
       if (msg.fromMs !== calendarRequestRef.current) return;
       setCalendar({ fromMs: msg.fromMs, toMs: msg.toMs, slotMs: msg.slotMs, sessions: msg.sessions || [] });
@@ -593,6 +601,15 @@ export default function App() {
     if (!showHome || !connected) return;
     requestHeatmap();
   }, [showHome, connected, requestHeatmap]);
+
+  // セッション詳細は JSONL を全文読むので、パネルを開いたときだけ取る（ポーリングしない）
+  const requestSessionTurns = useCallback(
+    ({ sessionId, projectDir }) => {
+      setSessionTurns(null);
+      send({ type: 'get_session_turns', sessionId, projectDir });
+    },
+    [send],
+  );
 
   // 週間カレンダーは活動パネルが「表示中の週」を持ち、週が変わるたびに呼ぶ
   const requestCalendar = useCallback(
@@ -1392,6 +1409,8 @@ export default function App() {
                   calendar={calendar}
                   calendarLoading={calendarLoading}
                   onRequestCalendar={requestCalendar}
+                  sessionTurns={sessionTurns}
+                  onRequestSessionTurns={requestSessionTurns}
                   error={homeError}
                   onDismissError={() => setHomeError(null)}
                   onRefresh={() => {

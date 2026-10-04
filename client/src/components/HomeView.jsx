@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   annotateRunningSessions,
   annotateRecentSessions,
@@ -19,6 +19,7 @@ import {
 import { parseCwd } from '../utils/cwdLabel.js';
 import { filterBySearch, collectProjects, filterByProject } from '../utils/sessionSearch.js';
 import ActivityPanel from './ActivityPanel.jsx';
+import SessionDetailDrawer from './SessionDetailDrawer.jsx';
 import HomeArtifactChips from './HomeArtifactChips.jsx';
 import { contextColorFor, contextPercent, formatTokens } from '../utils/contextUsage.js';
 import './HomeView.css';
@@ -162,6 +163,8 @@ export default function HomeView({
   calendar,
   calendarLoading,
   onRequestCalendar,
+  sessionTurns,
+  onRequestSessionTurns,
   error,
   onDismissError,
   onRefresh,
@@ -176,6 +179,8 @@ export default function HomeView({
   const [selectedProject, setSelectedProject] = useState('');
   // 直近一覧の状態絞り込み（やり残し / 途中で終了 / 完了）。その場限りなので保存しない
   const [completionFilter, setCompletionFilter] = useState('');
+  // セッション詳細（ターン詳細）のパネルに出しているセッション。{sessionId, projectDir, title, cwd}
+  const [detailTarget, setDetailTarget] = useState(null);
 
   // Star を付けたものは「続きをやる」印なので、それぞれの一覧で先頭に寄せる
   const annotatedAll = sortStarredFirst(annotateRunningSessions(runningSessions, sessions), starred);
@@ -261,15 +266,21 @@ export default function HomeView({
     else openReadonly(r);
   };
 
-  // カレンダーの帯のクリック。カードと同じく「開いていればそのタブ / tmux ペインがあれば接続 /
-  // 無ければ閲覧」の順で開く（起動中かどうかは running_sessions で引く）
-  const handleCalendarOpen = (seg) => {
-    const openTab = (sessions || []).find((t) => t.alive && t.claudeSessionId === seg.sessionId);
+  // カレンダーの帯・セッション詳細の「開く」。カードと同じく「開いていればそのタブ / tmux ペインが
+  // あれば接続 / 無ければ閲覧」の順で開く（起動中かどうかは running_sessions で引く）
+  const openSession = (target) => {
+    setDetailTarget(null);
+    const openTab = (sessions || []).find((t) => t.alive && t.claudeSessionId === target.sessionId);
     if (openTab) return onSelectTab(openTab.id);
-    const running = (runningSessions || []).find((r) => r.sessionId === seg.sessionId);
-    if (running?.paneId) return openTmux({ ...running, title: running.title || seg.title });
-    openReadonly({ sessionId: seg.sessionId, title: seg.title, cwd: seg.cwd, projectDir: seg.projectDir });
+    const running = (runningSessions || []).find((r) => r.sessionId === target.sessionId);
+    if (running?.paneId) return openTmux({ ...running, title: running.title || target.title });
+    openReadonly({ sessionId: target.sessionId, title: target.title, cwd: target.cwd, projectDir: target.projectDir });
   };
+
+  // カードの「詳細」・行の「詳細」・カレンダーの帯から、セッション詳細のパネルを開く
+  const openDetail = (s) =>
+    setDetailTarget({ sessionId: s.sessionId, projectDir: s.projectDir, title: s.title || tabName(s), cwd: s.cwd });
+  const closeDetail = useCallback(() => setDetailTarget(null), []);
 
   // 共有モードではセンシティブ指定のセッションを帯にも出さない（タイトル・パスが見えるため）
   const calendarData =
@@ -301,7 +312,7 @@ export default function HomeView({
         calendar={calendarData}
         calendarLoading={calendarLoading}
         onRequestCalendar={onRequestCalendar}
-        onOpenSession={handleCalendarOpen}
+        onOpenSession={openDetail}
       />
 
       <div className="home-header">
@@ -440,6 +451,15 @@ export default function HomeView({
                         閲覧で開く
                       </button>
                     </>
+                  )}
+                  {r.projectDir && (
+                    <button
+                      className="home-action"
+                      onClick={() => openDetail(r)}
+                      title="指示ごとのトークン・コミット・PR"
+                    >
+                      詳細
+                    </button>
                   )}
                 </div>
               </div>
@@ -598,6 +618,13 @@ export default function HomeView({
                     </button>
                     <button
                       className="home-action"
+                      onClick={() => openDetail(s)}
+                      title="指示ごとのトークン・コミット・PR"
+                    >
+                      詳細
+                    </button>
+                    <button
+                      className="home-action"
                       onClick={() => resume(s)}
                       title="ブリッジ内で claude を起動（サーバーを落とすと終了・ブラウザからのみ操作）"
                     >
@@ -643,6 +670,15 @@ export default function HomeView({
           </div>
           <HiddenNote count={hiddenOtherTabs.length} />
         </div>
+      )}
+      {detailTarget && (
+        <SessionDetailDrawer
+          target={detailTarget}
+          data={sessionTurns}
+          onRequest={onRequestSessionTurns}
+          onOpen={openSession}
+          onClose={closeDetail}
+        />
       )}
     </div>
   );
