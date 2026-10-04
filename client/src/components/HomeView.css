@@ -617,8 +617,8 @@
 .home-rows-header,
 .home-row {
   grid-template-columns:
-    18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 160px) 44px
-    62px;
+    18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 160px) 62px
+    44px 62px;
 }
 
 .home-row {
@@ -762,4 +762,88 @@
     opacity: 1;
     pointer-events: auto;
   }
+}
+
+/* やり残し判定のバッジ。目立たせたいのは「やり残し」「途中で終了」で、完了は沈める */
+.home-completion {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 15px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.home-completion.unfinished {
+  color: var(--warning);
+}
+
+.home-completion.interrupted {
+  color: var(--accent);
+}
+
+.home-completion.waiting {
+  color: var(--accent-secondary);
+}
+
+.home-completion.working {
+  color: var(--success);
+}
+
+.home-completion.done {
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+.home-row-completion {
+  display: flex;
+  justify-content: center;
+}
+
+/* 応答列の代わりに出す離席要約。ラベルで「応答ではない」ことを示す */
+.home-row-away-label {
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+/* 直近一覧の状態絞り込み。期間プリセット（.home-day）と並ぶので同じトーンにする */
+.home-completion-filter {
+  display: flex;
+  gap: 2px;
+}
+
+.home-completion-chip {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.home-completion-chip:hover {
+  color: var(--text-primary);
+}
+
+.home-completion-chip.active {
+  border-color: currentColor;
+}
+
+.home-completion-chip.unfinished.active {
+  color: var(--warning);
+}
+
+.home-completion-chip.interrupted.active {
+  color: var(--accent);
+}
+
+.home-completion-chip.done.active {
+  color: var(--text-primary);
 }
