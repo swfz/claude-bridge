@@ -1,0 +1,176 @@
+/* 週間カレンダー（活動パネルの「週」ビュー） */
+.cal {
+  --cal-hour: 28px;
+  --cal-axis: 38px;
+}
+
+.cal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.cal-nav {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.cal-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cal-range {
+  margin-left: 4px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cal-count {
+  color: var(--text-secondary);
+}
+
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.cal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cal-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+/* 曜日の見出しと本体は同じ列テンプレートで揃える */
+.cal-head,
+.cal-grid {
+  display: grid;
+  grid-template-columns: var(--cal-axis) repeat(7, minmax(0, 1fr));
+}
+
+.cal-head {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 2px;
+}
+
+.cal-day-label {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.cal-day-label.today {
+  color: var(--accent-secondary);
+  font-weight: 600;
+}
+
+/* 24 時間分は縦に長いので、この枠だけ縦スクロールさせる */
+.cal-scroll {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.cal-grid {
+  position: relative;
+  height: calc(var(--cal-hour) * 24);
+}
+
+.cal-hours {
+  position: relative;
+}
+
+.cal-hour {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 1 時間ごとの罫線は背景のグラデーションで引く（要素を 24×7 個並べない） */
+.cal-day {
+  position: relative;
+  border-left: 1px solid var(--border);
+  background-image: linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 100% var(--cal-hour);
+}
+
+.cal-day.today {
+  background-color: color-mix(in srgb, var(--accent-secondary) 7%, transparent);
+}
+
+.cal-seg {
+  position: absolute;
+  min-height: 3px;
+  padding: 0;
+  border: 1px solid var(--seg-color);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--seg-color) 35%, transparent);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.cal-seg:hover {
+  background: color-mix(in srgb, var(--seg-color) 60%, transparent);
+  z-index: 1;
+}
+
+/* 帯の左端に 10 分枠ごとの発言量 */
+.cal-density {
+  position: absolute;
+  left: 0;
+  width: 4px;
+  background: var(--text-primary);
+}
+
+.cal-density.level-1 {
+  opacity: 0.3;
+}
+
+.cal-density.level-2 {
+  opacity: 0.6;
+}
+
+.cal-density.level-3 {
+  opacity: 0.9;
+}
+
+.cal-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--accent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 左端の丸で、同じ色の帯と見分ける */
+.cal-now::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}

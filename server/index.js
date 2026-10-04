@@ -19,7 +19,7 @@ import { listSubagentTasks, readSubagentTranscript } from './subagent-tasks.js';
 import { listShellTasks, readShellTaskOutput } from './shell-tasks.js';
 import { readRateLimits } from './rate-limits.js';
 import { listSlashCommands } from './slash-commands.js';
-import { getActivityHeatmap, listActiveSessionIds } from './activity-heatmap.js';
+import { getActivityCalendar, getActivityHeatmap, listActiveSessionIds } from './activity-heatmap.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -312,6 +312,14 @@ function clampHeatmapDays(days) {
   const n = Number(days);
   if (!Number.isFinite(n)) return 365;
   return Math.min(730, Math.max(28, Math.floor(n)));
+}
+
+// 週間カレンダーの期間（ms）。数値で from < to、長さは 1 か月までに制限する
+const CALENDAR_MAX_RANGE_MS = 31 * 24 * 60 * 60 * 1000;
+function sanitizeCalendarRange(fromMs, toMs) {
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return null;
+  if (fromMs >= toMs || toMs - fromMs > CALENDAR_MAX_RANGE_MS) return null;
+  return { fromMs, toMs };
 }
 
 function findSession(id) {
@@ -1075,6 +1083,23 @@ wss.on('connection', (ws) => {
           })
           .catch((err) => {
             ws.send(JSON.stringify({ type: 'home_error', message: `活動量の集計に失敗しました: ${err.message}` }));
+          });
+        break;
+      }
+
+      case 'list_activity_calendar': {
+        // ホーム画面の週間カレンダー。草と同じファイル単位キャッシュの 10 分枠集計から切り出す
+        const range = sanitizeCalendarRange(msg.fromMs, msg.toMs);
+        if (!range) {
+          ws.send(JSON.stringify({ type: 'home_error', message: 'カレンダーの期間が不正です' }));
+          break;
+        }
+        getActivityCalendar(range)
+          .then((calendar) => {
+            ws.send(JSON.stringify({ type: 'activity_calendar', ...calendar }));
+          })
+          .catch((err) => {
+            ws.send(JSON.stringify({ type: 'home_error', message: `カレンダーの集計に失敗しました: ${err.message}` }));
           });
         break;
       }

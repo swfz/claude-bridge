@@ -1,13 +1,24 @@
-import { readdirSync, statSync, createReadStream, readFileSync, writeFileSync, renameSync, mkdirSync } from 'fs';
+import {
+  existsSync,
+  readdirSync,
+  statSync,
+  createReadStream,
+  readFileSync,
+  writeFileSync,
+  renameSync,
+  mkdirSync,
+} from 'fs';
 import { join, dirname, relative, sep } from 'path';
 import { CLAUDE_PROJECTS_DIR } from './jsonl-utils.js';
 import { DATA_DIR } from './storage.js';
+import { readFirstLines, summarizeHead } from './session-summary.js';
 
 // GitHub の草に相当する「日別の活動量」を JSONL から集計する。
 // ~/.claude/projects 以下は数百 MB あるので、ファイル単位で日別集計をキャッシュし、
 // 2 回目以降は「追記された分」だけを読み足す（JSONL は追記のみ）。
 
-const CACHE_VERSION = 1;
+// 2: 週間カレンダー用に 10 分枠の集計（slots）を追加
+const CACHE_VERSION = 2;
 const CACHE_FILE = join(DATA_DIR, 'activity-heatmap.json');
 const DAY_MS = 24 * 60 * 60 * 1000;
 // 日別セルの持ち方。JSON に落とすので配列で持つ（キー名の重複を避けて小さくする）
@@ -20,6 +31,38 @@ const CACHE_READ = 5;
 const CELL_SIZE = 6;
 
 const emptyCell = () => new Array(CELL_SIZE).fill(0);
+
+// 週間カレンダー用の 10 分枠。キーはエポックからの枠番号（ローカル時刻への変換は表示側）。
+export const SLOT_MS = 10 * 60 * 1000;
+const SLOT_PROMPTS = 0;
+const SLOT_REPLIES = 1;
+const SLOT_RESEARCH = 2;
+const SLOT_EDIT = 3;
+const SLOT_SIZE = 4;
+// 「調査していたのか、手を動かしていたのか」を枠ごとに見るためのツールの分類
+const RESEARCH_TOOLS = new Set(['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch']);
+const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
+
+function slotCellOf(slots, timestamp) {
+  const ms = Date.parse(timestamp);
+  if (Number.isNaN(ms)) return null;
+  const index = Math.floor(ms / SLOT_MS);
+  let cell = slots[index];
+  if (!cell) {
+    cell = new Array(SLOT_SIZE).fill(0);
+    slots[index] = cell;
+  }
+  return cell;
+}
+
+function countTools(content, slot) {
+  if (!Array.isArray(content)) return;
+  for (const block of content) {
+    if (block?.type !== 'tool_use') continue;
+    if (RESEARCH_TOOLS.has(block.name)) slot[SLOT_RESEARCH] += 1;
+    else if (EDIT_TOOLS.has(block.name)) slot[SLOT_EDIT] += 1;
+  }
+}
 
 // ~/.claude/projects 以下の JSONL を全部集める。
 // 本体（<projectDir>/<sessionId>.jsonl）に加えサブエージェント
@@ -88,8 +131,9 @@ function isUserPrompt(record) {
   return content.some((block) => block?.type === 'text');
 }
 
-// 1 行を日別集計に足す
-function accumulateLine(line, daily, dateKeyOf) {
+// 1 行を日別集計と 10 分枠の集計に足す
+function accumulateLine(line, entry, dateKeyOf) {
+  const { daily, slots } = entry;
   let record;
   try {
     record = JSON.parse(line);
@@ -108,11 +152,17 @@ function accumulateLine(line, daily, dateKeyOf) {
     cell = emptyCell();
     daily[date] = cell;
   }
+  const slot = slotCellOf(slots, record.timestamp);
   if (type === 'user') {
     cell[PROMPTS] += 1;
+    if (slot) slot[SLOT_PROMPTS] += 1;
     return;
   }
   cell[REPLIES] += 1;
+  if (slot) {
+    slot[SLOT_REPLIES] += 1;
+    countTools(record.message?.content, slot);
+  }
   const usage = record.message?.usage;
   if (!usage) return;
   cell[INPUT] += usage.input_tokens || 0;
@@ -123,7 +173,7 @@ function accumulateLine(line, daily, dateKeyOf) {
 
 // offset 以降を読み、完全な行だけを集計する。
 // 戻り値は「取り込み済みバイト数」＝次回の開始位置（書きかけの末尾行は含めない）。
-async function scanFrom(path, offset, daily, dateKeyOf) {
+async function scanFrom(path, offset, entry, dateKeyOf) {
   let consumed = offset;
   let buffer = '';
   const stream = createReadStream(path, { start: offset, encoding: 'utf-8' });
@@ -134,7 +184,7 @@ async function scanFrom(path, offset, daily, dateKeyOf) {
       const line = buffer.slice(0, index);
       buffer = buffer.slice(index + 1);
       consumed += Buffer.byteLength(line, 'utf-8') + 1;
-      if (line.trim()) accumulateLine(line, daily, dateKeyOf);
+      if (line.trim()) accumulateLine(line, entry, dateKeyOf);
     }
   }
   return consumed;
@@ -202,17 +252,19 @@ async function refreshDaily({ dir, cacheFile }) {
     const cached = cache.files[file.path];
     // 追記のみ前提。縮んでいたら別物（ローテート等）なので先頭から読み直す
     const reusable = cached && typeof cached.offset === 'number' && cached.offset <= file.size;
-    const entry = reusable ? { offset: cached.offset, daily: { ...cached.daily } } : { offset: 0, daily: {} };
+    const entry = reusable
+      ? { offset: cached.offset, daily: { ...cached.daily }, slots: { ...cached.slots } }
+      : { offset: 0, daily: {}, slots: {} };
 
     if (entry.offset < file.size) {
       try {
-        entry.offset = await scanFrom(file.path, entry.offset, entry.daily, dateKeyOf);
+        entry.offset = await scanFrom(file.path, entry.offset, entry, dateKeyOf);
         scannedFiles++;
       } catch {
         // 読めないファイルはこのラウンドでは諦める（次回また試す）
       }
     }
-    nextFiles[file.path] = { offset: entry.offset, daily: entry.daily };
+    nextFiles[file.path] = entry;
   }
 
   cache.files = nextFiles; // 消えたファイルはキャッシュからも落とす
@@ -313,6 +365,50 @@ export async function listActiveSessionIds({ from, to, dir = CLAUDE_PROJECTS_DIR
     }
   }
   return ids;
+}
+
+// 週間カレンダー用。[fromMs, toMs) に活動があったセッションごとに、10 分枠の集計を返す。
+// slots は [枠番号, 発言, 応答, 調査系ツール, 編集系ツール] の配列（枠番号の昇順）。
+// サブエージェントの活動は親セッションの枠に足す（その間も親は作業中なので帯をつなげる）。
+// タイトルと cwd は本体 JSONL の先頭だけ読んで取る（summary 全体は Artifact の全文走査を伴うので使わない）。
+export async function getActivityCalendar({ fromMs, toMs, dir = CLAUDE_PROJECTS_DIR, cacheFile = CACHE_FILE } = {}) {
+  const { files } = await sharedRefresh({ dir, cacheFile });
+  const fromSlot = Math.floor(fromMs / SLOT_MS);
+  const toSlot = Math.ceil(toMs / SLOT_MS);
+  const bySession = new Map();
+
+  for (const [path, entry] of Object.entries(files)) {
+    const sessionId = sessionIdFromPath(dir, path);
+    if (!sessionId) continue;
+    for (const [key, cell] of Object.entries(entry.slots || {})) {
+      const index = Number(key);
+      if (index < fromSlot || index >= toSlot) continue;
+      let session = bySession.get(sessionId);
+      if (!session) {
+        session = { sessionId, projectDir: relative(dir, path).split(sep)[0], slots: new Map() };
+        bySession.set(sessionId, session);
+      }
+      const target = session.slots.get(index);
+      if (target) for (let i = 0; i < SLOT_SIZE; i++) target[i] += cell[i];
+      else session.slots.set(index, [...cell]);
+    }
+  }
+
+  const sessions = await Promise.all(
+    [...bySession.values()].map(async (session) => {
+      // 本体が消えていてもサブエージェント側の活動は出す（タイトル無し）
+      const mainPath = join(dir, session.projectDir, `${session.sessionId}.jsonl`);
+      const head = existsSync(mainPath) ? summarizeHead(await readFirstLines(mainPath, 40)) : { title: '', cwd: '' };
+      return {
+        sessionId: session.sessionId,
+        projectDir: session.projectDir,
+        cwd: head.cwd || '',
+        title: head.title || '',
+        slots: [...session.slots.entries()].sort((a, b) => a[0] - b[0]).map(([index, cell]) => [index, ...cell]),
+      };
+    }),
+  );
+  return { fromMs, toMs, slotMs: SLOT_MS, sessions };
 }
 
 // テスト用（モジュールキャッシュをまたいだ状態を残さない）

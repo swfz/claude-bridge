@@ -20,6 +20,8 @@ import {
   periodEquals,
   weekdayTotals,
 } from '../utils/heatmap.js';
+import { shiftWeek, startOfWeek } from '../utils/calendar.js';
+import CalendarView from './CalendarView.jsx';
 import './ActivityPanel.css';
 
 const METRIC_KEY = 'homeHeatmapMetric';
@@ -171,11 +173,36 @@ function WeekdayView({ days, metric }) {
 // ホーム画面の活動パネル。日別の活動量（メッセージ数 / トークン数）を
 // 草・日別 / 週別 / 月別の棒・曜日別の 5 通りで見せる。集計はサーバー側で、ここは描くだけ。
 // 棒・升目のクリックは「その期間」を選ぶ操作で、選んだ期間は下の一覧の絞り込みに使う。
-export default function ActivityPanel({ data, loading, onRefresh, selectedPeriod, onSelectPeriod }) {
+// 「カレンダー」だけは別データ（10 分枠の集計）で、表示する週はこのパネルが持ち、
+// 週が変わるたびに onRequestCalendar で取りに行く。
+export default function ActivityPanel({
+  data,
+  loading,
+  onRefresh,
+  selectedPeriod,
+  onSelectPeriod,
+  calendar,
+  calendarLoading,
+  onRequestCalendar,
+  onOpenSession,
+}) {
   const [metric, setMetric] = useState(() => localStorage.getItem(METRIC_KEY) || 'messages');
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'heatmap');
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) !== 'false');
+  // 表示中の週（月曜 0:00 のローカル時刻 ms）。その場限りなので保存しない
+  const [weekStartMs, setWeekStartMs] = useState(() => startOfWeek(Date.now()));
   const scrollRef = useRef(null);
+  const isCalendar = view === 'calendar';
+
+  useEffect(() => {
+    if (!open || !isCalendar) return;
+    onRequestCalendar?.({ fromMs: weekStartMs, toMs: shiftWeek(weekStartMs, 1) });
+  }, [open, isCalendar, weekStartMs, onRequestCalendar]);
+
+  const handleRefresh = () => {
+    onRefresh?.();
+    if (isCalendar) onRequestCalendar?.({ fromMs: weekStartMs, toMs: shiftWeek(weekStartMs, 1) });
+  };
 
   useEffect(() => {
     localStorage.setItem(METRIC_KEY, metric);
@@ -192,7 +219,7 @@ export default function ActivityPanel({ data, loading, onRefresh, selectedPeriod
   const total = data?.total;
   const granularity = GRANULARITY_BY_VIEW[view] || 'day';
   // 草と棒のビューは横に長いので最新（右端）が見える位置から始める。曜日別は幅に収まる
-  const scrolls = view !== 'weekday';
+  const scrolls = view !== 'weekday' && !isCalendar;
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -231,19 +258,27 @@ export default function ActivityPanel({ data, loading, onRefresh, selectedPeriod
                 </button>
               ))}
             </div>
-            <div className="activity-segmented">
-              {HEAT_METRICS.map((m) => (
-                <button
-                  key={m.key}
-                  className={`activity-segment ${metric === m.key ? 'active' : ''}`}
-                  onClick={() => setMetric(m.key)}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            <button className="activity-refresh" onClick={onRefresh} disabled={loading} title="集計し直す">
-              {loading ? '集計中…' : '更新'}
+            {/* カレンダーはメッセージ / トークンの切り替えを使わない */}
+            {!isCalendar && (
+              <div className="activity-segmented">
+                {HEAT_METRICS.map((m) => (
+                  <button
+                    key={m.key}
+                    className={`activity-segment ${metric === m.key ? 'active' : ''}`}
+                    onClick={() => setMetric(m.key)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              className="activity-refresh"
+              onClick={handleRefresh}
+              disabled={isCalendar ? calendarLoading : loading}
+              title="集計し直す"
+            >
+              {(isCalendar ? calendarLoading : loading) ? '集計中…' : '更新'}
             </button>
           </div>
         )}
@@ -251,7 +286,15 @@ export default function ActivityPanel({ data, loading, onRefresh, selectedPeriod
 
       {open && (
         <div className="activity-body">
-          {loading && days.length === 0 ? (
+          {isCalendar ? (
+            <CalendarView
+              data={calendar}
+              loading={calendarLoading}
+              weekStartMs={weekStartMs}
+              onChangeWeek={setWeekStartMs}
+              onOpenSession={onOpenSession}
+            />
+          ) : loading && days.length === 0 ? (
             <div className="activity-loading">初回は全セッションを走査するので少し時間がかかります…</div>
           ) : (
             <div className={`activity-viewport ${scrolls ? 'scrolls' : ''}`} ref={scrollRef}>
@@ -275,34 +318,36 @@ export default function ActivityPanel({ data, loading, onRefresh, selectedPeriod
               {view === 'weekday' && <WeekdayView days={days} metric={metric} />}
             </div>
           )}
-          <div className="activity-legend">
-            {view === 'heatmap' && (
-              <>
-                <span className="activity-legend-label">少</span>
-                {[0, 1, 2, 3, 4].map((level) => (
-                  <div key={level} className={`activity-cell level-${level}`} />
-                ))}
-                <span className="activity-legend-label">多</span>
-              </>
-            )}
-            <span className="activity-legend-note">
-              {view === 'weekday'
-                ? `直近 ${days.length} 日の合計`
-                : `最大 ${formatMetric(metric, maxPerUnit)} / ${UNIT_LABEL[granularity]}`}
-            </span>
-            {selectedPeriod && (
-              <span className="activity-period-chip">
-                絞り込み中: {selectedPeriod.label}
-                <button
-                  className="activity-period-clear"
-                  onClick={() => onSelectPeriod?.(null)}
-                  title="期間の絞り込みを解除"
-                >
-                  ×
-                </button>
+          {!isCalendar && (
+            <div className="activity-legend">
+              {view === 'heatmap' && (
+                <>
+                  <span className="activity-legend-label">少</span>
+                  {[0, 1, 2, 3, 4].map((level) => (
+                    <div key={level} className={`activity-cell level-${level}`} />
+                  ))}
+                  <span className="activity-legend-label">多</span>
+                </>
+              )}
+              <span className="activity-legend-note">
+                {view === 'weekday'
+                  ? `直近 ${days.length} 日の合計`
+                  : `最大 ${formatMetric(metric, maxPerUnit)} / ${UNIT_LABEL[granularity]}`}
               </span>
-            )}
-          </div>
+              {selectedPeriod && (
+                <span className="activity-period-chip">
+                  絞り込み中: {selectedPeriod.label}
+                  <button
+                    className="activity-period-clear"
+                    onClick={() => onSelectPeriod?.(null)}
+                    title="期間の絞り込みを解除"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
     </section>

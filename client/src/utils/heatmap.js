@@ -14,6 +14,7 @@ export const ACTIVITY_VIEWS = [
   { key: 'weekly', label: '週別', title: '1 本 = 1 週（月曜始まり）。週単位の量を読む' },
   { key: 'monthly', label: '月別', title: '1 本 = 1 月。月単位の量を読む' },
   { key: 'weekday', label: '曜日', title: '曜日ごとの合計。週の中でどこに偏っているか' },
+  { key: 'calendar', label: 'カレンダー', title: '1 週間の時刻 × 曜日に、セッションの活動区間を帯で並べる' },
 ];
 
 // 曜日別の集計は「週の並び」で読みたいので月曜始まりにする
