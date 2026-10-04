@@ -12,13 +12,16 @@ import { join, dirname, relative, sep } from 'path';
 import { CLAUDE_PROJECTS_DIR } from './jsonl-utils.js';
 import { DATA_DIR } from './storage.js';
 import { readFirstLines, summarizeHead } from './session-summary.js';
+import { turnPrompt } from './session-turns.js';
 
 // GitHub の草に相当する「日別の活動量」を JSONL から集計する。
 // ~/.claude/projects 以下は数百 MB あるので、ファイル単位で日別集計をキャッシュし、
 // 2 回目以降は「追記された分」だけを読み足す（JSONL は追記のみ）。
 
 // 2: 週間カレンダー用に 10 分枠の集計（slots）を追加
-const CACHE_VERSION = 2;
+// 3: カレンダーの点（指示した時刻）用に、人の指示の時刻を分単位で持つ（prompts）
+const CACHE_VERSION = 3;
+const MINUTE_MS = 60 * 1000;
 const CACHE_FILE = join(DATA_DIR, 'activity-heatmap.json');
 const DAY_MS = 24 * 60 * 60 * 1000;
 // 日別セルの持ち方。JSON に落とすので配列で持つ（キー名の重複を避けて小さくする）
@@ -156,6 +159,10 @@ function accumulateLine(line, entry, dateKeyOf) {
   if (type === 'user') {
     cell[PROMPTS] += 1;
     if (slot) slot[SLOT_PROMPTS] += 1;
+    // カレンダーの点は「人が指示した時刻」だけにする（タスク通知などの注入は除き、
+    // スラッシュコマンドは含める。ターン詳細の区切りと同じ判定）
+    const ms = Date.parse(record.timestamp);
+    if (!Number.isNaN(ms) && turnPrompt(record)) entry.prompts.push(Math.floor(ms / MINUTE_MS));
     return;
   }
   cell[REPLIES] += 1;
@@ -253,8 +260,13 @@ async function refreshDaily({ dir, cacheFile }) {
     // 追記のみ前提。縮んでいたら別物（ローテート等）なので先頭から読み直す
     const reusable = cached && typeof cached.offset === 'number' && cached.offset <= file.size;
     const entry = reusable
-      ? { offset: cached.offset, daily: { ...cached.daily }, slots: { ...cached.slots } }
-      : { offset: 0, daily: {}, slots: {} };
+      ? {
+          offset: cached.offset,
+          daily: { ...cached.daily },
+          slots: { ...cached.slots },
+          prompts: [...(cached.prompts || [])],
+        }
+      : { offset: 0, daily: {}, slots: {}, prompts: [] };
 
     if (entry.offset < file.size) {
       try {
@@ -369,6 +381,8 @@ export async function listActiveSessionIds({ from, to, dir = CLAUDE_PROJECTS_DIR
 
 // 週間カレンダー用。[fromMs, toMs) に活動があったセッションごとに、10 分枠の集計を返す。
 // slots は [枠番号, 発言, 応答, 調査系ツール, 編集系ツール] の配列（枠番号の昇順）。
+// prompts は人が指示した時刻の [分番号（エポックからの分）, その分の指示数] の配列（昇順）。
+// サブエージェントの JSONL の「指示」は親が渡したタスクで人の発言ではないので、prompts は本体からだけ取る。
 // サブエージェントの活動は親セッションの枠に足す（その間も親は作業中なので帯をつなげる）。
 // タイトルと cwd は本体 JSONL の先頭だけ読んで取る（summary 全体は Artifact の全文走査を伴うので使わない）。
 export async function getActivityCalendar({ fromMs, toMs, dir = CLAUDE_PROJECTS_DIR, cacheFile = CACHE_FILE } = {}) {
@@ -380,17 +394,29 @@ export async function getActivityCalendar({ fromMs, toMs, dir = CLAUDE_PROJECTS_
   for (const [path, entry] of Object.entries(files)) {
     const sessionId = sessionIdFromPath(dir, path);
     if (!sessionId) continue;
+    const parts = relative(dir, path).split(sep);
+    const sessionOf = () => {
+      let session = bySession.get(sessionId);
+      if (!session) {
+        session = { sessionId, projectDir: parts[0], slots: new Map(), prompts: new Map() };
+        bySession.set(sessionId, session);
+      }
+      return session;
+    };
     for (const [key, cell] of Object.entries(entry.slots || {})) {
       const index = Number(key);
       if (index < fromSlot || index >= toSlot) continue;
-      let session = bySession.get(sessionId);
-      if (!session) {
-        session = { sessionId, projectDir: relative(dir, path).split(sep)[0], slots: new Map() };
-        bySession.set(sessionId, session);
-      }
+      const session = sessionOf();
       const target = session.slots.get(index);
       if (target) for (let i = 0; i < SLOT_SIZE; i++) target[i] += cell[i];
       else session.slots.set(index, [...cell]);
+    }
+    if (parts.length !== 2) continue; // サブエージェント
+    for (const minute of entry.prompts || []) {
+      const ms = minute * MINUTE_MS;
+      if (ms < fromMs || ms >= toMs) continue;
+      const session = sessionOf();
+      session.prompts.set(minute, (session.prompts.get(minute) || 0) + 1);
     }
   }
 
@@ -405,10 +431,11 @@ export async function getActivityCalendar({ fromMs, toMs, dir = CLAUDE_PROJECTS_
         cwd: head.cwd || '',
         title: head.title || '',
         slots: [...session.slots.entries()].sort((a, b) => a[0] - b[0]).map(([index, cell]) => [index, ...cell]),
+        prompts: [...session.prompts.entries()].sort((a, b) => a[0] - b[0]),
       };
     }),
   );
-  return { fromMs, toMs, slotMs: SLOT_MS, sessions };
+  return { fromMs, toMs, slotMs: SLOT_MS, minuteMs: MINUTE_MS, sessions };
 }
 
 // テスト用（モジュールキャッシュをまたいだ状態を残さない）
