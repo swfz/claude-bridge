@@ -1,0 +1,6 @@
+{"type":"user","message":{"role":"user","content":"ビルド時間を短縮したい"},"cwd":"/home/e2e/third-project","gitBranch":"perf/build","timestamp":"2026-08-11T10:30:00.000Z","uuid":"e2e-uuid-7"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"依存のキャッシュが効いていないので設定を見直します。"}]},"cwd":"/home/e2e/third-project","timestamp":"2026-08-11T10:31:00.000Z","uuid":"e2e-uuid-8"}
+{"type":"system","subtype":"turn_duration","durationMs":60000,"cwd":"/home/e2e/third-project","timestamp":"2026-08-11T10:31:01.000Z","uuid":"e2e-uuid-9"}
+{"type":"system","subtype":"away_summary","content":"E2E: キャッシュ設定を見直している途中です。次はビルドを流し直して計測してください。 (disable recaps in /config)","cwd":"/home/e2e/third-project","timestamp":"2026-08-11T10:40:00.000Z","uuid":"e2e-uuid-10"}
+{"type":"user","message":{"role":"user","content":"続けて"},"cwd":"/home/e2e/third-project","timestamp":"2026-08-11T10:41:00.000Z","uuid":"e2e-uuid-11"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_e2e_3","name":"Bash","input":{"command":"npm run build"}}]},"cwd":"/home/e2e/third-project","timestamp":"2026-08-11T10:41:30.000Z","uuid":"e2e-uuid-12"}

@@ -8,6 +8,14 @@ import {
 } from '../utils/runningSessions.js';
 import { isStarred, sortStarredFirst } from '../utils/starredSessions.js';
 import { isSensitive, splitSensitive } from '../utils/sensitiveSessions.js';
+import {
+  COMPLETION_STATES,
+  FILTERABLE_STATES,
+  classifyCompletion,
+  completionTooltip,
+  countByCompletion,
+  filterByCompletion,
+} from '../utils/completionState.js';
 import { parseCwd } from '../utils/cwdLabel.js';
 import { filterBySearch, collectProjects, filterByProject } from '../utils/sessionSearch.js';
 import ActivityPanel from './ActivityPanel.jsx';
@@ -120,6 +128,16 @@ function ContextCell({ usage }) {
   );
 }
 
+// やり残し判定のバッジ。内訳（ターン終了・コミット済みか・未コミットのファイル・現状メモ）は tooltip
+function CompletionBadge({ session, running }) {
+  const state = classifyCompletion(session, { running });
+  return (
+    <span className={`home-completion ${state}`} title={completionTooltip(session, { running })}>
+      {COMPLETION_STATES[state].label}
+    </span>
+  );
+}
+
 // ホーム画面。今このマシンで起動している Claude セッションと、
 // 直近 N 日に動いていた（終了済みを含む）セッションを一覧する。
 export default function HomeView({
@@ -156,6 +174,8 @@ export default function HomeView({
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
+  // 直近一覧の状態絞り込み（やり残し / 途中で終了 / 完了）。その場限りなので保存しない
+  const [completionFilter, setCompletionFilter] = useState('');
 
   // Star を付けたものは「続きをやる」印なので、それぞれの一覧で先頭に寄せる
   const annotatedAll = sortStarredFirst(annotateRunningSessions(runningSessions, sessions), starred);
@@ -177,7 +197,10 @@ export default function HomeView({
 
   // プロジェクト絞り込み → テキスト検索の順で AND 適用
   const filteredAnnotated = filterBySearch(filterByProject(annotated, selectedProject), searchQuery);
-  const filteredRecent = filterBySearch(filterByProject(recent, selectedProject), searchQuery);
+  const searchedRecent = filterBySearch(filterByProject(recent, selectedProject), searchQuery);
+  // 件数はプロジェクト・検索で絞った後の母数で数える（チップの数字と一覧の件数を一致させる）
+  const completionCounts = countByCompletion(searchedRecent);
+  const filteredRecent = filterByCompletion(searchedRecent, completionFilter);
   const otherTabs = filterBySearch(
     filterByProject(otherTabsVisible, selectedProject),
     searchQuery,
@@ -185,6 +208,7 @@ export default function HomeView({
   );
 
   const isFiltering = searchQuery.trim().length > 0 || !!selectedProject;
+  const isFilteringRecent = isFiltering || !!completionFilter;
   const emptyMessageFor = (defaultText) => (isFiltering ? '条件に一致するセッションはありません' : defaultText);
 
   // タブの識別名はカードに出しているサマリー（AI タイトル）を優先する。
@@ -390,6 +414,7 @@ export default function HomeView({
 
                 <Meta
                   items={[
+                    <CompletionBadge key="completion" session={r} running />,
                     openLabel(r.openTab),
                     r.kind !== 'interactive' && r.kind,
                     r.contextUsage && `ctx ${contextPercent(r.contextUsage)}%`,
@@ -460,8 +485,20 @@ export default function HomeView({
                 </button>
               </span>
             )}
+            <div className="home-completion-filter">
+              {FILTERABLE_STATES.map((state) => (
+                <button
+                  key={state}
+                  className={`home-completion-chip ${state} ${completionFilter === state ? 'active' : ''}`}
+                  onClick={() => setCompletionFilter((prev) => (prev === state ? '' : state))}
+                  title={COMPLETION_STATES[state].title}
+                >
+                  {COMPLETION_STATES[state].label} {completionCounts[state] || 0}
+                </button>
+              ))}
+            </div>
             <span className="home-count">
-              {isFiltering ? `${filteredRecent.length} / ${recent.length} 件` : `${recent.length} 件`}
+              {isFilteringRecent ? `${filteredRecent.length} / ${recent.length} 件` : `${recent.length} 件`}
             </span>
           </div>
         </div>
@@ -470,11 +507,13 @@ export default function HomeView({
           <p className="home-empty">
             {recentLoading
               ? '読み込み中...'
-              : emptyMessageFor(
-                  recentPeriod
-                    ? `${recentPeriod.label} に活動したセッションはありません`
-                    : `直近 ${recentDays} 日に動いていたセッションはありません`,
-                )}
+              : completionFilter
+                ? `「${COMPLETION_STATES[completionFilter].label}」のセッションはありません`
+                : emptyMessageFor(
+                    recentPeriod
+                      ? `${recentPeriod.label} に活動したセッションはありません`
+                      : `直近 ${recentDays} 日に動いていたセッションはありません`,
+                  )}
           </p>
         ) : (
           // 直近は「見比べる」より「探す」一覧なので、カードではなく列の揃った行で出す
@@ -488,6 +527,7 @@ export default function HomeView({
               <span>直近の指示</span>
               <span>応答</span>
               <span>Artifact</span>
+              <span>状態</span>
               <span>Ctx</span>
               <span className="home-row-time">更新</span>
             </div>
@@ -495,6 +535,9 @@ export default function HomeView({
               const label = s.openTab?.name || tabName(s);
               const starredNow = isStarred(starred, s.sessionId);
               const snippet = s.lastUserMessage || s.firstUserMessage;
+              // やり残し・途中で終了の行は、応答の代わりに Claude Code の離席要約（現状と次の一手）を出す
+              const state = classifyCompletion(s);
+              const away = (state === 'unfinished' || state === 'interrupted') && s.awaySummary?.text;
               return (
                 <div
                   key={s.sessionId}
@@ -513,13 +556,23 @@ export default function HomeView({
                   <span className="home-row-snippet" title={snippet}>
                     {snippet}
                   </span>
-                  <span className="home-row-snippet assistant" title={s.lastAssistantMessage}>
-                    {s.lastAssistantMessage}
-                  </span>
+                  {away ? (
+                    <span className="home-row-snippet assistant away" title={`現状: ${away}`}>
+                      <span className="home-row-away-label">現状</span>
+                      {away}
+                    </span>
+                  ) : (
+                    <span className="home-row-snippet assistant" title={s.lastAssistantMessage}>
+                      {s.lastAssistantMessage}
+                    </span>
+                  )}
                   {/* タイトル列に混ぜると .home-row-actions（ホバーで left: 65px から重なる）に
                       隠れて押せなくなるので、右端寄りの独立した列に置く */}
                   <span className="home-row-artifacts">
                     <HomeArtifactChips artifacts={s.artifacts} compact />
+                  </span>
+                  <span className="home-row-completion">
+                    <CompletionBadge session={s} />
                   </span>
                   <ContextCell usage={s.contextUsage} />
                   <span className="home-row-time" title={`${Math.round((s.size || 0) / 1024)} KB · ${s.sessionId}`}>

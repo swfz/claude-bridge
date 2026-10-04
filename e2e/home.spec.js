@@ -4,6 +4,7 @@ import { test, expect } from '@playwright/test';
 const FIXTURE_TITLE = 'E2Eフィクスチャ: ヘルスチェック追加';
 const FIXTURE_CWD_BASE = 'fixture-project';
 const FIXTURE_SECOND_TITLE = 'レート制限メーターの表示がずれているので直してください';
+const FIXTURE_THIRD_TITLE = 'ビルド時間を短縮したい';
 const FIXTURE_ARTIFACT_URL = 'https://claude.ai/code/artifact/e2e00000-0000-4000-8000-000000000001';
 
 test.describe('ホーム画面', () => {
@@ -99,6 +100,35 @@ test.describe('ホーム画面', () => {
     await page.locator('.home-period-clear').click();
     await expect(page.locator('.home-period-chip')).toHaveCount(0);
     await expect(page.locator('.home-row', { hasText: FIXTURE_SECOND_TITLE })).toBeVisible();
+  });
+
+  test('直近一覧にやり残し判定のバッジが出て、状態で絞り込める', async ({ page }) => {
+    await page.goto('/');
+
+    // fixture 1・2 はターンを終えて編集なし＝完了、3 はツール実行中のまま止まっている＝途中で終了
+    const done = page.locator('.home-row', { hasText: FIXTURE_TITLE });
+    const interrupted = page.locator('.home-row', { hasText: FIXTURE_THIRD_TITLE });
+    await expect(done.locator('.home-completion')).toHaveText('完了');
+    await expect(interrupted.locator('.home-completion')).toHaveText('途中で終了');
+    await expect(interrupted.locator('.home-completion')).toHaveAttribute('title', /ツールの実行中に止まった/);
+
+    // 途中で終了の行は応答の代わりに離席要約（現状）を出す
+    await expect(interrupted.locator('.home-row-away-label')).toHaveText('現状');
+    await expect(interrupted).toContainText('次はビルドを流し直して計測してください');
+    await expect(done.locator('.home-row-away-label')).toHaveCount(0);
+
+    const filter = page.locator('.home-completion-filter');
+    await expect(filter.getByRole('button', { name: '途中で終了 1' })).toBeVisible();
+    await expect(filter.getByRole('button', { name: '完了 2' })).toBeVisible();
+
+    await filter.getByRole('button', { name: '途中で終了 1' }).click();
+    await expect(page.locator('.home-row')).toHaveCount(1);
+    await expect(interrupted).toBeVisible();
+
+    // もう一度押すと解除
+    await filter.getByRole('button', { name: '途中で終了 1' }).click();
+    await expect(done).toBeVisible();
+    await expect(interrupted).toBeVisible();
   });
 
   // 帯のクリックは readonly セッションを開く（サーバーにセッションが残る）ので、このファイルの最後に置く

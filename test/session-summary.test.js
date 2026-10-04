@@ -6,6 +6,7 @@ import { join } from 'path';
 import {
   summarizeHead,
   summarizeTail,
+  detectTurnState,
   readSessionSummary,
   readSessionSummaryFor,
   readLastLines,
@@ -242,5 +243,92 @@ describe('readSessionSummaryFor', () => {
   it('returns an empty summary without cwd or sessionId', async () => {
     assert.equal((await readSessionSummaryFor('', 'sid', '/tmp')).title, '');
     assert.equal((await readSessionSummaryFor('/home/me', null, '/tmp')).title, '');
+  });
+});
+
+describe('detectTurnState', () => {
+  const prompt = (text = 'お願い') => ({ type: 'user', message: { role: 'user', content: text } });
+  const toolUse = () => ({
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 't', name: 'Bash', input: {} }] },
+  });
+  const toolResult = () => ({
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: 'ok' }] },
+  });
+  const text = (t = '終わりました') => ({
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'text', text: t }] },
+  });
+  const turnEnd = { type: 'system', subtype: 'turn_duration', durationMs: 1 };
+  const noise = [
+    { type: 'last-prompt', lastPrompt: 'x' },
+    { type: 'system', subtype: 'away_summary', content: 'x' },
+  ];
+
+  it("is 'ended' when the last turn closed with turn_duration (trailing metadata is ignored)", () => {
+    assert.equal(detectTurnState([prompt(), toolUse(), toolResult(), text(), turnEnd, ...noise]), 'ended');
+  });
+
+  it("is 'ended' for a text reply without turn_duration (older transcripts)", () => {
+    assert.equal(detectTurnState([prompt(), text()]), 'ended');
+  });
+
+  it("is 'midway' when it stopped while running a tool", () => {
+    assert.equal(detectTurnState([prompt(), toolUse()]), 'midway');
+    assert.equal(detectTurnState([prompt(), toolUse(), toolResult()]), 'midway');
+  });
+
+  it("is 'error' when the last reply is an API error, even with turn_duration after it", () => {
+    const apiError = { ...text('API Error: 529 Overloaded.'), isApiErrorMessage: true };
+    assert.equal(detectTurnState([prompt(), apiError, turnEnd]), 'error');
+    assert.equal(detectTurnState([prompt(), text('API Error: 500')]), 'error');
+  });
+
+  it("is 'interrupted' when the user interrupted", () => {
+    const interrupt = {
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] },
+    };
+    assert.equal(detectTurnState([prompt(), toolUse(), interrupt]), 'interrupted');
+  });
+
+  it("is 'prompt' when the last instruction got no reply", () => {
+    assert.equal(detectTurnState([prompt(), text(), turnEnd, prompt('次これ')]), 'prompt');
+  });
+
+  it('skips meta and command records when looking for the last prompt', () => {
+    const meta = { type: 'user', isMeta: true, message: { role: 'user', content: 'meta' } };
+    const command = prompt('<local-command-stdout>ok</local-command-stdout>');
+    assert.equal(detectTurnState([prompt(), text(), turnEnd, meta, command]), 'ended');
+  });
+
+  it('is null when there is nothing to judge', () => {
+    assert.equal(detectTurnState([]), null);
+    assert.equal(detectTurnState(noise), null);
+  });
+});
+
+describe('summarizeTail awaySummary / turnState', () => {
+  it('takes the latest away_summary without the recap footer', () => {
+    const lines = [
+      { type: 'system', subtype: 'away_summary', content: '古い要約', timestamp: '2026-10-01T00:00:00Z' },
+      {
+        type: 'system',
+        subtype: 'away_summary',
+        content: '設計中です。次は方針を決めてください。 (disable recaps in /config)',
+        timestamp: '2026-10-02T00:00:00Z',
+      },
+    ].map((r) => JSON.stringify(r));
+    const tail = summarizeTail(lines);
+    assert.deepEqual(tail.awaySummary, {
+      text: '設計中です。次は方針を決めてください。',
+      timestamp: '2026-10-02T00:00:00Z',
+    });
+    assert.equal(tail.turnState, null);
+  });
+
+  it('is null when there is no away_summary', () => {
+    assert.equal(summarizeTail([]).awaySummary, null);
   });
 });
