@@ -54,7 +54,7 @@ export function buildRuns(slots, slotMs, maxGapSlots = MAX_GAP_SLOTS) {
     current.replies += replies;
     current.research += research;
     current.edit += edit;
-    current.slots.push({ startMs: index * slotMs, prompts });
+    current.slots.push({ startMs: index * slotMs, prompts, research, edit });
   }
   return runs.map(({ firstIndex, lastIndex, ...rest }) => ({
     startMs: firstIndex * slotMs,
@@ -160,6 +160,49 @@ export function buildLegend(sessions) {
     .map(([project, count]) => ({ project, count }))
     .sort((a, b) => b.count - a.count || a.project.localeCompare(b.project))
     .map((item, i) => ({ ...item, color: i % PALETTE_SIZE }));
+}
+
+// 帯の色の付け方。プロジェクトごと（既定）か、10 分枠ごとの「調査 / 実装 / 対話」か
+export const COLOR_MODES = [
+  { key: 'project', label: 'プロジェクト', title: 'リポジトリごとに色を分ける' },
+  {
+    key: 'phase',
+    label: '調査 / 実装',
+    title: '10 分ごとに、調査系ツールと編集系ツールのどちらが多かったかで色を分ける',
+  },
+];
+
+export const PHASES = {
+  research: { label: '調査', title: 'Read / Grep / Glob / WebFetch / WebSearch が多かった' },
+  edit: { label: '実装', title: 'Edit / MultiEdit / Write / NotebookEdit が多かった（同数なら実装）' },
+  talk: { label: '対話', title: '調査系・編集系のツールを使っていない（会話や Bash など）' },
+};
+
+// 10 分枠の作業の種類。同数なら実装に倒す（手を動かした枠を調査に埋もれさせない）
+export function phaseOf(slot) {
+  const research = slot.research || 0;
+  const edit = slot.edit || 0;
+  if (edit > 0 && edit >= research) return 'edit';
+  if (research > 0) return 'research';
+  return 'talk';
+}
+
+// 週の中で各種類に費やした時間（枠の数 × 枠の長さ）。0:00 で切った帯の枠は日ごとに
+// 分かれているので、日ごとの帯の枠を足せば二重に数えない
+export function phaseTotals(days, slotMs) {
+  const totals = { research: 0, edit: 0, talk: 0 };
+  for (const day of days) {
+    for (const seg of day.segments) {
+      for (const slot of seg.slots) totals[phaseOf(slot)] += slotMs;
+    }
+  }
+  return totals;
+}
+
+export function formatHours(ms) {
+  const hours = ms / 3600000;
+  if (hours === 0) return '0 時間';
+  return hours < 10 ? `${hours.toFixed(1)} 時間` : `${Math.round(hours)} 時間`;
 }
 
 // 発言量の濃淡（0〜3）。1 枠の発言は多くても数件なので固定のしきい値で足りる

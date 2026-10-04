@@ -157,6 +157,16 @@ test.describe('ホーム画面', () => {
     await activity.getByRole('button', { name: '今週' }).click();
     await expect(segment).toHaveCount(1);
 
+    // 色分けを「調査 / 実装」に切り替えると、帯の中が 10 分枠ごとに塗られ凡例が時間の内訳になる
+    await activity.getByRole('button', { name: '調査 / 実装' }).click();
+    await expect(segment).toHaveClass(/phase/);
+    await expect(segment.locator('.cal-phase')).not.toHaveCount(0);
+    await expect(activity.locator('.cal-legend')).toContainText('調査');
+    await expect(activity.locator('.cal-legend')).toContainText('実装');
+    await expect(activity.locator('.cal-legend')).toContainText('対話');
+    await activity.getByRole('button', { name: 'プロジェクト' }).click();
+    await expect(activity.locator('.cal-legend')).toContainText('fixture-project');
+
     await segment.click();
     await expect(page.locator('.chat-view')).toBeVisible();
     await expect(page.locator('.chat-message.human').first()).toContainText(
