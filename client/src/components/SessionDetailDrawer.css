@@ -1,0 +1,196 @@
+/* ホームの「セッション詳細」（ターン詳細）。SubagentDrawer と同じ右サイドのドロワー */
+.session-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.session-detail {
+  width: 50%;
+  max-width: 820px;
+  min-width: min(420px, 100%);
+  height: 100%;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+  animation: session-detail-slide-in 0.2s ease-out;
+}
+
+@keyframes session-detail-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.session-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-detail-title-area {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.session-detail-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-detail-cwd {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-detail-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.session-detail-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px 24px;
+}
+
+.session-detail-empty {
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 16px 0;
+}
+
+.session-turns {
+  list-style: none;
+}
+
+.session-turn {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 1 行目: 番号・時刻・指示・数値。指示だけが伸び縮みする */
+.session-turn-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.session-turn-index {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 22px;
+  text-align: right;
+}
+
+.session-turn-time {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.session-turn-prompt {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-turn-stats {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 2 行目以降: そのターンの成果。番号と時刻の分だけ字下げする */
+.session-turn-outcomes {
+  list-style: none;
+  margin: 4px 0 0 30px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.session-turn-outcomes li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-turn-outcomes li::before {
+  content: '⎿ ';
+  opacity: 0.6;
+}
+
+.session-turn-hash {
+  margin-right: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--accent-secondary);
+}
+
+.session-turn-misc {
+  display: flex;
+  gap: 10px;
+}
+
+.session-turn-pr {
+  color: var(--accent-secondary);
+  text-decoration: none;
+}
+
+.session-turn-pr:hover {
+  text-decoration: underline;
+}
+
+.session-turn-files {
+  cursor: help;
+}
+
+@media (max-width: 640px) {
+  .session-detail {
+    width: 100%;
+  }
+
+  .session-turn-head {
+    flex-wrap: wrap;
+  }
+}

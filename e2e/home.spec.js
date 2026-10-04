@@ -131,8 +131,26 @@ test.describe('ホーム画面', () => {
     await expect(interrupted).toBeVisible();
   });
 
+  test('直近一覧の行の「詳細」でターン詳細のパネルが開く', async ({ page }) => {
+    await page.goto('/');
+
+    const row = page.locator('.home-row', { hasText: FIXTURE_SECOND_TITLE });
+    await row.hover();
+    await row.getByRole('button', { name: '詳細' }).click();
+
+    const detail = page.locator('.session-detail');
+    await expect(detail).toBeVisible();
+    await expect(detail.locator('.session-turn')).toHaveCount(1);
+    await expect(detail.locator('.session-turn-prompt')).toHaveText(FIXTURE_SECOND_TITLE);
+    await expect(detail.locator('.session-detail-cwd')).toHaveText('/home/e2e/second-project');
+
+    // 背景のクリックで閉じる
+    await page.locator('.session-detail-overlay').click({ position: { x: 10, y: 10 } });
+    await expect(detail).toHaveCount(0);
+  });
+
   // 帯のクリックは readonly セッションを開く（サーバーにセッションが残る）ので、このファイルの最後に置く
-  test('カレンダービューで fixture の活動が帯として出て、クリックで閲覧が開く', async ({ page }) => {
+  test('カレンダービューで fixture の活動が帯として出て、クリックで詳細から閲覧が開く', async ({ page }) => {
     // fixture は 2026-08-10 の活動。どの TZ でもその週が「今週」になる時刻に固定する
     await page.clock.setFixedTime(new Date('2026-08-10T09:30:00.000Z'));
     await page.goto('/');
@@ -167,7 +185,20 @@ test.describe('ホーム画面', () => {
     await activity.getByRole('button', { name: 'プロジェクト' }).click();
     await expect(activity.locator('.cal-legend')).toContainText('fixture-project');
 
+    // 帯のクリックはまずセッション詳細（ターン詳細）を出し、「開く」でセッションへ移る
     await segment.click();
+    const detail = page.locator('.session-detail');
+    await expect(detail).toBeVisible();
+    await expect(detail.locator('.session-detail-title')).toHaveText(FIXTURE_TITLE);
+    await expect(detail.locator('.session-turn').first()).toContainText('claude-bridge の E2E テスト用 fixture です');
+    await expect(detail.locator('.session-detail-totals')).toContainText('指示 2');
+
+    // Esc で閉じる → もう一度開いて「開く」
+    await page.keyboard.press('Escape');
+    await expect(detail).toHaveCount(0);
+    await segment.click();
+    await detail.getByRole('button', { name: '開く' }).click();
+    await expect(detail).toHaveCount(0);
     await expect(page.locator('.chat-view')).toBeVisible();
     await expect(page.locator('.chat-message.human').first()).toContainText(
       'claude-bridge の E2E テスト用 fixture です',
