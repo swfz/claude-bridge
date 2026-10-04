@@ -9,6 +9,7 @@ import {
   extractToolUses,
 } from './jsonl-utils.js';
 import { readFirstLines, readSessionSummary } from './session-summary.js';
+import { readSessionCompletion } from './session-completion.js';
 
 // セッション JSONL から最初のユーザーメッセージを抽出
 function extractFirstUserMessage(lines) {
@@ -103,6 +104,7 @@ export async function listRecentSessions({
     top.map(async (c) => {
       // タイトル・冒頭の依頼・直近のやりとり（カードで中身が分かるように）
       const summary = await readSessionSummary(c.filePath);
+      const cwd = summary.cwd || c.cwd;
       return {
         sessionId: c.sessionId,
         projectDir: c.projectDir,
@@ -111,7 +113,9 @@ export async function listRecentSessions({
         ...summary,
         // ディレクトリ名にハイフンを含むと projectDir からは cwd を復元できないので
         // JSONL に書かれた cwd を優先する（再開時の起動先になる）
-        cwd: summary.cwd || c.cwd,
+        cwd,
+        // やり残し判定（編集したファイルが未コミットのまま残っていないか）
+        completion: await readSessionCompletion({ filePath: c.filePath, cwd }),
       };
     }),
   );

@@ -51,6 +51,7 @@ describe('normalizeRunningSession', () => {
       cwd: '/Users/x/gh/claude-bridge',
       name: 'claude-bridge-76',
       status: 'busy',
+      waitingFor: null,
       kind: 'interactive',
       version: '2.1.231',
       tmuxTarget: '0:@5.%7',
@@ -58,6 +59,10 @@ describe('normalizeRunningSession', () => {
       startedAt: 1000,
       updatedAt: 2000,
     });
+  });
+
+  it('keeps waitingFor so the home view can tell a session is waiting for an answer', () => {
+    assert.equal(normalizeRunningSession({ ...meta, waitingFor: 'permission prompt' }).waitingFor, 'permission prompt');
   });
 
   it('falls back to statusUpdatedAt then startedAt for updatedAt', () => {

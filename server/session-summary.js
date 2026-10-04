@@ -109,6 +109,49 @@ export function summarizeHead(lines) {
   };
 }
 
+const AWAY_SUMMARY_MAX = 300;
+
+// API エラーの応答（529 Overloaded 等）。エラーのあとにも turn_duration が書かれるので
+// 「ターンは終わったが作業は終わっていない」として区別する
+function isApiError(record) {
+  if (record.isApiErrorMessage) return true;
+  return extractTextContent(record.message, 0).trim().startsWith('API Error');
+}
+
+function hasBlock(record, type) {
+  const content = record.message?.content;
+  return Array.isArray(content) && content.some((block) => block?.type === type);
+}
+
+// 末尾から見て、最後のターンがどう終わったか（ホームのやり残し判定用）。
+//   'ended'       … 応答を返してターンを終えた（system:turn_duration、または tool_use を含まない応答）
+//   'error'       … 最後の応答が API エラー
+//   'interrupted' … ユーザーが中断した（[Request interrupted by user]）
+//   'midway'      … ツールの実行中・結果待ちのまま止まっている
+//   'prompt'      … 最後の指示に応答が無い
+//   null          … 判断材料が無い
+export function detectTurnState(records) {
+  let sawTurnEnd = false;
+  for (let i = records.length - 1; i >= 0; i--) {
+    const record = records[i];
+    if (record.type === 'system') {
+      if (record.subtype === 'turn_duration') sawTurnEnd = true;
+      continue;
+    }
+    if (record.type === 'assistant') {
+      if (isApiError(record)) return 'error';
+      if (sawTurnEnd || !hasBlock(record, 'tool_use')) return 'ended';
+      return 'midway';
+    }
+    if (record.type !== 'user' || record.isMeta) continue;
+    const text = extractTextContent(record.message, 0).trim();
+    if (text.startsWith('[Request interrupted by user')) return 'interrupted';
+    if (hasBlock(record, 'tool_result')) return sawTurnEnd ? 'ended' : 'midway';
+    if (userPrompt(record)) return sawTurnEnd ? 'ended' : 'prompt';
+  }
+  return sawTurnEnd ? 'ended' : null;
+}
+
 // 末尾行群から: 直近のユーザー指示 / 直近のアシスタント発話 / 最終更新時刻
 export function summarizeTail(lines) {
   const records = parseLines(lines);
@@ -128,11 +171,24 @@ export function summarizeTail(lines) {
     if (!lastUserMessage) lastUserMessage = userPrompt(record);
     if (lastUserMessage && lastAssistantMessage && lastTimestamp && contextUsage) break;
   }
+  // 離席から戻ったときに Claude Code が書く要約（「いまどうなっていて、次に何を決めるか」）。
+  // やり残しの中身そのものなので、最新の 1 件をそのまま出す
+  let awaySummary = null;
+  for (let i = records.length - 1; i >= 0; i--) {
+    const record = records[i];
+    if (record.type === 'system' && record.subtype === 'away_summary' && typeof record.content === 'string') {
+      const text = snippetText(record.content.replace(/\(disable recaps in \/config\)\s*$/, ''));
+      if (text) awaySummary = { text: text.slice(0, AWAY_SUMMARY_MAX), timestamp: record.timestamp || '' };
+      break;
+    }
+  }
   return {
     lastUserMessage: lastUserMessage.slice(0, TEXT_MAX),
     lastAssistantMessage: lastAssistantMessage.slice(0, TEXT_MAX),
     lastTimestamp,
     contextUsage,
+    turnState: detectTurnState(records),
+    awaySummary,
   };
 }
 
@@ -145,6 +201,8 @@ const EMPTY_SUMMARY = {
   lastAssistantMessage: '',
   lastTimestamp: '',
   contextUsage: null,
+  turnState: null,
+  awaySummary: null,
   artifacts: [],
 };
 

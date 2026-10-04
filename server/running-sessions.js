@@ -4,7 +4,8 @@ import { readFile, readdir } from 'fs/promises';
 import { join } from 'path';
 import { SESSIONS_DIR } from './claude-session-meta.js';
 import { readSessionSummaryFor } from './session-summary.js';
-import { CLAUDE_PROJECTS_DIR } from './jsonl-utils.js';
+import { readSessionCompletion } from './session-completion.js';
+import { CLAUDE_PROJECTS_DIR, cwdToProjectDir } from './jsonl-utils.js';
 
 const execAsync = promisify(exec);
 
@@ -28,6 +29,8 @@ export function normalizeRunningSession(meta) {
     cwd: meta.cwd || '',
     name: meta.name || null,
     status: meta.status || null,
+    // 選択肢・ツール許可の待ち（"input needed" / "permission prompt"）。ホームの「返事待ち」判定に使う
+    waitingFor: meta.waitingFor || null,
     kind: meta.kind || null,
     version: meta.version || null,
     tmuxTarget: typeof meta.tmux === 'string' ? meta.tmux : null,
@@ -134,6 +137,12 @@ export async function listRunningSessions({ dir = SESSIONS_DIR, livePids, projec
       ...(await readSessionSummaryFor(m.cwd, m.sessionId, projectsDir)),
       // cwd はセッションメタ側が正（JSONL 由来で上書きしない）
       cwd: m.cwd,
+      completion: m.cwd
+        ? await readSessionCompletion({
+            filePath: join(projectsDir, cwdToProjectDir(m.cwd), `${m.sessionId}.jsonl`),
+            cwd: m.cwd,
+          })
+        : null,
     })),
   );
 }
