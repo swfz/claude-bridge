@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, appendFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { getActivityHeatmap, listActiveSessionIds, resetActivityHeatmapState } from '../server/activity-heatmap.js';
+import {
+  SLOT_MS,
+  getActivityCalendar,
+  getActivityHeatmap,
+  listActiveSessionIds,
+  resetActivityHeatmapState,
+} from '../server/activity-heatmap.js';
 
 const jsonl = (records) => records.map((r) => JSON.stringify(r)).join('\n') + '\n';
 
@@ -264,5 +270,111 @@ describe('listActiveSessionIds', () => {
     const past = dateKey(new Date(now - 30 * 86400000));
     const ids = await listActiveSessionIds({ from: past, to: past, dir, cacheFile });
     assert.equal(ids.size, 0);
+  });
+});
+
+describe('getActivityCalendar', () => {
+  beforeEach(() => resetActivityHeatmapState());
+
+  // 枠の境界ちょうどの時刻（ISO）。テストを TZ に依存させないため UTC の枠で組み立てる
+  const BASE = Math.floor(Date.UTC(2026, 9, 1, 3, 0) / SLOT_MS) * SLOT_MS;
+  const at = (minutes) => new Date(BASE + minutes * 60000).toISOString();
+  const toolUse = (ts, ...names) => ({
+    type: 'assistant',
+    timestamp: ts,
+    message: { role: 'assistant', content: names.map((name) => ({ type: 'tool_use', name, input: {} })) },
+  });
+  const range = { fromMs: BASE - 60 * 60000, toMs: BASE + 24 * 60 * 60000 };
+
+  it('aggregates prompts, replies and tool kinds into 10-minute slots', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    await writeFile(
+      join(dir, '-home-me-a', 's1.jsonl'),
+      jsonl([
+        { type: 'ai-title', aiTitle: 'カレンダー', cwd: '/home/me/a' },
+        { ...prompt(at(1)), cwd: '/home/me/a' },
+        toolUse(at(2), 'Read', 'Grep'),
+        toolUse(at(3), 'Edit'),
+        toolResult(at(4)),
+        reply(at(25), usage(1, 1)),
+      ]),
+    );
+
+    const result = await getActivityCalendar({ ...range, dir, cacheFile });
+    assert.equal(result.slotMs, SLOT_MS);
+    assert.equal(result.sessions.length, 1);
+    const [session] = result.sessions;
+    assert.equal(session.sessionId, 's1');
+    assert.equal(session.projectDir, '-home-me-a');
+    assert.equal(session.cwd, '/home/me/a');
+    assert.equal(session.title, 'カレンダー');
+    const base = BASE / SLOT_MS;
+    assert.deepEqual(session.slots, [
+      [base, 1, 2, 2, 1],
+      [base + 2, 0, 1, 0, 0],
+    ]);
+  });
+
+  it('merges subagent slots into the parent session', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    await mkdir(join(dir, '-home-me-a', 'parent', 'subagents'), { recursive: true });
+    await writeFile(join(dir, '-home-me-a', 'parent.jsonl'), jsonl([prompt(at(1))]));
+    await writeFile(
+      join(dir, '-home-me-a', 'parent', 'subagents', 'agent-x.jsonl'),
+      jsonl([toolUse(at(2), 'Read'), toolUse(at(15), 'Write')]),
+    );
+
+    const { sessions } = await getActivityCalendar({ ...range, dir, cacheFile });
+    assert.equal(sessions.length, 1);
+    const base = BASE / SLOT_MS;
+    assert.deepEqual(sessions[0].slots, [
+      [base, 1, 1, 1, 0],
+      [base + 1, 0, 1, 0, 1],
+    ]);
+  });
+
+  it('only returns slots inside the requested range', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    await writeFile(join(dir, '-home-me-a', 'in.jsonl'), jsonl([prompt(at(0)), prompt(at(60 * 30))]));
+    await writeFile(join(dir, '-home-me-a', 'out.jsonl'), jsonl([prompt(at(-60 * 5))]));
+
+    const { sessions } = await getActivityCalendar({ fromMs: BASE, toMs: BASE + SLOT_MS, dir, cacheFile });
+    assert.deepEqual(
+      sessions.map((s) => [s.sessionId, s.slots.length]),
+      [['in', 1]],
+    );
+  });
+
+  it('keeps subagent-only activity even when the main transcript is missing', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    await mkdir(join(dir, '-home-me-a', 'gone', 'subagents'), { recursive: true });
+    await writeFile(join(dir, '-home-me-a', 'gone', 'subagents', 'agent-x.jsonl'), jsonl([prompt(at(0))]));
+
+    const { sessions } = await getActivityCalendar({ ...range, dir, cacheFile });
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].title, '');
+    assert.equal(sessions[0].cwd, '');
+  });
+
+  it('adds appended activity on the next call', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    const file = join(dir, '-home-me-a', 's1.jsonl');
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    await writeFile(file, jsonl([prompt(at(0))]));
+    await getActivityCalendar({ ...range, dir, cacheFile });
+
+    resetActivityHeatmapState();
+    await appendFile(file, jsonl([prompt(at(5)), prompt(at(40))]));
+    const { sessions } = await getActivityCalendar({ ...range, dir, cacheFile });
+    const base = BASE / SLOT_MS;
+    assert.deepEqual(
+      sessions[0].slots.map((s) => [s[0], s[1]]),
+      [
+        [base, 2],
+        [base + 4, 1],
+      ],
+    );
   });
 });
