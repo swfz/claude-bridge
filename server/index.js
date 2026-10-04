@@ -9,7 +9,9 @@ import { Storage } from './storage.js';
 import { ThreadStore } from './thread-store.js';
 import { listClaudeSessions, listRecentSessions, loadSessionHistory } from './claude-sessions.js';
 import { JsonlWatcher } from './jsonl-watcher.js';
-import { cwdToProjectDir } from './jsonl-utils.js';
+import { CLAUDE_PROJECTS_DIR, cwdToProjectDir } from './jsonl-utils.js';
+import { readSessionSummary } from './session-summary.js';
+import { readSessionTurns } from './session-turns.js';
 import { listClaudeTmuxPanes, resolveTmuxJsonlTarget, resumeInTmuxWindow, TmuxSessionManager } from './tmux-session.js';
 import { listClaudeAgents } from './claude-agents.js';
 import { enrichPanesWithSessionMeta, readStatusByPid } from './claude-session-meta.js';
@@ -1100,6 +1102,39 @@ wss.on('connection', (ws) => {
           })
           .catch((err) => {
             ws.send(JSON.stringify({ type: 'home_error', message: `カレンダーの集計に失敗しました: ${err.message}` }));
+          });
+        break;
+      }
+
+      case 'get_session_turns': {
+        // ホームの「セッション詳細」。JSONL を全文読むので、パネルを開いたときだけ呼ばれる。
+        // パスはクライアントから受け取らず、検証した projectDir と sessionId から組み立てる
+        const { sessionId, projectDir } = msg;
+        if (
+          typeof sessionId !== 'string' ||
+          !/^[\w-]+$/.test(sessionId) ||
+          typeof projectDir !== 'string' ||
+          !/^[\w.-]+$/.test(projectDir) ||
+          projectDir.startsWith('..')
+        ) {
+          ws.send(JSON.stringify({ type: 'session_turns', sessionId, error: 'セッションの指定が不正です' }));
+          break;
+        }
+        const filePath = join(CLAUDE_PROJECTS_DIR, projectDir, `${sessionId}.jsonl`);
+        // git の突き合わせに使う cwd も JSONL に書かれたものを使う（クライアントの値は使わない）
+        readSessionSummary(filePath)
+          .then((summary) => readSessionTurns(filePath, { cwd: summary.cwd }))
+          .then((result) => {
+            ws.send(JSON.stringify({ type: 'session_turns', sessionId, ...result }));
+          })
+          .catch((err) => {
+            ws.send(
+              JSON.stringify({
+                type: 'session_turns',
+                sessionId,
+                error: `ターン詳細を読めませんでした: ${err.message}`,
+              }),
+            );
           });
         break;
       }

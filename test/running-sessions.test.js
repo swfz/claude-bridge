@@ -140,6 +140,22 @@ describe('listRunningSessions', () => {
     assert.equal(result.length, 1);
   });
 
+  it('adds the projectDir (for the session detail panel) and the completion state', async () => {
+    const dir = await makeDir({
+      '1.json': JSON.stringify({ pid: 1, sessionId: 'a', cwd: '/Users/x/gh/claude-bridge', updatedAt: 1 }),
+      '2.json': JSON.stringify({ pid: 2, sessionId: 'b', updatedAt: 2 }),
+    });
+    const projectsDir = await mkdtemp(join(tmpdir(), 'cb-projects-'));
+    const result = await listRunningSessions({ dir, livePids: new Set([1, 2]), projectsDir });
+    const byId = Object.fromEntries(result.map((r) => [r.sessionId, r]));
+    assert.equal(byId.a.projectDir, '-Users-x-gh-claude-bridge');
+    // JSONL がまだ無くても判定は「編集なし」で返る
+    assert.equal(byId.a.completion.git, 'none');
+    // cwd が無ければ JSONL を指せないので付けない
+    assert.equal(byId.b.projectDir, null);
+    assert.equal(byId.b.completion, null);
+  });
+
   it('returns an empty list when the directory does not exist', async () => {
     const result = await listRunningSessions({
       dir: join(tmpdir(), 'cb-sessions-does-not-exist'),

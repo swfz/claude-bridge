@@ -72,7 +72,7 @@ export function snippetText(text) {
 }
 
 // ユーザーが実際に打った指示か（tool_result やスラッシュコマンドの展開は除く）
-function userPrompt(record) {
+export function userPrompt(record) {
   if (record.type !== 'user' || record.isMeta) return '';
   const raw = extractTextContent(record.message, 0).trim();
   if (!raw || raw.startsWith('<')) return '';
