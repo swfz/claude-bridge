@@ -8,6 +8,9 @@ import {
   densityLevel,
   earliestOffsetMs,
   formatDayHeader,
+  formatHours,
+  phaseOf,
+  phaseTotals,
   formatWeekRange,
   projectOf,
   segmentTooltip,
@@ -63,8 +66,8 @@ describe('buildRuns', () => {
       ],
     );
     assert.deepEqual(runs[0].slots, [
-      { startMs: base * SLOT, prompts: 1 },
-      { startMs: (base + 2) * SLOT, prompts: 0 },
+      { startMs: base * SLOT, prompts: 1, research: 0, edit: 0 },
+      { startMs: (base + 2) * SLOT, prompts: 0, research: 1, edit: 0 },
     ]);
   });
 
@@ -269,5 +272,42 @@ describe('formatting helpers', () => {
       edit: 1,
     });
     assert.equal(tip, 'abcdef12\n/x/app\n09:00〜10:30（1 時間 30 分）\n発言 3 · 応答 5 · 調査 2 · 編集 1');
+  });
+});
+
+describe('phaseOf / phaseTotals / formatHours', () => {
+  it('classifies a slot by the dominant tool kind (ties go to edit)', () => {
+    assert.equal(phaseOf({ research: 3, edit: 1 }), 'research');
+    assert.equal(phaseOf({ research: 1, edit: 2 }), 'edit');
+    assert.equal(phaseOf({ research: 2, edit: 2 }), 'edit');
+    assert.equal(phaseOf({ research: 0, edit: 0 }), 'talk');
+    assert.equal(phaseOf({}), 'talk');
+  });
+
+  it('sums time per phase across the week without double counting midnight splits', () => {
+    const weekStartMs = local(2026, 9, 28);
+    const start = local(2026, 9, 29, 23, 50);
+    const days = buildCalendarDays(
+      [
+        {
+          sessionId: 's1',
+          cwd: '/x/app',
+          slots: [
+            [slotAt(start), 1, 1, 2, 0], // 調査
+            [slotAt(start) + 1, 0, 1, 0, 1], // 実装（0:00 をまたいで翌日）
+            [slotAt(start) + 2, 0, 1, 0, 0], // 対話
+          ],
+        },
+      ],
+      { weekStartMs, slotMs: SLOT },
+    );
+    assert.deepEqual(phaseTotals(days, SLOT), { research: SLOT, edit: SLOT, talk: SLOT });
+    assert.deepEqual(phaseTotals([], SLOT), { research: 0, edit: 0, talk: 0 });
+  });
+
+  it('formats hours compactly', () => {
+    assert.equal(formatHours(0), '0 時間');
+    assert.equal(formatHours(30 * 60000), '0.5 時間');
+    assert.equal(formatHours(12 * 3600000 + 20 * 60000), '12 時間');
   });
 });

@@ -37,6 +37,33 @@
   color: var(--text-secondary);
 }
 
+/* 色分けの切り替え。活動パネルのビュー切替と同じトーン */
+.cal-color-modes {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.cal-color-mode {
+  background: var(--bg-primary);
+  border: none;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cal-color-mode + .cal-color-mode {
+  border-left: 1px solid var(--border);
+}
+
+.cal-color-mode.active {
+  background: var(--accent-secondary);
+  color: #fff;
+}
+
 .cal-legend {
   display: flex;
   flex-wrap: wrap;
@@ -133,9 +160,39 @@
   z-index: 1;
 }
 
-/* 帯の左端に 10 分枠ごとの発言量 */
+/* 調査 / 実装の色分け。帯自体はプロジェクト色を消して枠の色だけを見せる */
+.cal-seg.phase {
+  --seg-color: var(--text-secondary);
+  background: color-mix(in srgb, var(--seg-color) 12%, transparent);
+}
+
+.cal-phase {
+  position: absolute;
+  left: 0;
+  right: 0;
+  opacity: 0.75;
+}
+
+.phase-research {
+  background: var(--cal-2);
+}
+
+.phase-edit {
+  background: var(--cal-1);
+}
+
+.phase-talk {
+  background: color-mix(in srgb, var(--text-secondary) 45%, transparent);
+}
+
+.cal-seg.phase:hover .cal-phase {
+  opacity: 1;
+}
+
+/* 帯の左端に 10 分枠ごとの発言量（色分けの上に重ねる） */
 .cal-density {
   position: absolute;
+  z-index: 1;
   left: 0;
   width: 4px;
   background: var(--text-primary);

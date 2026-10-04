@@ -1,17 +1,33 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  COLOR_MODES,
   DAY_MS,
+  PHASES,
   buildCalendarDays,
   buildLegend,
   densityLevel,
   earliestOffsetMs,
   formatDayHeader,
+  formatHours,
   formatWeekRange,
+  phaseOf,
+  phaseTotals,
   segmentTooltip,
   shiftWeek,
   startOfWeek,
 } from '../utils/calendar.js';
 import './CalendarView.css';
+
+const COLOR_MODE_KEY = 'homeCalendarColor';
+
+function loadColorMode() {
+  try {
+    const saved = localStorage.getItem(COLOR_MODE_KEY);
+    return COLOR_MODES.some((m) => m.key === saved) ? saved : 'project';
+  } catch {
+    return 'project';
+  }
+}
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const pct = (ms) => `${(ms / DAY_MS) * 100}%`;
@@ -19,18 +35,28 @@ const pct = (ms) => `${(ms / DAY_MS) * 100}%`;
 // 週間カレンダー。縦軸が時刻、横軸が曜日で、セッションの活動区間を帯で並べる。
 // 帯は 20 分以上の空きで切れるので、止まっていた区間は空白として見える。
 // 帯の左端は 10 分枠ごとの発言量の濃淡。重なったセッションは横に並べる（並行作業）。
+// 色はプロジェクトごとか、10 分枠ごとの「調査 / 実装 / 対話」かを切り替えられる。
 export default function CalendarView({ data, loading, weekStartMs, onChangeWeek, onOpenSession, now = Date.now() }) {
   const scrollRef = useRef(null);
   const scrolledWeekRef = useRef(null);
+  const [colorMode, setColorMode] = useState(loadColorMode);
+  const isPhase = colorMode === 'phase';
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLOR_MODE_KEY, colorMode);
+    } catch {
+      // 保存できなくても表示は変わらない
+    }
+  }, [colorMode]);
 
   // 応答が今の週のものでなければ描かない（週送りを連打したときの取り違え防止）
   const current = data && data.fromMs === weekStartMs ? data : null;
+  const slotMs = current?.slotMs || 600000;
   const sessions = useMemo(() => current?.sessions || [], [current]);
-  const days = useMemo(
-    () => buildCalendarDays(sessions, { weekStartMs, slotMs: current?.slotMs || 600000 }),
-    [sessions, weekStartMs, current],
-  );
+  const days = useMemo(() => buildCalendarDays(sessions, { weekStartMs, slotMs }), [sessions, weekStartMs, slotMs]);
   const legend = useMemo(() => buildLegend(sessions), [sessions]);
+  const totals = useMemo(() => phaseTotals(days, slotMs), [days, slotMs]);
 
   // 週を開いたら一番早い活動の少し上までスクロールする（更新では動かさない）
   useEffect(() => {
@@ -63,17 +89,40 @@ export default function CalendarView({ data, loading, weekStartMs, onChangeWeek,
         </button>
         <span className="cal-range">{formatWeekRange(weekStartMs)}</span>
         <span className="cal-count">{loading && !current ? '集計中…' : `${sessions.length} セッション`}</span>
+        <div className="cal-color-modes">
+          {COLOR_MODES.map((mode) => (
+            <button
+              key={mode.key}
+              className={`cal-color-mode ${colorMode === mode.key ? 'active' : ''}`}
+              onClick={() => setColorMode(mode.key)}
+              title={mode.title}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {legend.length > 0 && (
+      {isPhase ? (
         <div className="cal-legend">
-          {legend.map((item) => (
-            <span key={item.project} className="cal-legend-item">
-              <span className="cal-swatch" style={{ background: `var(--cal-${item.color})` }} />
-              {item.project} {item.count}
+          {Object.entries(PHASES).map(([phase, info]) => (
+            <span key={phase} className="cal-legend-item" title={info.title}>
+              <span className={`cal-swatch phase-${phase}`} />
+              {info.label} {formatHours(totals[phase])}
             </span>
           ))}
         </div>
+      ) : (
+        legend.length > 0 && (
+          <div className="cal-legend">
+            {legend.map((item) => (
+              <span key={item.project} className="cal-legend-item">
+                <span className="cal-swatch" style={{ background: `var(--cal-${item.color})` }} />
+                {item.project} {item.count}
+              </span>
+            ))}
+          </div>
+        )
       )}
 
       <div className="cal-head">
@@ -109,9 +158,10 @@ export default function CalendarView({ data, loading, weekStartMs, onChangeWeek,
                       key={seg.key}
                       type="button"
                       tabIndex={-1}
-                      className="cal-seg"
+                      className={`cal-seg ${isPhase ? 'phase' : ''}`}
                       style={{
-                        '--seg-color': `var(--cal-${seg.color})`,
+                        // 調査 / 実装の色分けではプロジェクト色を使わない（CSS 側の中立色にする）
+                        ...(isPhase ? {} : { '--seg-color': `var(--cal-${seg.color})` }),
                         top: pct(seg.startMs - day.dayStartMs),
                         height: pct(duration),
                         // 隣の帯と接しないよう左右 1px ずつ縮める
@@ -121,6 +171,18 @@ export default function CalendarView({ data, loading, weekStartMs, onChangeWeek,
                       title={segmentTooltip(seg)}
                       onClick={() => onOpenSession?.(seg)}
                     >
+                      {/* 調査 / 実装の色分けは枠ごとに塗る（帯の中の空き枠は塗らない） */}
+                      {isPhase &&
+                        seg.slots.map((slot) => (
+                          <span
+                            key={`p${slot.startMs}`}
+                            className={`cal-phase phase-${phaseOf(slot)}`}
+                            style={{
+                              top: `${((slot.startMs - seg.startMs) / duration) * 100}%`,
+                              height: `${(slotMs / duration) * 100}%`,
+                            }}
+                          />
+                        ))}
                       {seg.slots.map((slot) => {
                         const level = densityLevel(slot.prompts);
                         if (level === 0) return null;
@@ -130,7 +192,7 @@ export default function CalendarView({ data, loading, weekStartMs, onChangeWeek,
                             className={`cal-density level-${level}`}
                             style={{
                               top: `${((slot.startMs - seg.startMs) / duration) * 100}%`,
-                              height: `${(600000 / duration) * 100}%`,
+                              height: `${(slotMs / duration) * 100}%`,
                             }}
                           />
                         );
