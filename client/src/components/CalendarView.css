@@ -189,25 +189,30 @@
   opacity: 1;
 }
 
-/* 帯の左端に 10 分枠ごとの発言量（色分けの上に重ねる） */
-.cal-density {
+/* 帯の左端に、自分が指示した時刻（分単位）の点。色分けの上に重ねる。
+   点の中心が時刻に来るよう上に半分ずらす */
+.cal-dot {
   position: absolute;
   z-index: 1;
-  left: 0;
-  width: 4px;
+  left: 2px;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
   background: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--bg-primary);
 }
 
-.cal-density.level-1 {
-  opacity: 0.3;
+/* 同じ分に複数回指示したときは少し大きくする（件数はホバーで） */
+.cal-dot.multi {
+  left: 1px;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
 }
 
-.cal-density.level-2 {
-  opacity: 0.6;
-}
-
-.cal-density.level-3 {
-  opacity: 0.9;
+.cal-dot:hover {
+  background: var(--accent);
 }
 
 .cal-now {

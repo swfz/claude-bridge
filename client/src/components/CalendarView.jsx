@@ -5,13 +5,13 @@ import {
   PHASES,
   buildCalendarDays,
   buildLegend,
-  densityLevel,
   earliestOffsetMs,
   formatDayHeader,
   formatHours,
   formatWeekRange,
   phaseOf,
   phaseTotals,
+  promptMarkTooltip,
   segmentTooltip,
   shiftWeek,
   startOfWeek,
@@ -34,7 +34,8 @@ const pct = (ms) => `${(ms / DAY_MS) * 100}%`;
 
 // 週間カレンダー。縦軸が時刻、横軸が曜日で、セッションの活動区間を帯で並べる。
 // 帯は 20 分以上の空きで切れるので、止まっていた区間は空白として見える。
-// 帯の左端は 10 分枠ごとの発言量の濃淡。重なったセッションは横に並べる（並行作業）。
+// 帯の左端の点は自分が指示した時刻（分単位）。点の無い区間は Claude が自走していた時間。
+// 重なったセッションは横に並べる（並行作業）。
 // 色はプロジェクトごとか、10 分枠ごとの「調査 / 実装 / 対話」かを切り替えられる。
 export default function CalendarView({ data, loading, weekStartMs, onChangeWeek, onOpenSession, now = Date.now() }) {
   const scrollRef = useRef(null);
@@ -54,7 +55,11 @@ export default function CalendarView({ data, loading, weekStartMs, onChangeWeek,
   const current = data && data.fromMs === weekStartMs ? data : null;
   const slotMs = current?.slotMs || 600000;
   const sessions = useMemo(() => current?.sessions || [], [current]);
-  const days = useMemo(() => buildCalendarDays(sessions, { weekStartMs, slotMs }), [sessions, weekStartMs, slotMs]);
+  const minuteMs = current?.minuteMs || 60000;
+  const days = useMemo(
+    () => buildCalendarDays(sessions, { weekStartMs, slotMs, minuteMs }),
+    [sessions, weekStartMs, slotMs, minuteMs],
+  );
   const legend = useMemo(() => buildLegend(sessions), [sessions]);
   const totals = useMemo(() => phaseTotals(days, slotMs), [days, slotMs]);
 
@@ -183,20 +188,14 @@ export default function CalendarView({ data, loading, weekStartMs, onChangeWeek,
                             }}
                           />
                         ))}
-                      {seg.slots.map((slot) => {
-                        const level = densityLevel(slot.prompts);
-                        if (level === 0) return null;
-                        return (
-                          <span
-                            key={slot.startMs}
-                            className={`cal-density level-${level}`}
-                            style={{
-                              top: `${((slot.startMs - seg.startMs) / duration) * 100}%`,
-                              height: `${(slotMs / duration) * 100}%`,
-                            }}
-                          />
-                        );
-                      })}
+                      {seg.promptMarks.map((mark) => (
+                        <span
+                          key={mark.ms}
+                          className={`cal-dot ${mark.count > 1 ? 'multi' : ''}`}
+                          style={{ top: `${((mark.ms - seg.startMs) / duration) * 100}%` }}
+                          title={promptMarkTooltip(mark)}
+                        />
+                      ))}
                     </button>
                   );
                 })}

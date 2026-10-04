@@ -165,8 +165,9 @@ test.describe('ホーム画面', () => {
     const segment = activity.locator(`.cal-seg[title*="${FIXTURE_TITLE}"]`);
     await expect(segment).toHaveCount(1, { timeout: 30_000 });
     await expect(segment).toHaveAttribute('title', /fixture-project/);
-    // 発言のあった枠は左端に濃淡が付く
-    await expect(segment.locator('.cal-density')).not.toHaveCount(0);
+    // 指示した時刻に点が打たれる（fixture 1 の指示は 2 件・別々の分）
+    await expect(segment.locator('.cal-dot')).toHaveCount(2);
+    await expect(segment.locator('.cal-dot').first()).toHaveAttribute('title', /^\d{2}:\d{2} 指示$/);
     await expect(activity.locator('.cal-legend')).toContainText('fixture-project');
 
     // 前の週には fixture の活動が無い

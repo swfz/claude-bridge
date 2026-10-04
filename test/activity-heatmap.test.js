@@ -313,7 +313,53 @@ describe('getActivityCalendar', () => {
     assert.deepEqual(session.slots, [
       [base, 1, 2, 2, 1],
       [base + 2, 0, 1, 0, 0],
+    ]); // 指示した時刻は分単位（at(1) = BASE の 1 分後）
+    assert.equal(result.minuteMs, 60000);
+    assert.deepEqual(session.prompts, [[BASE / 60000 + 1, 1]]);
+  });
+
+  it('marks only human prompts by minute, counting several in the same minute', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    const text = (ts, content) => ({ type: 'user', timestamp: ts, message: { role: 'user', content } });
+    await writeFile(
+      join(dir, '-home-me-a', 's1.jsonl'),
+      jsonl([
+        text(at(5), 'お願い'),
+        text(new Date(BASE + 5 * 60000 + 30000).toISOString(), 'もう 1 つ'), // 同じ 5 分目
+        text(at(7), '<command-message>ship</command-message>\n<command-name>/ship</command-name>'),
+        text(at(8), '<task-notification>done</task-notification>'),
+        text(at(9), '[Request interrupted by user]'),
+        { ...text(at(10), 'meta'), isMeta: true },
+        toolResult(at(11)),
+      ]),
+    );
+
+    const { sessions } = await getActivityCalendar({ ...range, dir, cacheFile });
+    const minute = BASE / 60000;
+    assert.deepEqual(sessions[0].prompts, [
+      [minute + 5, 2],
+      [minute + 7, 1],
     ]);
+  });
+
+  it('does not mark the tasks a parent handed to its subagents', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    await mkdir(join(dir, '-home-me-a', 'parent', 'subagents'), { recursive: true });
+    await writeFile(join(dir, '-home-me-a', 'parent.jsonl'), jsonl([prompt(at(1))]));
+    await writeFile(join(dir, '-home-me-a', 'parent', 'subagents', 'agent-x.jsonl'), jsonl([prompt(at(3), '調べて')]));
+
+    const { sessions } = await getActivityCalendar({ ...range, dir, cacheFile });
+    assert.deepEqual(sessions[0].prompts, [[BASE / 60000 + 1, 1]]);
+  });
+
+  it('only returns prompts inside the requested range', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    await writeFile(join(dir, '-home-me-a', 's1.jsonl'), jsonl([prompt(at(0)), prompt(at(15))]));
+
+    const { sessions } = await getActivityCalendar({ fromMs: BASE, toMs: BASE + SLOT_MS, dir, cacheFile });
+    assert.deepEqual(sessions[0].prompts, [[BASE / 60000, 1]]);
   });
 
   it('merges subagent slots into the parent session', async () => {

@@ -104,7 +104,10 @@ export function projectOf(session) {
 }
 
 // 帯を日ごとに切ってレーンを割り当てる。戻り値は日ごとの配列（週の 7 日分）。
-export function buildCalendarDays(sessions, { weekStartMs, slotMs, maxGapSlots = MAX_GAP_SLOTS } = {}) {
+export function buildCalendarDays(
+  sessions,
+  { weekStartMs, slotMs, minuteMs = 60 * 1000, maxGapSlots = MAX_GAP_SLOTS } = {},
+) {
   const starts = weekDayStarts(weekStartMs);
   const perDay = starts.slice(0, -1).map(() => []);
   const colors = new Map(buildLegend(sessions).map((item) => [item.project, item.color]));
@@ -135,6 +138,13 @@ export function buildCalendarDays(sessions, { weekStartMs, slotMs, maxGapSlots =
           research: run.research,
           edit: run.edit,
           slots: run.slots.filter((s) => s.startMs >= dayStart && s.startMs < dayEnd),
+          // 指示した時刻の点（分単位）。帯（日ごとに切った後）の範囲に入るものだけ
+          promptMarks: promptMarksIn(
+            session.prompts,
+            minuteMs,
+            Math.max(run.startMs, dayStart),
+            Math.min(run.endMs, dayEnd),
+          ),
         });
       }
     }
@@ -205,12 +215,18 @@ export function formatHours(ms) {
   return hours < 10 ? `${hours.toFixed(1)} 時間` : `${Math.round(hours)} 時間`;
 }
 
-// 発言量の濃淡（0〜3）。1 枠の発言は多くても数件なので固定のしきい値で足りる
-export function densityLevel(prompts) {
-  if (prompts <= 0) return 0;
-  if (prompts === 1) return 1;
-  if (prompts <= 3) return 2;
-  return 3;
+// 指示した時刻の点。サーバーの prompts（[分番号, その分の指示数]）のうち [startMs, endMs) に入るもの
+export function promptMarksIn(prompts, minuteMs, startMs, endMs) {
+  const marks = [];
+  for (const [minute, count] of prompts || []) {
+    const ms = minute * minuteMs;
+    if (ms >= startMs && ms < endMs) marks.push({ ms, count });
+  }
+  return marks;
+}
+
+export function promptMarkTooltip(mark) {
+  return mark.count > 1 ? `${formatClock(mark.ms)} 指示 ${mark.count} 件` : `${formatClock(mark.ms)} 指示`;
 }
 
 // 一番早い活動の時刻（その日の 0:00 からの ms）。初期スクロール位置に使う
