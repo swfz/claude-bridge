@@ -110,7 +110,7 @@
 
 /* 24 時間分は縦に長いので、この枠だけ縦スクロールさせる */
 .cal-scroll {
-  max-height: 360px;
+  max-height: min(620px, 65vh);
   overflow-y: auto;
 }
 
