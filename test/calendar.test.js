@@ -5,13 +5,12 @@ import {
   buildCalendarDays,
   buildLegend,
   buildRuns,
+  densityLevel,
   earliestOffsetMs,
   formatDayHeader,
   formatHours,
   phaseOf,
   phaseTotals,
-  promptMarkTooltip,
-  promptMarksIn,
   formatWeekRange,
   projectOf,
   segmentTooltip,
@@ -250,6 +249,10 @@ describe('buildCalendarDays', () => {
 });
 
 describe('formatting helpers', () => {
+  it('maps prompt counts to density levels', () => {
+    assert.deepEqual([0, 1, 2, 3, 4, 10].map(densityLevel), [0, 1, 2, 2, 3, 3]);
+  });
+
   it('formats headers and ranges', () => {
     assert.equal(formatDayHeader(local(2026, 9, 28)), '月 9/28');
     assert.equal(formatWeekRange(local(2026, 9, 28)), '2026/9/28 〜 10/4');
@@ -306,58 +309,5 @@ describe('phaseOf / phaseTotals / formatHours', () => {
     assert.equal(formatHours(0), '0 時間');
     assert.equal(formatHours(30 * 60000), '0.5 時間');
     assert.equal(formatHours(12 * 3600000 + 20 * 60000), '12 時間');
-  });
-});
-
-describe('prompt marks', () => {
-  const MIN = 60 * 1000;
-
-  it('keeps marks inside [start, end)', () => {
-    const base = 1000; // 分番号
-    const marks = promptMarksIn(
-      [
-        [base, 1],
-        [base + 5, 2],
-        [base + 10, 1],
-      ],
-      MIN,
-      base * MIN,
-      (base + 10) * MIN,
-    );
-    assert.deepEqual(marks, [
-      { ms: base * MIN, count: 1 },
-      { ms: (base + 5) * MIN, count: 2 },
-    ]);
-    assert.deepEqual(promptMarksIn(undefined, MIN, 0, 1), []);
-  });
-
-  it('attaches marks to the segment (split at midnight) they fall in', () => {
-    const weekStartMs = local(2026, 9, 28);
-    const start = local(2026, 9, 29, 23, 50);
-    const minute = (ms) => Math.floor(ms / MIN);
-    const days = buildCalendarDays(
-      [
-        {
-          sessionId: 's1',
-          cwd: '/x/app',
-          slots: [
-            [slotAt(start), 1, 0, 0, 0],
-            [slotAt(start) + 1, 1, 0, 0, 0],
-          ],
-          prompts: [
-            [minute(local(2026, 9, 29, 23, 53)), 1],
-            [minute(local(2026, 9, 30, 0, 4)), 3],
-          ],
-        },
-      ],
-      { weekStartMs, slotMs: SLOT, minuteMs: MIN },
-    );
-    assert.deepEqual(days[1].segments[0].promptMarks, [{ ms: local(2026, 9, 29, 23, 53), count: 1 }]);
-    assert.deepEqual(days[2].segments[0].promptMarks, [{ ms: local(2026, 9, 30, 0, 4), count: 3 }]);
-  });
-
-  it('formats the mark tooltip with the count only when there are several', () => {
-    assert.equal(promptMarkTooltip({ ms: local(2026, 9, 28, 9, 5), count: 1 }), '09:05 指示');
-    assert.equal(promptMarkTooltip({ ms: local(2026, 9, 28, 9, 5), count: 3 }), '09:05 指示 3 件');
   });
 });
