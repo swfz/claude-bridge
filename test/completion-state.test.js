@@ -12,7 +12,14 @@ import {
 const clean = { edited: 2, git: 'clean', uncommitted: [], uncommittedCount: 0, pushed: false, prCount: 0 };
 const pushed = { ...clean, pushed: true };
 const withPr = { ...clean, pushed: true, prCount: 1 };
-const dirty = { edited: 3, git: 'dirty', uncommitted: ['a.js', 'b.js'], uncommittedCount: 2, pushed: false, prCount: 0 };
+const dirty = {
+  edited: 3,
+  git: 'dirty',
+  uncommitted: ['a.js', 'b.js'],
+  uncommittedCount: 2,
+  pushed: false,
+  prCount: 0,
+};
 const none = { edited: 0, git: 'none', uncommitted: [], uncommittedCount: 0, pushed: false, prCount: 0 };
 const unknown = { edited: 1, git: 'unknown', uncommitted: [], uncommittedCount: 0, pushed: false, prCount: 0 };
 
@@ -39,10 +46,7 @@ describe('classifyCompletion', () => {
   it("is 'consult' when nothing was edited and the last reply is not a question", () => {
     assert.equal(classifyCompletion({ turnState: 'ended', completion: none }), 'consult');
     assert.equal(classifyCompletion({ turnState: 'ended', completion: null }), 'consult');
-    assert.equal(
-      classifyCompletion({ turnState: 'ended', completion: none, lastAssistantQuestion: false }),
-      'consult',
-    );
+    assert.equal(classifyCompletion({ turnState: 'ended', completion: none, lastAssistantQuestion: false }), 'consult');
   });
 
   it("is 'asking' when nothing was edited and the last reply ends with a question", () => {
@@ -51,8 +55,14 @@ describe('classifyCompletion', () => {
   });
 
   it('ignores the question flag once something was edited', () => {
-    assert.equal(classifyCompletion({ turnState: 'ended', completion: dirty, lastAssistantQuestion: true }), 'unfinished');
-    assert.equal(classifyCompletion({ turnState: 'ended', completion: clean, lastAssistantQuestion: true }), 'unpushed');
+    assert.equal(
+      classifyCompletion({ turnState: 'ended', completion: dirty, lastAssistantQuestion: true }),
+      'unfinished',
+    );
+    assert.equal(
+      classifyCompletion({ turnState: 'ended', completion: clean, lastAssistantQuestion: true }),
+      'unpushed',
+    );
   });
 
   it("treats an unreadable cwd as 'done' (a removed worktree cannot hold uncommitted changes)", () => {
@@ -125,7 +135,10 @@ describe('PR のマージ状態', () => {
 
   it("keeps 'unfinished' and 'interrupted' ahead of the PR state", () => {
     assert.equal(classifyCompletion({ turnState: 'ended', completion: withPrs(dirty, [pr(1, 'open')]) }), 'unfinished');
-    assert.equal(classifyCompletion({ turnState: 'midway', completion: withPrs(clean, [pr(1, 'open')]) }), 'interrupted');
+    assert.equal(
+      classifyCompletion({ turnState: 'midway', completion: withPrs(clean, [pr(1, 'open')]) }),
+      'interrupted',
+    );
   });
 
   it('lists one check per PR instead of the push line', () => {
@@ -143,7 +156,10 @@ describe('PR のマージ状態', () => {
       { label: '編集なし', ok: true },
       { label: 'PR #9 マージ済み', ok: true },
     ]);
-    assert.match(completionTooltip({ turnState: 'ended', completion: withPrs(clean, [pr(1, 'open')]) }), /^マージ待ち: /);
+    assert.match(
+      completionTooltip({ turnState: 'ended', completion: withPrs(clean, [pr(1, 'open')]) }),
+      /^マージ待ち: /,
+    );
   });
 });
 
@@ -210,7 +226,10 @@ describe('completionChecks / completionTooltip', () => {
   it('describes the new states in the tooltip', () => {
     assert.match(completionTooltip({ turnState: 'ended', completion: clean }), /^反映前: /);
     assert.match(completionTooltip({ turnState: 'ended', completion: none }), /^相談のみ: /);
-    assert.match(completionTooltip({ turnState: 'ended', completion: none, lastAssistantQuestion: true }), /^回答待ち: /);
+    assert.match(
+      completionTooltip({ turnState: 'ended', completion: none, lastAssistantQuestion: true }),
+      /^回答待ち: /,
+    );
   });
 
   it('marks undecidable checks with ?', () => {

@@ -377,9 +377,12 @@ describe('summarizeTail lastAssistantQuestion', () => {
 
   it('is false when the latest reply is a statement even if an older one asked', () => {
     const tail = summarizeTail(
-      jsonl([userRecord('相談'), assistantText('どうしますか？'), userRecord('A で'), assistantText('A で実装しました。')]).split(
-        '\n',
-      ),
+      jsonl([
+        userRecord('相談'),
+        assistantText('どうしますか？'),
+        userRecord('A で'),
+        assistantText('A で実装しました。'),
+      ]).split('\n'),
     );
     assert.equal(tail.lastAssistantQuestion, false);
   });

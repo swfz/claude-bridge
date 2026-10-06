@@ -54,7 +54,9 @@ const PR_CHECKS = {
 };
 
 function prNumber(url) {
-  return String(url || '').split('/').pop();
+  return String(url || '')
+    .split('/')
+    .pop();
 }
 
 // running: 起動中のセッションなら true（上段のカード）。終了したセッションは status を見ない
@@ -107,7 +109,11 @@ export function completionChecks(session, { running = false } = {}) {
     } else if (!hasPrs) {
       const pushed = !!completion.pushed;
       checks.push({
-        label: pushed ? (completion.prCount > 0 ? 'PR 作成済み' : 'push 済み') : 'push / PR の記録なし（このセッション内）',
+        label: pushed
+          ? completion.prCount > 0
+            ? 'PR 作成済み'
+            : 'push 済み'
+          : 'push / PR の記録なし（このセッション内）',
         ok: pushed,
       });
     }

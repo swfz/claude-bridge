@@ -28,7 +28,14 @@ const toolResult = (id, { isError = false } = {}) => ({
   type: 'user',
   message: {
     role: 'user',
-    content: [{ type: 'tool_result', tool_use_id: id, content: isError ? 'rejected' : 'ok', ...(isError ? { is_error: true } : {}) }],
+    content: [
+      {
+        type: 'tool_result',
+        tool_use_id: id,
+        content: isError ? 'rejected' : 'ok',
+        ...(isError ? { is_error: true } : {}),
+      },
+    ],
   },
 });
 
@@ -133,7 +140,9 @@ describe('hasGitPush', () => {
   });
 
   it('detects a push chained after a heredoc commit message', () => {
-    const command = ['git commit -m "$(cat <<\'EOF\'', 'fix: x', '', 'Co-Authored-By: a', 'EOF', ')" && git push'].join('\n');
+    const command = ["git commit -m \"$(cat <<'EOF'", 'fix: x', '', 'Co-Authored-By: a', 'EOF', ')" && git push'].join(
+      '\n',
+    );
     assert.equal(hasGitPush(command), true);
   });
 
@@ -243,7 +252,12 @@ describe('readSessionCompletion', () => {
   });
 
   it('counts created PRs from pr-link records', async () => {
-    const prLink = (n) => ({ type: 'pr-link', sessionId: 's1', prNumber: n, prUrl: `https://github.com/o/r/pull/${n}` });
+    const prLink = (n) => ({
+      type: 'pr-link',
+      sessionId: 's1',
+      prNumber: n,
+      prUrl: `https://github.com/o/r/pull/${n}`,
+    });
     const filePath = await makeSession([prLink(1), prLink(2), prLink(1)]);
     const prState = async (url) => (url.endsWith('/1') ? 'merged' : 'open');
     const result = await readSessionCompletion({ filePath, cwd: '/r', prState });
