@@ -780,8 +780,17 @@
   color: var(--warning);
 }
 
+.home-completion.unpushed {
+  color: var(--warning);
+}
+
 .home-completion.interrupted {
   color: var(--accent);
+}
+
+.home-completion.merging,
+.home-completion.asking {
+  color: var(--accent-secondary);
 }
 
 .home-completion.waiting {
@@ -792,7 +801,8 @@
   color: var(--success);
 }
 
-.home-completion.done {
+.home-completion.done,
+.home-completion.consult {
   color: var(--text-secondary);
   border-color: var(--border);
 }
@@ -840,8 +850,21 @@
   color: var(--warning);
 }
 
+.home-completion-chip.unpushed.active {
+  color: var(--warning);
+}
+
 .home-completion-chip.interrupted.active {
   color: var(--accent);
+}
+
+.home-completion-chip.merging.active,
+.home-completion-chip.asking.active {
+  color: var(--accent-secondary);
+}
+
+.home-completion-chip.consult.active {
+  color: var(--text-primary);
 }
 
 .home-completion-chip.done.active {
