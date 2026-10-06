@@ -111,6 +111,37 @@ export function summarizeHead(lines) {
 
 const AWAY_SUMMARY_MAX = 300;
 
+// 末尾の装飾（強調・コード・閉じ括弧）と空白。質問かどうかの判定ではこれらを剥がして見る
+const TRAILING_DECORATION_RE = /[*_`」）)\]\s]+$/;
+const TRAILING_DECORATION_OR_STOP_RE = /[*_`」）)\]\s。．.！!]+$/;
+// 疑問符なしで返事を求めている言い回し。「必要なら言ってください」のような締めの常套句まで
+// 拾わないよう、「ください」単独ではなく「決めて／選んで／指定して」に限る
+const QUESTION_ENDINGS = [
+  '決めてください',
+  '選んでください',
+  '指定してください',
+  'どちらにしますか',
+  'どうしますか',
+  'どれにしますか',
+  'よいですか',
+  'いいですか',
+  'よろしいですか',
+  'でしょうか',
+  'ますか',
+  'ましょうか',
+];
+
+// 応答本文が質問（ユーザーへの問いかけ）で終わっているか（ホームの「回答待ち」判定用）
+export function endsWithQuestion(text) {
+  if (typeof text !== 'string') return false;
+  const body = snippetText(text);
+  if (!body) return false;
+  const trimmed = body.replace(TRAILING_DECORATION_RE, '');
+  if (/[？?]$/.test(trimmed)) return true;
+  const stripped = body.replace(TRAILING_DECORATION_OR_STOP_RE, '');
+  return QUESTION_ENDINGS.some((ending) => stripped.endsWith(ending));
+}
+
 // API エラーの応答（529 Overloaded 等）。エラーのあとにも turn_duration が書かれるので
 // 「ターンは終わったが作業は終わっていない」として区別する
 function isApiError(record) {
@@ -157,6 +188,9 @@ export function summarizeTail(lines) {
   const records = parseLines(lines);
   let lastUserMessage = '';
   let lastAssistantMessage = '';
+  // 質問で終わっているかは、本文のある直近の応答の全文（TEXT_MAX で切る前）で見る。
+  // tool_use だけの応答は本文が空なので、遡って本文のある応答を探す
+  let lastAssistantText = null;
   let lastTimestamp = '';
   // 今のコンテキスト量は「usage のある直近の assistant」から取る。
   // API エラー等で usage を持たないレコードが末尾に来ることがあるので遡って探す。
@@ -167,9 +201,13 @@ export function summarizeTail(lines) {
     if (!lastAssistantMessage && record.type === 'assistant') {
       lastAssistantMessage = snippetText(extractTextContent(record.message, 0));
     }
+    if (lastAssistantText === null && record.type === 'assistant') {
+      const text = extractTextContent(record.message, 0);
+      if (text.trim()) lastAssistantText = text;
+    }
     if (!contextUsage) contextUsage = extractContextUsage(record);
     if (!lastUserMessage) lastUserMessage = userPrompt(record);
-    if (lastUserMessage && lastAssistantMessage && lastTimestamp && contextUsage) break;
+    if (lastUserMessage && lastAssistantMessage && lastAssistantText !== null && lastTimestamp && contextUsage) break;
   }
   // 離席から戻ったときに Claude Code が書く要約（「いまどうなっていて、次に何を決めるか」）。
   // やり残しの中身そのものなので、最新の 1 件をそのまま出す
@@ -185,6 +223,7 @@ export function summarizeTail(lines) {
   return {
     lastUserMessage: lastUserMessage.slice(0, TEXT_MAX),
     lastAssistantMessage: lastAssistantMessage.slice(0, TEXT_MAX),
+    lastAssistantQuestion: endsWithQuestion(lastAssistantText || ''),
     lastTimestamp,
     contextUsage,
     turnState: detectTurnState(records),
@@ -199,6 +238,7 @@ const EMPTY_SUMMARY = {
   cwd: '',
   lastUserMessage: '',
   lastAssistantMessage: '',
+  lastAssistantQuestion: false,
   lastTimestamp: '',
   contextUsage: null,
   turnState: null,

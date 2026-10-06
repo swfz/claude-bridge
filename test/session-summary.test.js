@@ -7,6 +7,7 @@ import {
   summarizeHead,
   summarizeTail,
   detectTurnState,
+  endsWithQuestion,
   readSessionSummary,
   readSessionSummaryFor,
   readLastLines,
@@ -330,5 +331,77 @@ describe('summarizeTail awaySummary / turnState', () => {
 
   it('is null when there is no away_summary', () => {
     assert.equal(summarizeTail([]).awaySummary, null);
+  });
+});
+
+describe('endsWithQuestion', () => {
+  it('is true when the reply ends with a question mark (after decorations)', () => {
+    assert.equal(endsWithQuestion('どちらの方針で進めますか？'), true);
+    assert.equal(endsWithQuestion('Should I continue?'), true);
+    assert.equal(endsWithQuestion('**A と B のどちらにしますか？**'), true);
+    assert.equal(endsWithQuestion('次は「API を先に作る？」'), true);
+    assert.equal(endsWithQuestion('案は 2 つあります（`a` と `b`）。どれを採用しますか? \n\n'), true);
+  });
+
+  it('is true for Japanese phrases that ask for a reply without a question mark', () => {
+    assert.equal(endsWithQuestion('どちらにするか決めてください。'), true);
+    assert.equal(endsWithQuestion('A か B を選んでください'), true);
+    assert.equal(endsWithQuestion('対象のブランチを指定してください！'), true);
+    assert.equal(endsWithQuestion('この方針でよろしいですか。'), true);
+    assert.equal(endsWithQuestion('先に移行しておきましょうか'), true);
+    assert.equal(endsWithQuestion('この設計で問題ないでしょうか。'), true);
+    assert.equal(endsWithQuestion('続けますか'), true);
+  });
+
+  it('is false for statements and closing pleasantries', () => {
+    assert.equal(endsWithQuestion('修正してテストも通しました。'), false);
+    assert.equal(endsWithQuestion('必要なら言ってください。'), false);
+    assert.equal(endsWithQuestion('何かあればお知らせください'), false);
+    assert.equal(endsWithQuestion('Done.'), false);
+  });
+
+  it('is false for empty input', () => {
+    assert.equal(endsWithQuestion(''), false);
+    assert.equal(endsWithQuestion('   '), false);
+    assert.equal(endsWithQuestion(undefined), false);
+  });
+});
+
+describe('summarizeTail lastAssistantQuestion', () => {
+  const assistantText = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+
+  it('is true when the latest reply ends with a question', () => {
+    const tail = summarizeTail(jsonl([userRecord('相談'), assistantText('A と B のどちらにしますか？')]).split('\n'));
+    assert.equal(tail.lastAssistantQuestion, true);
+  });
+
+  it('is false when the latest reply is a statement even if an older one asked', () => {
+    const tail = summarizeTail(
+      jsonl([userRecord('相談'), assistantText('どうしますか？'), userRecord('A で'), assistantText('A で実装しました。')]).split(
+        '\n',
+      ),
+    );
+    assert.equal(tail.lastAssistantQuestion, false);
+  });
+
+  it('looks at the full reply, not the snippet cut for the card', () => {
+    const long = `${'説明'.repeat(200)}\n\nこの方針で進めてよいですか？`;
+    const tail = summarizeTail(jsonl([userRecord('相談'), assistantText(long)]).split('\n'));
+    assert.equal(tail.lastAssistantQuestion, true);
+  });
+
+  it('skips tool_use-only replies to find the latest text', () => {
+    const tail = summarizeTail(
+      jsonl([
+        userRecord('相談'),
+        assistantText('どちらにしますか？'),
+        { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't', name: 'Read', input: {} }] } },
+      ]).split('\n'),
+    );
+    assert.equal(tail.lastAssistantQuestion, true);
+  });
+
+  it('is false without any assistant reply', () => {
+    assert.equal(summarizeTail(jsonl([userRecord('依頼')]).split('\n')).lastAssistantQuestion, false);
   });
 });

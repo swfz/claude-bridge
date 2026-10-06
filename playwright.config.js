@@ -62,6 +62,8 @@ export default defineConfig({
       CLAUDE_BRIDGE_SESSIONS_DIR: SESSIONS_DIR,
       CLAUDE_BRIDGE_DIR: BRIDGE_DIR,
       CLAUDE_BRIDGE_SHELL_TASKS_ROOT: SHELL_TASKS_DIR,
+      // PR のマージ状態を gh で取りに行かない（fixture の PR は実在しない）
+      CLAUDE_BRIDGE_DISABLE_GH: '1',
     },
   },
 });
