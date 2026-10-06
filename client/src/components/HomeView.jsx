@@ -33,6 +33,9 @@ const DAY_PRESETS = [1, 3, 7, 30];
 // 既定ブランチは「どのセッションにも付く」＝識別に効かないので出さない
 const DEFAULT_BRANCHES = new Set(['main', 'master', 'HEAD']);
 
+// 応答列の代わりに離席要約（現状と次の一手）を出す状態＝手を付け直す必要があるもの
+const AWAY_STATES = new Set(['unfinished', 'interrupted', 'unpushed', 'merging']);
+
 // カード上段のパス行。フルパスは共通プレフィックスばかりで情報量が無いので
 // parseCwd で「親/プロジェクト（+ worktree）」まで削り、全体は title に逃がす。
 function PathLine({ cwd, branch }) {
@@ -557,7 +560,7 @@ export default function HomeView({
               const snippet = s.lastUserMessage || s.firstUserMessage;
               // やり残し・途中で終了の行は、応答の代わりに Claude Code の離席要約（現状と次の一手）を出す
               const state = classifyCompletion(s);
-              const away = (state === 'unfinished' || state === 'interrupted') && s.awaySummary?.text;
+              const away = AWAY_STATES.has(state) && s.awaySummary?.text;
               return (
                 <div
                   key={s.sessionId}

@@ -5,6 +5,7 @@ const FIXTURE_TITLE = 'E2Eフィクスチャ: ヘルスチェック追加';
 const FIXTURE_CWD_BASE = 'fixture-project';
 const FIXTURE_SECOND_TITLE = 'レート制限メーターの表示がずれているので直してください';
 const FIXTURE_THIRD_TITLE = 'ビルド時間を短縮したい';
+const FIXTURE_FOURTH_TITLE = 'ログの保存期間をどうするか相談したい';
 const FIXTURE_ARTIFACT_URL = 'https://claude.ai/code/artifact/e2e00000-0000-4000-8000-000000000001';
 
 test.describe('ホーム画面', () => {
@@ -105,21 +106,28 @@ test.describe('ホーム画面', () => {
   test('直近一覧にやり残し判定のバッジが出て、状態で絞り込める', async ({ page }) => {
     await page.goto('/');
 
-    // fixture 1・2 はターンを終えて編集なし＝完了、3 はツール実行中のまま止まっている＝途中で終了
-    const done = page.locator('.home-row', { hasText: FIXTURE_TITLE });
+    // fixture 1・2 はターンを終えて編集なし・最後の応答が質問ではない＝相談のみ、
+    // 3 はツール実行中のまま止まっている＝途中で終了、4 は編集なしで質問で終わっている＝回答待ち
+    const consult = page.locator('.home-row', { hasText: FIXTURE_TITLE });
     const interrupted = page.locator('.home-row', { hasText: FIXTURE_THIRD_TITLE });
-    await expect(done.locator('.home-completion')).toHaveText('完了');
+    const asking = page.locator('.home-row', { hasText: FIXTURE_FOURTH_TITLE });
+    await expect(consult.locator('.home-completion')).toHaveText('相談のみ');
+    await expect(consult.locator('.home-completion')).toHaveAttribute('title', /最後の応答は質問ではない/);
     await expect(interrupted.locator('.home-completion')).toHaveText('途中で終了');
     await expect(interrupted.locator('.home-completion')).toHaveAttribute('title', /ツールの実行中に止まった/);
+    await expect(asking.locator('.home-completion')).toHaveText('回答待ち');
+    await expect(asking.locator('.home-completion')).toHaveAttribute('title', /最後の応答が質問で終わっている/);
 
     // 途中で終了の行は応答の代わりに離席要約（現状）を出す
     await expect(interrupted.locator('.home-row-away-label')).toHaveText('現状');
     await expect(interrupted).toContainText('次はビルドを流し直して計測してください');
-    await expect(done.locator('.home-row-away-label')).toHaveCount(0);
+    await expect(consult.locator('.home-row-away-label')).toHaveCount(0);
 
     const filter = page.locator('.home-completion-filter');
     await expect(filter.getByRole('button', { name: '途中で終了 1' })).toBeVisible();
-    await expect(filter.getByRole('button', { name: '完了 2' })).toBeVisible();
+    await expect(filter.getByRole('button', { name: '相談のみ 2' })).toBeVisible();
+    await expect(filter.getByRole('button', { name: '回答待ち 1' })).toBeVisible();
+    await expect(filter.getByRole('button', { name: '完了 0' })).toBeVisible();
 
     await filter.getByRole('button', { name: '途中で終了 1' }).click();
     await expect(page.locator('.home-row')).toHaveCount(1);
@@ -127,8 +135,12 @@ test.describe('ホーム画面', () => {
 
     // もう一度押すと解除
     await filter.getByRole('button', { name: '途中で終了 1' }).click();
-    await expect(done).toBeVisible();
+    await expect(consult).toBeVisible();
     await expect(interrupted).toBeVisible();
+
+    await filter.getByRole('button', { name: '回答待ち 1' }).click();
+    await expect(page.locator('.home-row')).toHaveCount(1);
+    await expect(asking).toBeVisible();
   });
 
   test('直近一覧の行の「詳細」でターン詳細のパネルが開く', async ({ page }) => {

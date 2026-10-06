@@ -1,0 +1,3 @@
+{"type":"user","message":{"role":"user","content":"ログの保存期間をどうするか相談したい"},"cwd":"/home/e2e/fourth-project","gitBranch":"main","timestamp":"2026-08-11T11:00:00.000Z","uuid":"e2e-uuid-401"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"30 日と 90 日の 2 案があります。コストを優先するなら 30 日です。どちらにしますか？"}]},"cwd":"/home/e2e/fourth-project","timestamp":"2026-08-11T11:01:00.000Z","uuid":"e2e-uuid-402"}
+{"type":"system","subtype":"turn_duration","durationMs":60000,"cwd":"/home/e2e/fourth-project","timestamp":"2026-08-11T11:01:01.000Z","uuid":"e2e-uuid-403"}
