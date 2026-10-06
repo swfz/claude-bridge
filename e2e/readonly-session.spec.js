@@ -45,6 +45,28 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await shellDrawer.locator('.shell-drawer-close').click();
   await expect(shellDrawer).toHaveCount(0);
 
+  // ヘッダの Links で、会話に出てきた URL（本文・ツール入力・Artifact）の一覧がドロワーで開く
+  await page.locator('.thread-toggle', { hasText: 'Links' }).click();
+  const linkDrawer = page.locator('.link-drawer');
+  await expect(linkDrawer).toBeVisible();
+  const linkRows = linkDrawer.locator('.link-row');
+  await expect(linkRows).toHaveCount(3);
+  const prUrl = 'https://github.com/swfz/claude-bridge/pull/1';
+  const prRow = linkRows.filter({ hasText: 'github.com' });
+  await expect(prRow.locator('a')).toHaveAttribute('href', prUrl);
+  await expect(prRow.locator('a')).toHaveText('claude-bridge の PR');
+  const docsRow = linkRows.filter({ hasText: 'example.com' });
+  await expect(docsRow).toContainText('×2');
+  await expect(docsRow.locator('.link-badge', { hasText: 'WebFetch' })).toHaveCount(1);
+  await expect(linkRows.filter({ hasText: 'claude.ai' })).toHaveCount(1);
+  // 絞り込み
+  await linkDrawer.locator('.link-drawer-filter').fill('github');
+  await expect(linkRows).toHaveCount(1);
+  // 「会話へ」でドロワーが閉じ、そのメッセージへスクロールする
+  await linkRows.first().getByRole('button', { name: '会話へ' }).click();
+  await expect(linkDrawer).toHaveCount(0);
+  await expect(page.locator('[data-message-uuid="e2e-uuid-links"]')).toBeInViewport();
+
   // 開いたセッションはサイドバーのタブとしても残る
   const tab = page.locator('.tab', { hasText: FIXTURE_TITLE });
   await expect(tab).toHaveCount(1);
