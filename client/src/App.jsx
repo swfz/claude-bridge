@@ -12,6 +12,7 @@ import ChoicePrompt from './components/ChoicePrompt.jsx';
 import TaskStrip from './components/TaskStrip.jsx';
 import SubagentDrawer from './components/SubagentDrawer.jsx';
 import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
+import LinkDrawer from './components/LinkDrawer.jsx';
 import NewSessionDialog from './components/NewSessionDialog.jsx';
 import PreviewDrawer from './components/PreviewDrawer.jsx';
 import FileExplorer from './components/FileExplorer.jsx';
@@ -31,6 +32,7 @@ import {
 import { statusMapOf, updateAttention } from './utils/attention.js';
 import { pickNotifyTargets } from './utils/notifications.js';
 import { latestContextUsage } from './utils/contextUsage.js';
+import { collectLinks } from './utils/links.js';
 import './App.css';
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
@@ -99,6 +101,8 @@ export default function App() {
   const [subagentDrawer, setSubagentDrawer] = useState(null);
   // 出力を表示中のシェルタスク（null なら閉じている）
   const [shellDrawer, setShellDrawer] = useState(null);
+  // セッション内の URL 一覧のドロワー
+  const [showLinkDrawer, setShowLinkDrawer] = useState(false);
   // 「未解決／続きをやる」印を付けた claudeSessionId（localStorage のみ）
   const [starredSessions, setStarredSessions] = useState(loadStarred);
   // 一覧取得時に添えるだけなので、star の変更で再取得は走らせない（JSONL 走査を避ける）
@@ -531,6 +535,7 @@ export default function App() {
   useEffect(() => {
     setSubagentDrawer(null);
     setShellDrawer(null);
+    setShowLinkDrawer(false);
   }, [activeSessionId, showHome]);
 
   const handleOpenSubagentTask = useCallback((task) => {
@@ -1242,6 +1247,14 @@ export default function App() {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   // 表示メッセージは唯一の真実 messagesBySession から activeSessionId で派生させる
   const messages = (activeSessionId && messagesBySession[activeSessionId]) || [];
+  // ヘッダの Links とドロワー用。チャットの messages からクライアント側で抽出する（サーバーには取りに行かない）
+  const activeMessages = activeSessionId ? messagesBySession[activeSessionId] : undefined;
+  const links = useMemo(() => collectLinks(activeMessages), [activeMessages]);
+  const handleCloseLinkDrawer = useCallback(() => setShowLinkDrawer(false), []);
+  const handleJumpFromLinks = useCallback((uuid) => {
+    setJumpToUuid(uuid);
+    setShowLinkDrawer(false);
+  }, []);
   // 閲覧専用セッションは JSONL を読むだけ。chat 固定でコメントは付けられるが送信はしない
   const isReadonly = activeSession?.type === 'readonly';
   const effectiveViewMode = isReadonly ? 'chat' : viewMode;
@@ -1311,6 +1324,14 @@ export default function App() {
               >
                 Memo
                 {comments.length > 0 && <span className="thread-count-badge">{comments.length}</span>}
+              </button>
+              <button
+                className={`toggle-btn thread-toggle ${showLinkDrawer ? 'active' : ''}`}
+                onClick={() => setShowLinkDrawer(!showLinkDrawer)}
+                title="このセッションに出てきた URL の一覧"
+              >
+                Links
+                {links.length > 0 && <span className="thread-count-badge">{links.length}</span>}
               </button>
             </>
           )}
@@ -1572,6 +1593,10 @@ export default function App() {
           onOpenPreview={handleOpenPreview}
           onClose={() => setSubagentDrawer(null)}
         />
+      )}
+
+      {showLinkDrawer && (
+        <LinkDrawer links={links} onJumpToMessage={handleJumpFromLinks} onClose={handleCloseLinkDrawer} />
       )}
 
       {shellDrawer && (
