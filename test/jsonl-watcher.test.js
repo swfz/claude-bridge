@@ -132,6 +132,71 @@ describe('JsonlWatcher', () => {
       assert.equal(messages[0].timestamp, '2026-06-19T07:50:17.709Z');
     });
 
+    it('marks injected user records (isMeta / tag) with injected: true', () => {
+      const filePath = join(tmpDir, 'injected.jsonl');
+      const records = [
+        { type: 'user', uuid: 'h1', message: { role: 'user', content: 'hello' } },
+        { type: 'user', uuid: 'm1', isMeta: true, message: { role: 'user', content: 'meta text' } },
+      ];
+      writeFileSync(filePath, records.map((r) => JSON.stringify(r)).join('\n') + '\n');
+
+      const messages = [];
+      watcher._readNewLines({
+        bridgeSessionId: 'test-session',
+        targetFile: filePath,
+        linesRead: 0,
+        onMessage: (msg) => messages.push(msg),
+      });
+
+      assert.equal(messages.length, 2);
+      assert.equal('injected' in messages[0], false);
+      assert.equal(messages[1].injected, true);
+    });
+
+    it('emits a webfetch message for a WebFetch result', () => {
+      const filePath = join(tmpDir, 'webfetch.jsonl');
+      const record = {
+        type: 'user',
+        uuid: 'u-fetch',
+        timestamp: '2026-10-07T00:00:00.000Z',
+        message: { role: 'user', content: [{ tool_use_id: 'toolu_f', type: 'tool_result', content: '...' }] },
+        toolUseResult: {
+          bytes: 10,
+          code: 301,
+          codeText: 'Moved',
+          result: 'REDIRECT DETECTED: x',
+          durationMs: 5,
+          url: 'https://example.com/a',
+        },
+      };
+      writeFileSync(filePath, JSON.stringify(record) + '\n');
+
+      const messages = [];
+      const state = {
+        bridgeSessionId: 'test-session',
+        targetFile: filePath,
+        linesRead: 0,
+        onMessage: (msg) => messages.push(msg),
+      };
+
+      watcher._readNewLines(state);
+
+      assert.deepEqual(messages, [
+        {
+          type: 'chat_message',
+          bridgeSessionId: 'test-session',
+          role: 'webfetch',
+          // タイトルが取れない（リダイレクト）ときは URL を content にする
+          content: 'https://example.com/a',
+          url: 'https://example.com/a',
+          title: null,
+          code: 301,
+          uuid: 'u-fetch',
+          timestamp: '2026-10-07T00:00:00.000Z',
+        },
+      ]);
+    });
+
     it('skips already-read lines', () => {
       const filePath = join(tmpDir, 'test.jsonl');
       writeFileSync(

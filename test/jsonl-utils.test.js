@@ -7,6 +7,8 @@ import {
   extractContextUsage,
   extractTextContent,
   extractToolUses,
+  extractWebFetchResult,
+  isInjectedUserRecord,
 } from '../server/jsonl-utils.js';
 
 describe('extractTextContent', () => {
@@ -249,6 +251,90 @@ describe('extractArtifactPublish', () => {
       extractArtifactPublish({ type: 'user', message: { content: 'text' }, toolUseResult: { url: URL } }),
       null,
     );
+  });
+});
+
+describe('extractWebFetchResult', () => {
+  const fetchRecord = (toolUseResult, block = {}) => ({
+    type: 'user',
+    uuid: 'u-fetch',
+    message: {
+      role: 'user',
+      content: [{ tool_use_id: 'toolu_f', type: 'tool_result', content: '...', ...block }],
+    },
+    toolUseResult,
+  });
+  const base = { bytes: 1000, code: 200, codeText: 'OK', durationMs: 300, url: 'https://example.com/cve' };
+
+  it('result の先頭の見出し行をタイトルにする', () => {
+    const record = fetchRecord({ ...base, result: '\n# NGINX Rift 脆弱性（CVE-2026-42945）のまとめ\n\n本文' });
+    assert.deepEqual(extractWebFetchResult(record), {
+      url: 'https://example.com/cve',
+      title: 'NGINX Rift 脆弱性（CVE-2026-42945）のまとめ',
+      code: 200,
+    });
+  });
+
+  it('見出しでなくても先頭の非空行を使い、強調・バッククォートを剥がして 120 文字で切る', () => {
+    assert.equal(extractWebFetchResult(fetchRecord({ ...base, result: '**`foo` の概要**\n本文' })).title, 'foo の概要');
+    assert.equal(extractWebFetchResult(fetchRecord({ ...base, result: 'あ'.repeat(200) })).title.length, 120);
+  });
+
+  it('Artifact を読んだ結果は引用部分のタイトルを使う', () => {
+    const result = '[Artifact abc123 "週次レポート" — owned by you; raw HTML follows]\n<html></html>';
+    assert.equal(
+      extractWebFetchResult(fetchRecord({ ...base, url: 'https://claude.ai/artifact/abc123', result })).title,
+      '週次レポート',
+    );
+  });
+
+  it('リダイレクト・2xx 以外・code 不明はタイトル null（url と code は返す）', () => {
+    assert.deepEqual(
+      extractWebFetchResult(fetchRecord({ ...base, code: 301, result: 'REDIRECT DETECTED: https://example.com/new' })),
+      { url: 'https://example.com/cve', title: null, code: 301 },
+    );
+    assert.deepEqual(extractWebFetchResult(fetchRecord({ ...base, code: undefined, result: '# x' })), {
+      url: 'https://example.com/cve',
+      title: null,
+      code: null,
+    });
+  });
+
+  it('失敗（toolUseResult が文字列）や http(s) 以外の url は null', () => {
+    assert.equal(extractWebFetchResult(fetchRecord('Error: fetch failed', { is_error: true })), null);
+    assert.equal(extractWebFetchResult(fetchRecord({ ...base, url: 'file:///tmp/x', result: '# x' })), null);
+    assert.equal(extractWebFetchResult(null), null);
+    assert.equal(extractWebFetchResult({ type: 'assistant', toolUseResult: { ...base, result: '# x' } }), null);
+  });
+
+  it('Artifact の publish レコード（result が無い）とは区別する', () => {
+    const publish = fetchRecord({
+      url: 'https://claude.ai/code/artifact/46f54464-0000-0000-0000-000000000000',
+      path: '/tmp/report.html',
+      title: 'レポート',
+    });
+    assert.equal(extractWebFetchResult(publish), null);
+    assert.notEqual(extractArtifactPublish(publish), null);
+  });
+});
+
+describe('isInjectedUserRecord', () => {
+  const user = (content, extra = {}) => ({ type: 'user', message: { role: 'user', content }, ...extra });
+
+  it('isMeta の user レコードは注入', () => {
+    assert.equal(isInjectedUserRecord(user('Caveat: ...', { isMeta: true })), true);
+  });
+
+  it('タグで始まる本文（タスク通知・system-reminder）は注入', () => {
+    assert.equal(isInjectedUserRecord(user('  <task-notification>\n<task-id>x</task-id>')), true);
+    assert.equal(isInjectedUserRecord(user([{ type: 'text', text: '<system-reminder>...</system-reminder>' }])), true);
+  });
+
+  it('スラッシュコマンド（<command-name> 始まり）と普通の文は注入ではない', () => {
+    assert.equal(isInjectedUserRecord(user('<command-name>/ship</command-name>')), false);
+    assert.equal(isInjectedUserRecord(user('https://example.com/a を見て')), false);
+    assert.equal(isInjectedUserRecord({ type: 'assistant', isMeta: true }), false);
+    assert.equal(isInjectedUserRecord(null), false);
   });
 });
 

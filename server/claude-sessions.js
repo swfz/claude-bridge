@@ -4,6 +4,8 @@ import { join } from 'path';
 import {
   CLAUDE_PROJECTS_DIR,
   extractArtifactPublish,
+  extractWebFetchResult,
+  isInjectedUserRecord,
   extractContextUsage,
   extractTextContent,
   extractToolUses,
@@ -157,6 +159,8 @@ export function parseHistoryLines(content) {
           messages.push({
             role: 'human',
             content: text,
+            // タグ注入・isMeta（人が打っていない）ときだけ付ける。リンク一覧で「自分が渡した」と数えないため
+            ...(isInjectedUserRecord(record) ? { injected: true } : {}),
             // 安定アンカー用に JSONL の uuid を持たせる
             uuid: record.uuid,
             timestamp: record.timestamp || record.updatedAt || '',
@@ -172,6 +176,19 @@ export function parseHistoryLines(content) {
             url: artifact.url,
             title: artifact.title,
             path: artifact.path,
+            uuid: record.uuid,
+            timestamp: record.timestamp || record.updatedAt || '',
+          });
+        }
+        // WebFetch の結果。LinkDrawer が URL に読んだページの見出しを添えるのに使う（チャットには描かない）
+        const webFetch = extractWebFetchResult(record);
+        if (webFetch) {
+          messages.push({
+            role: 'webfetch',
+            content: webFetch.title || webFetch.url,
+            url: webFetch.url,
+            title: webFetch.title,
+            code: webFetch.code,
             uuid: record.uuid,
             timestamp: record.timestamp || record.updatedAt || '',
           });

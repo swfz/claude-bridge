@@ -56,6 +56,57 @@ export function extractArtifactPublish(record) {
   return { url, title, path };
 }
 
+// WebFetch の結果レコードから、読んだ URL と結果の見出し（タイトル）を取り出す。
+// 結果は tool_result だけの user レコードで、toolUseResult が {bytes, code, codeText, result, durationMs, url}。
+// result は WebFetch が返した要約テキストで、先頭行が Markdown の見出しになっていることが多い。
+// claude.ai の Artifact を読んだときは `[Artifact <id> "タイトル" — owned by you; ...]` で始まる。
+// 失敗時は toolUseResult が文字列なので拾わない。Artifact の publish（extractArtifactPublish）とは result の有無で分かれる
+const WEBFETCH_TITLE_MAX = 120;
+const ARTIFACT_READ_TITLE_PATTERN = /^\[Artifact [^\]]*"([^"]+)"/;
+
+function webFetchTitle(result, code) {
+  // リダイレクト（`REDIRECT DETECTED: ...`）やエラー応答の本文はタイトルにしない
+  if (typeof code !== 'number' || code < 200 || code >= 300) return null;
+  const firstLine = result.split('\n').find((line) => line.trim());
+  if (!firstLine) return null;
+
+  const artifact = firstLine.match(ARTIFACT_READ_TITLE_PATTERN);
+  if (artifact) return artifact[1].trim().slice(0, WEBFETCH_TITLE_MAX) || null;
+
+  const title = firstLine
+    .trim()
+    .replace(/^#+\s*/, '')
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    .trim();
+  return title ? title.slice(0, WEBFETCH_TITLE_MAX) : null;
+}
+
+export function extractWebFetchResult(record) {
+  if (!record || record.type !== 'user') return null;
+
+  const result = record.toolUseResult;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return null;
+
+  const url = result.url;
+  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return null;
+  // Artifact の publish 結果（url はあるが result が無い）と取り違えない
+  if (typeof result.result !== 'string') return null;
+
+  const code = typeof result.code === 'number' ? result.code : null;
+  return { url, title: webFetchTitle(result.result, code), code };
+}
+
+// 人が打っていない user レコード（タグ注入・isMeta）か。タスク通知（`<task-notification>`）、
+// `<system-reminder>`、チームメイトのメッセージなどは本文がタグで始まる。スラッシュコマンド（`<command-name>`）は
+// 人の操作なので注入扱いしない。session-summary.js の userPrompt() と同じ考え方
+export function isInjectedUserRecord(record) {
+  if (!record || record.type !== 'user') return false;
+  if (record.isMeta) return true;
+  const text = extractTextContent(record.message, 0).trim();
+  return text.startsWith('<') && !text.startsWith('<command-name>');
+}
+
 // message オブジェクトから tool_use ブロックを抽出
 export function extractToolUses(msg) {
   if (!msg || typeof msg === 'string') return [];

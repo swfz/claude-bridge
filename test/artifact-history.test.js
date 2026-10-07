@@ -67,3 +67,53 @@ describe('parseHistoryLines と Artifact の公開リンク', () => {
     assert.deepEqual(parseHistoryLines(content), []);
   });
 });
+
+describe('parseHistoryLines と WebFetch の結果', () => {
+  it('WebFetch の結果レコードから webfetch メッセージを作る', () => {
+    const content = JSON.stringify({
+      type: 'user',
+      uuid: 'u-fetch',
+      timestamp: '2026-10-07T00:00:00.000Z',
+      message: { role: 'user', content: [{ tool_use_id: 'toolu_f', type: 'tool_result', content: '...' }] },
+      toolUseResult: {
+        bytes: 10,
+        code: 200,
+        codeText: 'OK',
+        result: '# 取得したページ\n本文',
+        durationMs: 5,
+        url: 'https://example.com/a',
+      },
+    });
+
+    assert.deepEqual(parseHistoryLines(content), [
+      {
+        role: 'webfetch',
+        content: '取得したページ',
+        url: 'https://example.com/a',
+        title: '取得したページ',
+        code: 200,
+        uuid: 'u-fetch',
+        timestamp: '2026-10-07T00:00:00.000Z',
+      },
+    ]);
+  });
+});
+
+describe('parseHistoryLines と注入された user レコード', () => {
+  it('タグ注入の user レコードにだけ injected: true を付ける', () => {
+    const content = [
+      JSON.stringify({ type: 'user', uuid: 'h1', message: { role: 'user', content: 'https://example.com/a を見て' } }),
+      JSON.stringify({
+        type: 'user',
+        uuid: 'n1',
+        message: { role: 'user', content: '<task-notification>https://example.com/b</task-notification>' },
+      }),
+    ].join('\n');
+
+    const messages = parseHistoryLines(content);
+    assert.equal(messages.length, 2);
+    assert.equal('injected' in messages[0], false);
+    assert.equal(messages[1].role, 'human');
+    assert.equal(messages[1].injected, true);
+  });
+});

@@ -4,6 +4,8 @@ import {
   CLAUDE_PROJECTS_DIR,
   cwdToProjectDir,
   extractArtifactPublish,
+  extractWebFetchResult,
+  isInjectedUserRecord,
   extractContextUsage,
   extractTextContent,
   extractToolUses,
@@ -199,6 +201,8 @@ export class JsonlWatcher {
               bridgeSessionId: state.bridgeSessionId,
               role: 'human',
               content: text,
+              // タグ注入・isMeta（人が打っていない）ときだけ付ける。リンク一覧で「自分が渡した」と数えないため
+              ...(isInjectedUserRecord(record) ? { injected: true } : {}),
               // JSONL の uuid を安定アンカー（コメント/レビューの位置）として伝播する
               uuid: record.uuid,
               timestamp: record.timestamp || '',
@@ -216,6 +220,21 @@ export class JsonlWatcher {
               url: artifact.url,
               title: artifact.title,
               path: artifact.path,
+              uuid: record.uuid,
+              timestamp: record.timestamp || '',
+            });
+          }
+          // WebFetch の結果。LinkDrawer が URL に読んだページの見出しを添えるのに使う（チャットには描かない）
+          const webFetch = extractWebFetchResult(record);
+          if (webFetch) {
+            state.onMessage({
+              type: 'chat_message',
+              bridgeSessionId: state.bridgeSessionId,
+              role: 'webfetch',
+              content: webFetch.title || webFetch.url,
+              url: webFetch.url,
+              title: webFetch.title,
+              code: webFetch.code,
               uuid: record.uuid,
               timestamp: record.timestamp || '',
             });
