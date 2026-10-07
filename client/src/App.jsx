@@ -360,8 +360,9 @@ export default function App() {
     return on('chat_message', (msg) => {
       const session = sessionsRef.current.find((s) => s.id === msg.bridgeSessionId);
       const isTmux = session?.type === 'tmux';
-      // artifact（公開リンク）はセッション種別を問わず受ける
-      if (!(msg.role === 'assistant' || msg.role === 'artifact' || (isTmux && msg.role === 'human'))) return;
+      // artifact（公開リンク）と webfetch（WebFetch の結果。リンク一覧のタイトル用）はセッション種別を問わず受ける
+      const isLinkRecord = msg.role === 'artifact' || msg.role === 'webfetch';
+      if (!(msg.role === 'assistant' || isLinkRecord || (isTmux && msg.role === 'human'))) return;
 
       const newMsg = {
         id: `jsonl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -372,10 +373,14 @@ export default function App() {
         toolUses: msg.toolUses,
         // コンテキスト使用量（usage のある assistant にだけ入る）
         contextUsage: msg.contextUsage,
-        // Artifact の公開先（role: 'artifact' のときだけ入る）
+        // Artifact の公開先（role: 'artifact'）と WebFetch で読んだ URL（role: 'webfetch'）
         url: msg.url,
         title: msg.title,
         path: msg.path,
+        // WebFetch の HTTP ステータス（role: 'webfetch' のときだけ入る）
+        code: msg.code,
+        // タグ注入・isMeta の user レコード（人が打っていない）。リンク一覧の origin 判定用
+        injected: msg.injected,
         timestamp: msg.timestamp || new Date().toISOString(),
       };
 
@@ -695,10 +700,14 @@ export default function App() {
         toolUses: m.toolUses,
         // コンテキスト使用量（usage のある assistant にだけ入る）
         contextUsage: m.contextUsage,
-        // Artifact の公開先（role: 'artifact' のときだけ入る）
+        // Artifact の公開先（role: 'artifact'）と WebFetch で読んだ URL（role: 'webfetch'）
         url: m.url,
         title: m.title,
         path: m.path,
+        // WebFetch の HTTP ステータス（role: 'webfetch' のときだけ入る）
+        code: m.code,
+        // タグ注入・isMeta の user レコード（人が打っていない）。リンク一覧の origin 判定用
+        injected: m.injected,
         timestamp: m.timestamp || new Date().toISOString(),
         // 境界がある: timestamp が境界以下 / 不在を履歴扱い、境界より新しければ通常表示
         // 境界がない: 従来通り全件履歴扱い（bridgeId 不明な resume 即時ロード等）

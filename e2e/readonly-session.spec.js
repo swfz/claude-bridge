@@ -58,7 +58,18 @@ test('行をクリックすると readonly セッションが開き、会話が�
   const docsRow = linkRows.filter({ hasText: 'example.com' });
   await expect(docsRow).toContainText('×2');
   await expect(docsRow.locator('.link-badge', { hasText: 'WebFetch' })).toHaveCount(1);
+  // WebFetch の結果から取ったタイトルがアンカーに出て、URL が出てきた行の文脈が添えられる
+  await expect(docsRow.locator('.link-row-anchor')).toHaveText('E2E フェッチ結果のタイトル');
+  await expect(docsRow.locator('.link-row-context')).toContainText('参考:');
   await expect(linkRows.filter({ hasText: 'claude.ai' })).toHaveCount(1);
+  // fixture のリンクはすべて Claude 側の出現が先なので「Claude」に数えられ、「自分」で絞ると 0 件
+  const originToggles = linkDrawer.locator('.link-drawer-origin');
+  await expect(originToggles.getByRole('button', { name: 'Claude 3' })).toBeVisible();
+  await expect(prRow.locator('.link-row-icon')).toHaveAttribute('title', 'Claude が探した');
+  await originToggles.getByRole('button', { name: '自分 0' }).click();
+  await expect(linkRows).toHaveCount(0);
+  await originToggles.getByRole('button', { name: 'すべて 3' }).click();
+  await expect(linkRows).toHaveCount(3);
   // 絞り込み
   await linkDrawer.locator('.link-drawer-filter').fill('github');
   await expect(linkRows).toHaveCount(1);
