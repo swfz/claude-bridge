@@ -20,9 +20,6 @@ export default function SubagentDrawer({
   onOpenPreview,
   onClose,
 }) {
-  // 最下部にいる間だけ新着に追従する（上を読んでいる最中に引き戻さない）
-  const { scrollRef: bodyRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(messages, agentId);
-
   // 開いた直後は即取得し、実行中の間だけポーリングで追いかける
   useEffect(() => {
     if (!agentId) return;
@@ -32,15 +29,22 @@ export default function SubagentDrawer({
     return () => clearInterval(timer);
   }, [agentId, status, onRequestTranscript]);
 
-  // ChatMessage は id を key に使うので、クライアント側で採番する
+  // ChatMessage は id を key に使うので、クライアント側で採番する。
+  // webfetch（WebFetch の結果。リンク一覧用で描かない）は ChatView と同じく除く。
+  // 残すと描画されないメッセージの到着で「↓ 新しいメッセージ」が出てしまう
   const items = useMemo(
     () =>
-      (messages || []).map((m, i) => ({
-        ...m,
-        id: `${agentId}-${i}`,
-      })),
+      (messages || [])
+        .filter((m) => m.role !== 'webfetch')
+        .map((m, i) => ({
+          ...m,
+          id: `${agentId}-${i}`,
+        })),
     [messages, agentId],
   );
+
+  // 最下部にいる間だけ新着に追従する（上を読んでいる最中に引き戻さない）
+  const { scrollRef: bodyRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(items, agentId);
 
   return (
     <div className="subagent-drawer-overlay" onClick={onClose}>

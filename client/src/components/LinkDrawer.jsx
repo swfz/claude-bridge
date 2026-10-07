@@ -10,20 +10,44 @@ function sourceLabel(source) {
   if (source === 'human') return '指示';
   if (source === 'assistant') return '応答';
   if (source === 'artifact') return 'Artifact';
+  // タスク通知・system-reminder などのタグ注入、isMeta の user レコード
+  if (source === 'system') return '通知';
   if (source.startsWith('tool:')) return source.slice('tool:'.length);
   return source;
 }
 
-function matchesFilter(link, query) {
+// 行頭アイコンと絞り込みトグルの文言（origin は collectLinks() が最初の出現から決める）
+const ORIGIN_ICONS = {
+  user: { icon: '👤', title: '自分が渡した' },
+  claude: { icon: '🤖', title: 'Claude が探した' },
+};
+const ORIGIN_FILTERS = [
+  { value: 'all', label: 'すべて' },
+  { value: 'user', label: '自分' },
+  { value: 'claude', label: 'Claude' },
+];
+
+function matchesFilter(link, query, origin = 'all') {
+  if (origin !== 'all' && link.origin !== origin) return false;
   if (!query) return true;
-  return [link.url, link.label, link.host].some((v) => (v || '').toLowerCase().includes(query));
+  return [link.url, link.label, link.title, link.context, link.host].some((v) =>
+    (v || '').toLowerCase().includes(query),
+  );
+}
+
+// WebFetch の HTTP ステータスが 2xx 以外（リダイレクト等）か
+function isNonOkStatus(code) {
+  return typeof code === 'number' && (code < 200 || code >= 300);
 }
 
 // セッション内でやり取りされた URL の一覧を右サイドのドロワーで見せる。
-// links は utils/links.js の collectLinks() の結果（チャットの messages からクライアント側で抽出したもの）
+// links は utils/links.js の collectLinks() の結果（チャットの messages からクライアント側で抽出したもの）。
+// 各行はアンカー（label → WebFetch のタイトル → URL）、その下に URL が出てきた行の文脈、meta 行の順
 export default function LinkDrawer({ links, onJumpToMessage, onClose }) {
   const [filter, setFilter] = useState('');
   const [copied, setCopied] = useState(false);
+  // 自分が渡した / Claude が探した の絞り込み（その場限りで保存しない）
+  const [origin, setOrigin] = useState('all');
   const filterRef = useRef(null);
 
   // 開いた直後は絞り込みに入力できるようにする
@@ -51,8 +75,18 @@ export default function LinkDrawer({ links, onJumpToMessage, onClose }) {
 
   const visibleLinks = useMemo(() => {
     const query = filter.trim().toLowerCase();
-    return (links || []).filter((link) => matchesFilter(link, query));
-  }, [links, filter]);
+    return (links || []).filter((link) => matchesFilter(link, query, origin));
+  }, [links, filter, origin]);
+
+  // トグルに添える件数（文字の絞り込みは反映しない全体の内訳）
+  const originCounts = useMemo(() => {
+    const counts = { all: 0, user: 0, claude: 0 };
+    for (const link of links || []) {
+      counts.all += 1;
+      if (counts[link.origin] !== undefined) counts[link.origin] += 1;
+    }
+    return counts;
+  }, [links]);
 
   const handleCopy = async () => {
     try {
@@ -82,11 +116,24 @@ export default function LinkDrawer({ links, onJumpToMessage, onClose }) {
             type="text"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="URL / ラベル / ホストで絞り込み"
+            placeholder="URL / ラベル / タイトル / 文脈で絞り込み"
           />
           <button className="link-drawer-copy" onClick={handleCopy} disabled={visibleLinks.length === 0}>
             {copied ? 'コピーしました' : 'Markdown でコピー'}
           </button>
+        </div>
+
+        <div className="link-drawer-origin">
+          {ORIGIN_FILTERS.map(({ value, label }) => (
+            <button
+              key={value}
+              className={`link-origin-toggle ${origin === value ? 'active' : ''}`}
+              onClick={() => setOrigin(value)}
+              aria-pressed={origin === value}
+            >
+              {label} {originCounts[value]}
+            </button>
+          ))}
         </div>
 
         <div className="link-drawer-body">
@@ -97,7 +144,9 @@ export default function LinkDrawer({ links, onJumpToMessage, onClose }) {
           ) : (
             visibleLinks.map((link) => (
               <div className="link-row" key={link.url}>
-                <span className="link-row-icon">🔗</span>
+                <span className="link-row-icon" title={(ORIGIN_ICONS[link.origin] || ORIGIN_ICONS.claude).title}>
+                  {(ORIGIN_ICONS[link.origin] || ORIGIN_ICONS.claude).icon}
+                </span>
                 <div className="link-row-main">
                   <a
                     className="link-row-anchor"
@@ -106,10 +155,22 @@ export default function LinkDrawer({ links, onJumpToMessage, onClose }) {
                     rel="noopener noreferrer"
                     title={link.url}
                   >
-                    {link.label || link.url}
+                    {link.label || link.title || link.url}
                   </a>
+                  {link.context && (
+                    <div className="link-row-context" title={link.context}>
+                      {link.context}
+                    </div>
+                  )}
                   <div className="link-row-meta">
                     {link.host && <span className="link-row-host">{link.host}</span>}
+                    {/* label がアンカーを占めているときだけ、WebFetch で読んだタイトルを別に出す */}
+                    {link.label && link.title && (
+                      <span className="link-row-fetched" title={link.title}>
+                        🌐 {link.title}
+                      </span>
+                    )}
+                    {isNonOkStatus(link.code) && <span className="link-badge link-badge-http">HTTP {link.code}</span>}
                     {link.sources.map((source) => (
                       <span className="link-badge" key={source}>
                         {sourceLabel(source)}

@@ -343,6 +343,10 @@ export const ChatMessage = memo(function ChatMessage({
     );
   }
 
+  // WebFetch の結果はリンク一覧（LinkDrawer）のタイトル用。チャットには WebFetch の tool_use が
+  // すでに出ているので二重に描かない
+  if (message.role === 'webfetch') return null;
+
   // Artifact の publish（claude.ai の共有ページ）。本文は無いのでリンクだけ出す
   if (message.role === 'artifact') {
     return (
@@ -617,8 +621,12 @@ export default function ChatView({
   readonly,
   sessionId,
 }) {
+  // 描画するメッセージ。WebFetch の結果（role: 'webfetch'）はリンク一覧のタイトル用で画面には出さないので、
+  // ここで除いておく（messages のまま渡すと、見えないものが届いたときにも「↓ 新しいメッセージ」が出る）
+  const shown = useMemo(() => messages.filter((m) => m.role !== 'webfetch'), [messages]);
+
   // 最下部にいる間だけ新着に追従する（上を読んでいる最中に引き戻さない）
-  const { scrollRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(messages, sessionId);
+  const { scrollRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(shown, sessionId);
 
   // このセッションで公開した Artifact（URL ごとに 1 件）
   const artifacts = useMemo(() => collectArtifacts(messages), [messages]);
@@ -818,12 +826,12 @@ export default function ChatView({
 
   return (
     <div className="chat-view" ref={scrollRef} onScroll={onScroll}>
-      {messages.length > 0 && <ArtifactStrip artifacts={artifacts} />}
-      {messages.length === 0 ? (
+      {shown.length > 0 && <ArtifactStrip artifacts={artifacts} />}
+      {shown.length === 0 ? (
         <div className="chat-empty">Chat モード — Claude の出力がここに表示されます</div>
       ) : (
-        messages.map((msg, i) => {
-          const showDivider = msg.isHistory && i < messages.length - 1 && !messages[i + 1].isHistory;
+        shown.map((msg, i) => {
+          const showDivider = msg.isHistory && i < shown.length - 1 && !shown[i + 1].isHistory;
           return (
             <div key={msg.id}>
               <ChatMessage
