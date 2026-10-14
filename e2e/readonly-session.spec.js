@@ -20,6 +20,12 @@ test('行をクリックすると readonly セッションが開き、会話が�
     'ヘルスチェックのエンドポイントを追加します',
   );
 
+  // 閲覧タブは tmux に繋がっていないので、送信欄の直上に「届かない」注意と再開ボタンが出る
+  // （fixture のセッションは起動していない＝stopped）
+  const notice = page.locator('.input-notice');
+  await expect(notice).toContainText('このセッションは起動していません');
+  await expect(notice.locator('button', { hasText: 'tmux で再開' })).toBeVisible();
+
   // サブエージェントの完了報告は「You」ではなく送り手つきの見出しで、枠と注意書きを外した本文を出す
   const handback = page.locator('.chat-message.sender-subagent');
   await expect(handback).toHaveCount(1);

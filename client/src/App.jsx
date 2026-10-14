@@ -34,6 +34,7 @@ import { pickNotifyTargets } from './utils/notifications.js';
 import { latestContextUsage } from './utils/contextUsage.js';
 import { collectLinks } from './utils/links.js';
 import './App.css';
+import { readonlyDeliveryState } from './utils/runningSessions.js';
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
 const RUNNING_POLL_INTERVAL = 5000;
@@ -381,9 +382,9 @@ export default function App() {
         code: msg.code,
         // タグ注入・isMeta の user レコード（人が打っていない）。リンク一覧の origin 判定用
         injected: msg.injected,
-        timestamp: msg.timestamp || new Date().toISOString(),
         // 人が打っていない human の送り手（サブエージェントの報告・タスク通知など）。チャットの見出し用
         sender: msg.sender,
+        timestamp: msg.timestamp || new Date().toISOString(),
       };
 
       updateSessionMessages(msg.bridgeSessionId, (prev) => {
@@ -449,7 +450,9 @@ export default function App() {
 
   useEffect(() => {
     return on('running_sessions', (msg) => {
-      setRunningSessions(msg.sessions || []);
+      // 閲覧タブを見ている間も 5 秒ごとに届くので、同じ内容なら前の参照を保って App の再描画を避ける
+      const next = msg.sessions || [];
+      setRunningSessions((prev) => (prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     });
   }, [on]);
 
@@ -498,13 +501,15 @@ export default function App() {
     return on('rate_limits', (msg) => setRateLimits({ usage: msg.usage, fetchedAt: msg.fetchedAt }));
   }, [on]);
 
-  // ホーム表示中だけポーリングする（裏では取りに行かない）
+  // ホーム表示中と、閲覧タブを見ている間だけポーリングする（裏では取りに行かない）。
+  // 閲覧タブでは「tmux ペインで起動中か」を送信欄の注意書きに使う
+  const watchingReadonly = !showHome && sessions.some((s) => s.id === activeSessionId && s.type === 'readonly');
   useEffect(() => {
-    if (!showHome || !connected) return;
+    if ((!showHome && !watchingReadonly) || !connected) return;
     send({ type: 'list_running_sessions' });
     const timer = setInterval(() => send({ type: 'list_running_sessions' }), RUNNING_POLL_INTERVAL);
     return () => clearInterval(timer);
-  }, [showHome, connected, send]);
+  }, [showHome, watchingReadonly, connected, send]);
 
   // 作業中タブを見ている間だけサブエージェントの一覧を取り直す（タブ切替時は即時 1 回）
   useEffect(() => {
@@ -710,13 +715,13 @@ export default function App() {
         code: m.code,
         // タグ注入・isMeta の user レコード（人が打っていない）。リンク一覧の origin 判定用
         injected: m.injected,
+        // 人が打っていない human の送り手（サブエージェントの報告・タスク通知など）。チャットの見出し用
+        sender: m.sender,
         timestamp: m.timestamp || new Date().toISOString(),
         // 境界がある: timestamp が境界以下 / 不在を履歴扱い、境界より新しければ通常表示
         // 境界がない: 従来通り全件履歴扱い（bridgeId 不明な resume 即時ロード等）
         isHistory: boundary ? !m.timestamp || m.timestamp <= boundary : true,
       }));
-        // 人が打っていない human の送り手（サブエージェントの報告・タスク通知など）。チャットの見出し用
-        sender: m.sender,
 
       // active かどうかに関係なく bridgeSessionId のメッセージ列へ格納する。
       // 表示は messagesBySession[activeSessionId] の派生なので、active なら自動反映。
@@ -1277,6 +1282,66 @@ export default function App() {
   // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
   const activeChoice = sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
 
+  // 閲覧タブは inbox 経由（Stop hook が次の応答終了時に注入）なので、tmux ペインに繋がっていないと
+  // 送っても届かない／いつ届くか分からない。送信前に気づけるよう入力欄の直上に出す
+  const readonlyDelivery = isReadonly ? readonlyDeliveryState(activeSession, runningSessions) : null;
+  let readonlyNotice = null;
+  if (readonlyDelivery?.kind === 'tmux') {
+    const r = readonlyDelivery.running;
+    readonlyNotice = (
+      <>
+        <span className="input-notice-text">
+          ⚠ tmux に接続していません。送信は inbox に溜まり、Claude の次の応答が終わるまで届きません
+        </span>
+        <button
+          className="btn btn-primary"
+          onClick={() =>
+            handleAttachTmux({
+              paneId: r.paneId,
+              name: activeSession.name,
+              cwd: r.cwd,
+              target: r.tmuxTarget,
+              claudePid: r.pid,
+              claudeSessionId: r.sessionId,
+              status: r.status,
+            })
+          }
+        >
+          tmux ペインに接続
+        </button>
+      </>
+    );
+  } else if (readonlyDelivery?.kind === 'running') {
+    readonlyNotice = (
+      <span className="input-notice-text">
+        ⚠ tmux 外で起動中のため直接は送れません。送信は Claude の次の応答が終わるまで届きません
+      </span>
+    );
+  } else if (readonlyDelivery?.kind === 'stopped' && activeSession?.claudeSessionId) {
+    readonlyNotice = (
+      <>
+        <span className="input-notice-text">
+          ⚠ このセッションは起動していません。送信しても再開して応答が返るまで届きません
+        </span>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            // 失敗（tmux 未インストール等）は home_error としてホームのバナーにしか出ないのでホームへ移る。
+            // 成功すれば session_opened で新しい tmux タブに切り替わる
+            setShowHome(true);
+            handleResumeInTmux({
+              claudeSessionId: activeSession.claudeSessionId,
+              name: activeSession.name,
+              cwd: activeSession.cwd,
+            });
+          }}
+        >
+          tmux で再開
+        </button>
+      </>
+    );
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -1563,6 +1628,7 @@ export default function App() {
               disabled={!activeSession?.claudeSessionId}
               placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
               slashCommands={slashCommands[activeSessionId] || []}
+              notice={readonlyNotice}
             />
           ) : (
             <InputBar

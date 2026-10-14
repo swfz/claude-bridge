@@ -72,3 +72,18 @@ export function formatElapsed(timestamp, now = Date.now()) {
   if (hour < 24) return `${hour}時間前`;
   return `${Math.floor(hour / 24)}日前`;
 }
+
+// 閲覧（readonly）タブから送ったメッセージがいつ届くかを、起動中セッション一覧から判定する。
+// readonly は PTY を持たず inbox 経由（Stop hook が次の応答終了時に注入）なので、
+// tmux ペインに繋いでいないと「送ったのに届かない」ように見える。入力欄の注意書き用。
+//   'unknown' : 起動中一覧が未取得
+//   'tmux'    : tmux ペインで起動中（ペインに接続すれば直接送れる。running を返す）
+//   'running' : 起動中だが tmux ではない（次の応答終了まで届かない）
+//   'stopped' : 起動していない（再開するまで届かない）
+export function readonlyDeliveryState(session, runningSessions) {
+  if (!session?.claudeSessionId) return { kind: 'stopped', running: null };
+  if (!runningSessions) return { kind: 'unknown', running: null };
+  const running = runningSessions.find((r) => r.sessionId === session.claudeSessionId) || null;
+  if (!running) return { kind: 'stopped', running: null };
+  return { kind: running.paneId ? 'tmux' : 'running', running };
+}
