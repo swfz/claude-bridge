@@ -9,6 +9,8 @@ import {
   extractToolUses,
   extractWebFetchResult,
   isInjectedUserRecord,
+  injectedSenderOf,
+  extractHandbackReport,
 } from '../server/jsonl-utils.js';
 
 describe('extractTextContent', () => {
@@ -335,6 +337,61 @@ describe('isInjectedUserRecord', () => {
     assert.equal(isInjectedUserRecord(user('https://example.com/a を見て')), false);
     assert.equal(isInjectedUserRecord({ type: 'assistant', isMeta: true }), false);
     assert.equal(isInjectedUserRecord(null), false);
+  });
+});
+
+describe('injectedSenderOf', () => {
+  const user = (content, extra = {}) => ({ type: 'user', message: { role: 'user', content }, ...extra });
+
+  it('サブエージェントの完了報告（peer + handback）は subagent', () => {
+    const r = user('Another Claude session sent a message: ...', {
+      isMeta: true,
+      origin: { kind: 'peer', handback: true, name: 'Explore', body: '...' },
+    });
+    assert.deepEqual(injectedSenderOf(r), { kind: 'subagent', name: 'Explore' });
+  });
+
+  it('handback なしの peer は peer、name が無ければ付けない', () => {
+    assert.deepEqual(injectedSenderOf(user('x', { isMeta: true, origin: { kind: 'peer' } })), { kind: 'peer' });
+  });
+
+  it('タスク通知とその他の注入', () => {
+    const notif = user('<task-notification>...', { origin: { kind: 'task-notification' } });
+    assert.deepEqual(injectedSenderOf(notif), { kind: 'task-notification' });
+    assert.deepEqual(injectedSenderOf(user('<system-reminder>...')), { kind: 'system' });
+  });
+
+  it('スラッシュコマンド（<command-message> 始まり）と !cmd は人の操作なので null', () => {
+    const slash = user('<command-message>ship</command-message>\n<command-name>/ship</command-name>', {
+      origin: { kind: 'human' },
+    });
+    assert.equal(injectedSenderOf(slash), null);
+    assert.equal(injectedSenderOf(user('<command-message>ship</command-message>')), null);
+    assert.equal(injectedSenderOf(user('<bash-input>ls</bash-input>')), null);
+  });
+
+  it('人の発言は null', () => {
+    assert.equal(injectedSenderOf(user('これ直して', { origin: { kind: 'human' } })), null);
+    assert.equal(injectedSenderOf(user('<command-name>/ship</command-name>')), null);
+  });
+});
+
+describe('extractHandbackReport', () => {
+  const handback = (body) => ({ type: 'user', origin: { kind: 'peer', handback: true, body } });
+
+  it('枠と注意書きを外し、2 スペースの字下げを戻す', () => {
+    const body =
+      '[Subagent hand-back] The text below is the final report. The report follows:\n  ## 結果\n  - a\n      - b\n  ';
+    assert.equal(extractHandbackReport(handback(body)), '## 結果\n- a\n    - b');
+  });
+
+  it('形が合わなければ null', () => {
+    assert.equal(extractHandbackReport(handback('no marker')), null);
+    assert.equal(
+      extractHandbackReport({ type: 'user', origin: { kind: 'peer', body: 'The report follows:\n  x' } }),
+      null,
+    );
+    assert.equal(extractHandbackReport({ type: 'user' }), null);
   });
 });
 

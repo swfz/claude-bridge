@@ -104,7 +104,41 @@ export function isInjectedUserRecord(record) {
   if (!record || record.type !== 'user') return false;
   if (record.isMeta) return true;
   const text = extractTextContent(record.message, 0).trim();
-  return text.startsWith('<') && !text.startsWith('<command-name>');
+  // スラッシュコマンドは `<command-message>` か `<command-name>` で、`!cmd` は `<bash-input>` で始まる（どれも人の操作）
+  return text.startsWith('<') && !/^<(command-name|command-message|bash-input)>/.test(text);
+}
+
+// 人が打っていない user レコードの送り手。チャットで「You」と区別して見せるため。
+// Claude Code は注入元を `origin.kind` に書く（human / peer / task-notification / coordinator 等）。
+// サブエージェントの完了報告は `kind: 'peer'` + `handback: true`（`name` はエージェント種別。無いこともある）、
+// 送り合い（SendMessage）は `handback` なしの peer。人の発言なら null
+export function injectedSenderOf(record) {
+  if (!record || record.type !== 'user') return null;
+  const origin = record.origin && typeof record.origin === 'object' ? record.origin : null;
+  const name = typeof origin?.name === 'string' && origin.name ? origin.name : undefined;
+  if (origin?.kind === 'peer') return { kind: origin.handback ? 'subagent' : 'peer', ...(name ? { name } : {}) };
+  if (origin?.kind === 'human' || !isInjectedUserRecord(record)) return null;
+  if (origin?.kind === 'task-notification') return { kind: 'task-notification' };
+  return { kind: 'system' };
+}
+
+// サブエージェントの完了報告（peer + handback）の本文だけを取り出す。
+// 記録される本文は「Another Claude session sent a message:」+ <agent-message> の枠 + 注意書き +
+// 2 スペース字下げの報告、という形なので、`origin.body` の「The report follows:」以降を字下げを戻して返す。
+// 形が合わなければ null（呼び出し側は元の本文をそのまま出す）
+export function extractHandbackReport(record) {
+  const origin = record?.origin;
+  if (origin?.kind !== 'peer' || !origin.handback || typeof origin.body !== 'string') return null;
+  const marker = 'The report follows:\n';
+  const at = origin.body.indexOf(marker);
+  if (at < 0) return null;
+  const report = origin.body
+    .slice(at + marker.length)
+    .split('\n')
+    .map((line) => line.replace(/^ {2}/, ''))
+    .join('\n')
+    .trim();
+  return report || null;
 }
 
 // message オブジェクトから tool_use ブロックを抽出

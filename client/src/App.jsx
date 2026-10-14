@@ -382,6 +382,8 @@ export default function App() {
         // タグ注入・isMeta の user レコード（人が打っていない）。リンク一覧の origin 判定用
         injected: msg.injected,
         timestamp: msg.timestamp || new Date().toISOString(),
+        // 人が打っていない human の送り手（サブエージェントの報告・タスク通知など）。チャットの見出し用
+        sender: msg.sender,
       };
 
       updateSessionMessages(msg.bridgeSessionId, (prev) => {
@@ -713,6 +715,8 @@ export default function App() {
         // 境界がない: 従来通り全件履歴扱い（bridgeId 不明な resume 即時ロード等）
         isHistory: boundary ? !m.timestamp || m.timestamp <= boundary : true,
       }));
+        // 人が打っていない human の送り手（サブエージェントの報告・タスク通知など）。チャットの見出し用
+        sender: m.sender,
 
       // active かどうかに関係なく bridgeSessionId のメッセージ列へ格納する。
       // 表示は messagesBySession[activeSessionId] の派生なので、active なら自動反映。

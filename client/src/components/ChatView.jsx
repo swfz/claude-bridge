@@ -14,6 +14,7 @@ import { rehypeSourceLine } from '../utils/rehypeSourceLine.js';
 import FilePreview from './FilePreview.jsx';
 import CodeBlock from './CodeBlock.jsx';
 import ArtifactStrip from './ArtifactStrip.jsx';
+import { humanSenderLabel } from '../utils/messageSender.js';
 import './ChatView.css';
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
@@ -330,6 +331,8 @@ export const ChatMessage = memo(function ChatMessage({
   }, [selMenu]);
 
   const isHuman = message.role === 'human';
+  // 人が打っていない human（サブエージェントの報告・タスク通知など）は「You」と見出しを分ける
+  const senderLabel = isHuman ? humanSenderLabel(message.sender) : null;
   const isSystem = message.role === 'system';
   const isHistory = message.isHistory;
 
@@ -425,9 +428,9 @@ export const ChatMessage = memo(function ChatMessage({
 
   return (
     <div
-      className={`chat-message ${isHuman ? 'human' : 'assistant'} ${isHistory ? 'history' : ''} ${
-        pickTarget ? 'msg-pick-target' : ''
-      } ${lineMode ? 'msg-line-mode' : ''}`}
+      className={`chat-message ${isHuman ? 'human' : 'assistant'} ${
+        message.sender ? `sender-${message.sender.kind}` : ''
+      } ${isHistory ? 'history' : ''} ${pickTarget ? 'msg-pick-target' : ''} ${lineMode ? 'msg-line-mode' : ''}`}
       data-message-uuid={message.uuid || undefined}
     >
       <div className="chat-message-header">
@@ -436,7 +439,9 @@ export const ChatMessage = memo(function ChatMessage({
             {pickNumber}
           </span>
         )}
-        <span className="chat-role">{isHuman ? 'You' : 'Claude'}</span>
+        <span className="chat-role" title={message.sender?.name || undefined}>
+          {isHuman ? senderLabel : 'Claude'}
+        </span>
         <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
         {messageComments.length > 0 && (
           <button
@@ -676,7 +681,7 @@ export default function ChatView({
       } else {
         quote = (msg.content || '').replace(/\s+/g, ' ').trim().slice(0, 80);
       }
-      if (!quote) quote = msg.role === 'human' ? 'You' : 'Claude';
+      if (!quote) quote = msg.role === 'human' ? humanSenderLabel(msg.sender) : 'Claude';
       const anchor = { type: 'message', messageUuid: msg.uuid, quote };
       if (line != null) anchor.line = line;
       onPickMessageForReview({ anchor });

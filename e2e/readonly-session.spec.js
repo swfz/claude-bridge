@@ -20,6 +20,13 @@ test('行をクリックすると readonly セッションが開き、会話が�
     'ヘルスチェックのエンドポイントを追加します',
   );
 
+  // サブエージェントの完了報告は「You」ではなく送り手つきの見出しで、枠と注意書きを外した本文を出す
+  const handback = page.locator('.chat-message.sender-subagent');
+  await expect(handback).toHaveCount(1);
+  await expect(handback.locator('.chat-role')).toHaveText('Subagent · Explore');
+  await expect(handback).toContainText('E2E サブエージェント報告');
+  await expect(handback).not.toContainText('Subagent hand-back');
+
   // Artifact ツールで公開したページは、会話内のカードと最上段のリンク一覧の両方に出る
   const artifactUrl = 'https://claude.ai/code/artifact/e2e00000-0000-4000-8000-000000000001';
   const artifactCard = page.locator('.chat-message.artifact');
