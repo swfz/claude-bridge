@@ -7,6 +7,7 @@ import {
   findUnmatchedTabs,
   statusClass,
   formatElapsed,
+  readonlyDeliveryState,
 } from '../client/src/utils/runningSessions.js';
 
 const running = { pid: 100, sessionId: 'sid-a' };
@@ -167,5 +168,30 @@ describe('formatElapsed', () => {
     const base = Date.parse('2026-08-17T05:00:00.000Z');
     assert.equal(formatElapsed('2026-08-17T03:00:00.000Z', base), '2時間前');
     assert.equal(formatElapsed('not a date', base), '');
+  });
+});
+
+describe('readonlyDeliveryState', () => {
+  const tab = { id: 't1', type: 'readonly', claudeSessionId: 'sid-a' };
+
+  it('is unknown until the running list arrives', () => {
+    assert.equal(readonlyDeliveryState(tab, null).kind, 'unknown');
+  });
+
+  it('is stopped when the session is not running', () => {
+    assert.equal(readonlyDeliveryState(tab, [{ pid: 1, sessionId: 'sid-b', paneId: '%1' }]).kind, 'stopped');
+  });
+
+  it('is tmux when the session runs in a tmux pane', () => {
+    const r = { pid: 1, sessionId: 'sid-a', paneId: '%3' };
+    assert.deepEqual(readonlyDeliveryState(tab, [r]), { kind: 'tmux', running: r });
+  });
+
+  it('is running when the session runs outside tmux', () => {
+    assert.equal(readonlyDeliveryState(tab, [{ pid: 1, sessionId: 'sid-a', paneId: null }]).kind, 'running');
+  });
+
+  it('is stopped when the tab has no claudeSessionId', () => {
+    assert.equal(readonlyDeliveryState({ id: 't2' }, []).kind, 'stopped');
   });
 });

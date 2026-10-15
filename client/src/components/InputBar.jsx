@@ -19,8 +19,17 @@ function filterCommands(commands, query) {
 }
 
 // onSendEscape は PTY を持つセッションだけに渡される。TUI で開いてしまったモーダルを
-// 閉じるための Escape 送信で、補完ドロップダウンを Escape キーで畳む挙動とは別物
-export default function InputBar({ onSubmit, disabled, placeholder, draftKey, slashCommands = [], onSendEscape }) {
+// 閉じるための Escape 送信で、補完ドロップダウンを Escape キーで畳む挙動とは別物。
+// notice は入力欄の直上に出す注意書き（閲覧タブで「tmux 未接続なので届かない」等）
+export default function InputBar({
+  onSubmit,
+  disabled,
+  placeholder,
+  draftKey,
+  slashCommands = [],
+  onSendEscape,
+  notice,
+}) {
   const [text, setText] = useState(() => (draftKey && drafts.get(draftKey)) || '');
   const [selectedIndex, setSelectedIndex] = useState(0);
   // Escape で閉じたあと、入力が変わるまでは出し直さない
@@ -120,51 +129,54 @@ export default function InputBar({ onSubmit, disabled, placeholder, draftKey, sl
   };
 
   return (
-    <div className="input-bar">
-      {showSuggestions && (
-        <div className="slash-suggestions" ref={listRef}>
-          {suggestions.map((command, i) => (
-            <div
-              key={command.name}
-              className={`slash-suggestion${i === selectedIndex ? ' selected' : ''}`}
-              // フォーカスを textarea に残したまま確定する
-              onMouseDown={(e) => {
-                e.preventDefault();
-                applySuggestion(command);
-              }}
-            >
-              <span className="slash-suggestion-name">/{command.name}</span>
-              <span className="slash-suggestion-desc">{command.description}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <textarea
-        ref={textareaRef}
-        className="input-textarea"
-        value={text}
-        onChange={handleInput}
-        onKeyDown={handleKeyDown}
-        placeholder={
-          placeholder ||
-          (disabled ? 'セッションを作成してください' : 'メッセージを入力... (Enter で送信、Shift+Enter で改行)')
-        }
-        disabled={disabled}
-        rows={1}
-      />
-      {onSendEscape && (
-        <button
-          className="btn btn-ghost input-escape"
-          onClick={onSendEscape}
+    <>
+      {notice && <div className="input-notice">{notice}</div>}
+      <div className="input-bar">
+        {showSuggestions && (
+          <div className="slash-suggestions" ref={listRef}>
+            {suggestions.map((command, i) => (
+              <div
+                key={command.name}
+                className={`slash-suggestion${i === selectedIndex ? ' selected' : ''}`}
+                // フォーカスを textarea に残したまま確定する
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  applySuggestion(command);
+                }}
+              >
+                <span className="slash-suggestion-name">/{command.name}</span>
+                <span className="slash-suggestion-desc">{command.description}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <textarea
+          ref={textareaRef}
+          className="input-textarea"
+          value={text}
+          onChange={handleInput}
+          onKeyDown={handleKeyDown}
+          placeholder={
+            placeholder ||
+            (disabled ? 'セッションを作成してください' : 'メッセージを入力... (Enter で送信、Shift+Enter で改行)')
+          }
           disabled={disabled}
-          title="TUI で開いたパネル（/model 等）を閉じる"
-        >
-          Esc
+          rows={1}
+        />
+        {onSendEscape && (
+          <button
+            className="btn btn-ghost input-escape"
+            onClick={onSendEscape}
+            disabled={disabled}
+            title="TUI で開いたパネル（/model 等）を閉じる"
+          >
+            Esc
+          </button>
+        )}
+        <button className="btn btn-primary input-send" onClick={handleSubmit} disabled={disabled || !text.trim()}>
+          送信
         </button>
-      )}
-      <button className="btn btn-primary input-send" onClick={handleSubmit} disabled={disabled || !text.trim()}>
-        送信
-      </button>
-    </div>
+      </div>
+    </>
   );
 }
