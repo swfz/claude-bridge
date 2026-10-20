@@ -113,35 +113,49 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // C-u + 再送を試みるまでのポーリング回数（既定 pollMs=250 で約2秒）
 const RESEND_AFTER_POLLS = 8;
 
-// シェルの rc 初期化（mise/nvm/p10k 等）が終わる前に send-keys すると入力が
-// 食われることがあるため、固定 delay ではなく「画面にコマンドがエコーされたか」を
-// ポーリングで確認してから Enter を送る。エコーが見えなければ入力行をクリアして
-// 再送し、これを一定回数繰り返す。
-export async function sendCommandWhenShellReady(paneId, command, { pollMs = 250, timeoutMs = 15000 } = {}) {
-  validatePaneId(paneId);
-  const escapedCommand = escapeForShell(command);
-  const normalizedCommand = command.replace(/\s+/g, '');
-  const sendLiteral = () => execAsync(`tmux send-keys -t ${paneId} -l ${escapedCommand}`);
+// プロンプト待ちのシェルとみなすフォアグラウンドのコマンド名（ログインシェルは `-zsh` になる）
+const SHELL_COMMANDS = new Set(['zsh', 'bash', 'fish', 'sh', 'dash', 'ksh', 'tcsh', 'csh']);
+const isShellCommand = (command) => SHELL_COMMANDS.has(command.replace(/^-/, ''));
 
-  await sendLiteral();
+async function paneCurrentCommand(paneId) {
+  try {
+    const { stdout } = await execAsync(`tmux display-message -p -t ${paneId} '#{pane_current_command}'`);
+    return stdout.trim();
+  } catch {
+    return '';
+  }
+}
 
-  const startedAt = Date.now();
-  let pollsSinceResend = 0;
-
-  while (true) {
-    if (Date.now() - startedAt > timeoutMs) {
-      throw new Error('シェルの起動を確認できませんでした（tmux window 内でコマンドが受け付けられません）');
-    }
-
-    await delay(pollMs);
-
-    // ペイン幅が狭いとコマンドが折り返されるので、空白を全部除いて比較する
+// 新しい window のシェルが rc（zinit/mise/starship 等）を読み終えてプロンプトを出すまで待つ。
+// 「画面が空でなく、settleMs の間変化しない」を準備完了とみなす。readyTimeoutMs を過ぎたら
+// 諦めて先へ進む（送信後の確認で取りこぼしは拾い直す）。
+async function waitForQuietScreen(paneId, { pollMs, settleMs, deadline }) {
+  let last = null;
+  let stableSince = 0;
+  while (Date.now() < deadline) {
     const screen = await capturePane(paneId);
-    const normalizedScreen = screen.replace(/\s+/g, '');
-    if (normalizedScreen.includes(normalizedCommand)) {
-      await execAsync(`tmux send-keys -t ${paneId} Enter`);
+    if (screen !== last) {
+      last = screen;
+      stableSince = Date.now();
+    } else if (screen.trim() && Date.now() - stableSince >= settleMs) {
       return;
     }
+    await delay(pollMs);
+  }
+}
+
+// 本文を送り、画面にエコーされるまで待つ。見えなければ入力行をクリアして再送する
+async function typeUntilEchoed(paneId, sendLiteral, normalizedCommand, { pollMs, deadline }) {
+  await sendLiteral();
+  let pollsSinceResend = 0;
+  while (true) {
+    if (Date.now() > deadline) {
+      throw new Error('シェルの起動を確認できませんでした（tmux window 内でコマンドが受け付けられません）');
+    }
+    await delay(pollMs);
+    // ペイン幅が狭いとコマンドが折り返されるので、空白を全部除いて比較する
+    const screen = await capturePane(paneId);
+    if (screen.replace(/\s+/g, '').includes(normalizedCommand)) return;
 
     pollsSinceResend += 1;
     if (pollsSinceResend >= RESEND_AFTER_POLLS) {
@@ -152,11 +166,69 @@ export async function sendCommandWhenShellReady(paneId, command, { pollMs = 250,
   }
 }
 
+// 新しい tmux window のシェルにコマンドを打って実行させる。
+// 画面のエコーだけでは準備完了と言えない（シェルが読む前でも端末ドライバが先行入力を
+// エコーするので、rc の初期化中に Enter まで送ってしまい、取りこぼされることがある）。
+// そのため (1) プロンプトが出て画面が落ち着くのを待ってから打ち、(2) Enter の後は
+// ペインのフォアグラウンドがシェル以外に変わったかで起動を確かめ、
+// シェルのままなら画面を見て Enter の再送／本文の打ち直しをする。
+export async function sendCommandWhenShellReady(
+  paneId,
+  command,
+  { pollMs = 250, timeoutMs = 20000, settleMs = 700, readyTimeoutMs = 8000, startCheckMs = 1500 } = {},
+) {
+  validatePaneId(paneId);
+  const escapedCommand = escapeForShell(command);
+  const normalizedCommand = command.replace(/\s+/g, '');
+  const sendLiteral = () => execAsync(`tmux send-keys -t ${paneId} -l ${escapedCommand}`);
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutMs;
+
+  await waitForQuietScreen(paneId, { pollMs, settleMs, deadline: startedAt + Math.min(readyTimeoutMs, timeoutMs) });
+
+  await typeUntilEchoed(paneId, sendLiteral, normalizedCommand, { pollMs, deadline });
+  await execAsync(`tmux send-keys -t ${paneId} Enter`);
+
+  let lastCheck = Date.now();
+  while (true) {
+    if (Date.now() > deadline) {
+      throw new Error('コマンドの起動を確認できませんでした（tmux window 内で Enter が受け付けられません）');
+    }
+    await delay(pollMs);
+
+    // 落ち着いた時点の値と比べると rc の子プロセス（git 等）を拾って誤判定し得るので、
+    // 既知のシェル名かどうかで見る
+    const current = await paneCurrentCommand(paneId);
+    if (current && !isShellCommand(current)) return;
+    if (Date.now() - lastCheck < startCheckMs) continue;
+    lastCheck = Date.now();
+    // フォアグラウンドが分からないまま打ち直すと、起動済みの claude に本文を送りかねない。
+    // 確かめようがないので（従来どおりエコー確認までで）終える
+    if (!current) return;
+
+    const normalizedScreen = (await capturePane(paneId)).replace(/\s+/g, '');
+    const idx = normalizedScreen.lastIndexOf(normalizedCommand);
+    if (idx === -1) {
+      // 初期化中に先行入力ごと捨てられた。打ち直す
+      await execAsync(`tmux send-keys -t ${paneId} C-u`);
+      await typeUntilEchoed(paneId, sendLiteral, normalizedCommand, { pollMs, deadline });
+      await execAsync(`tmux send-keys -t ${paneId} Enter`);
+    } else if (normalizedScreen.slice(idx + normalizedCommand.length) === '') {
+      // 本文は入力行に残ったまま（Enter だけ取りこぼされた）
+      await execAsync(`tmux send-keys -t ${paneId} Enter`);
+    } else {
+      // コマンドの後ろに出力がある＝実行はされた（すぐ終了するコマンドなど）
+      return;
+    }
+  }
+}
+
 // `tmux list-sessions -F "#{session_last_attached}\t#{session_name}"` の出力から
 // 直近にアタッチされたセッション名を選ぶ。候補がなければ null。
 export function pickTargetSession(stdout) {
+  // 一度もアタッチされていないセッションは last_attached が空で行頭がタブになるので、
+  // 全体を trim() すると先頭行のタブまで消えて名前を取りこぼす
   const rows = (stdout || '')
-    .trim()
     .split('\n')
     .filter((line) => line.trim())
     .map((line) => {
@@ -179,7 +251,9 @@ export function buildResumeWindowName(claudeSessionId) {
 // tmux に新しい window を作り、そこで `claude --resume <id>` を起動する。
 // PTY 直起動（resume_session）と違い、claude は tmux 側のプロセスになるので
 // ブリッジを落としても生き続け、ターミナルからも操作できる。
-export async function resumeInTmuxWindow({ claudeSessionId, cwd }) {
+// シェルの準備待ち＋起動確認に数秒かかるので、window ができた時点で onWindowCreated を呼ぶ
+// （呼び出し側はそこでタブを開いて「起動中」を見せられる）。
+export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated }) {
   if (!/^[\w-]+$/.test(claudeSessionId || '')) {
     throw new Error(`Invalid claudeSessionId: ${claudeSessionId}`);
   }
@@ -218,15 +292,18 @@ export async function resumeInTmuxWindow({ claudeSessionId, cwd }) {
   const [paneId, target] = stdout.trim().split('\t');
   validatePaneId(paneId);
 
-  // シェル経由で流すので rc（mise/nvm 等）を通る。claude を抜けてもペインは残る
-  await sendCommandWhenShellReady(paneId, `claude --resume ${claudeSessionId}`);
-
-  return {
+  const pane = {
     paneId,
     target: target || paneId,
     sessionName: sessionName || FALLBACK_TMUX_SESSION,
     windowName,
   };
+  onWindowCreated?.(pane);
+
+  // シェル経由で流すので rc（mise/nvm 等）を通る。claude を抜けてもペインは残る
+  await sendCommandWhenShellReady(paneId, `claude --resume ${claudeSessionId}`);
+
+  return pane;
 }
 
 export function resolveTmuxJsonlTarget({ claudeSessionId, cwd }) {

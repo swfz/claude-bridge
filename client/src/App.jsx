@@ -1326,8 +1326,8 @@ export default function App() {
         <button
           className="btn btn-primary"
           onClick={() => {
-            // 失敗（tmux 未インストール等）は home_error としてホームのバナーにしか出ないのでホームへ移る。
-            // 成功すれば session_opened で新しい tmux タブに切り替わる
+            // window を作れない失敗（tmux 未インストール等）は home_error としてホームのバナーにしか出ないのでホームへ移る。
+            // window ができれば session_opened で新しい tmux タブ（起動中の表示）に切り替わる
             setShowHome(true);
             handleResumeInTmux({
               claudeSessionId: activeSession.claudeSessionId,

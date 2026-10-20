@@ -42,6 +42,11 @@ describe('pickTargetSession', () => {
     assert.equal(pickTargetSession('0\tdetached-only'), 'detached-only');
   });
 
+  it('keeps a never-attached session listed first (empty last_attached)', () => {
+    // ブリッジが作った受け皿セッションはアタッチされないので行頭がタブになる
+    assert.equal(pickTargetSession('\tbridge\n'), 'bridge');
+  });
+
   it('returns null for empty output (no tmux server)', () => {
     assert.equal(pickTargetSession(''), null);
     assert.equal(pickTargetSession(undefined), null);
@@ -65,6 +70,9 @@ describe('buildResumeWindowName', () => {
   });
 });
 
+// Enter を送った後はペインのフォアグラウンドが claude になる
+const claudeAfterEnter = () => (execCalls.some((c) => / send-keys -t %\d+ Enter$/.test(c)) ? 'claude\n' : 'zsh\n');
+
 describe('resumeInTmuxWindow', () => {
   beforeEach(() => {
     execCalls.length = 0;
@@ -76,6 +84,7 @@ describe('resumeInTmuxWindow', () => {
       'list-sessions': '100\told-sess\n900\tmain-sess\n',
       'new-window': '%7\tmain-sess:3.0\n',
       'capture-pane': 'claude --resume abc-123\n',
+      'display-message': claudeAfterEnter,
     };
 
     const pane = await resumeInTmuxWindow({
@@ -102,6 +111,28 @@ describe('resumeInTmuxWindow', () => {
     assert.ok(execCalls.some((c) => c === 'tmux send-keys -t %7 Enter'));
   });
 
+  it('reports the created window before typing the resume command', async () => {
+    responses = {
+      'list-sessions': '900\tmain-sess\n',
+      'new-window': '%7\tmain-sess:3.0\n',
+      'capture-pane': 'claude --resume abc-123\n',
+      'display-message': claudeAfterEnter,
+    };
+    let callsAtCreated = null;
+
+    await resumeInTmuxWindow({
+      claudeSessionId: 'abc-123',
+      cwd: '/tmp/work',
+      onWindowCreated: (pane) => {
+        assert.equal(pane.paneId, '%7');
+        callsAtCreated = execCalls.length;
+      },
+    });
+
+    assert.ok(callsAtCreated != null);
+    assert.ok(!execCalls.slice(0, callsAtCreated).some((c) => c.includes('send-keys')));
+  });
+
   it('targets a purely numeric session name as a session, not a window index', async () => {
     // セッション名が「0」のような数字だけの場合、`-t 0` は window index 0 と
     // 解釈され "index 0 in use" で失敗する（実際に起きた回帰）
@@ -109,6 +140,7 @@ describe('resumeInTmuxWindow', () => {
       'list-sessions': '900\t0\n',
       'new-window': '%3\t0:2.0\n',
       'capture-pane': 'claude --resume abc-123\n',
+      'display-message': claudeAfterEnter,
     };
 
     const pane = await resumeInTmuxWindow({ claudeSessionId: 'abc-123', cwd: '/tmp/work' });
@@ -123,6 +155,7 @@ describe('resumeInTmuxWindow', () => {
       'list-sessions': new Error('no server running on /tmp/tmux-1000/default'),
       'new-session': '%0\tbridge:0.0\n',
       'capture-pane': 'claude --resume def-456\n',
+      'display-message': claudeAfterEnter,
     };
 
     const pane = await resumeInTmuxWindow({
@@ -186,69 +219,164 @@ describe('sendCommandWhenShellReady', () => {
     responses = {};
   });
 
-  it('presses Enter once the echoed command is visible on the first capture', async () => {
+  const FAST = { pollMs: 5, settleMs: 15, readyTimeoutMs: 200, startCheckMs: 20 };
+  const literalSendsOf = () =>
+    execCalls.filter((c) => c.includes('send-keys -t %7 -l') && c.includes('claude --resume abc-123'));
+  const enterCount = () => execCalls.filter((c) => c === 'tmux send-keys -t %7 Enter').length;
+
+  // Enter を押すまではシェル、押した後は claude がフォアグラウンドになる
+  const shellUntilEnter = () => (enterCount() > 0 ? 'claude\n' : 'zsh\n');
+
+  it('waits for the prompt, types, presses Enter and returns once claude is in the foreground', async () => {
     responses = {
-      'capture-pane': 'user@host:~$ claude --resume abc-123\n',
+      'capture-pane': () => (literalSendsOf().length ? 'user@host:~$ claude --resume abc-123\n' : 'user@host:~$\n'),
+      'display-message': shellUntilEnter,
     };
 
-    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { pollMs: 5, timeoutMs: 200 });
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
 
-    const literalIdx = execCalls.findIndex(
-      (c) => c.includes('send-keys -t %7 -l') && c.includes('claude --resume abc-123'),
-    );
-    const captureIdx = execCalls.findIndex((c) => c.includes('capture-pane -t %7'));
+    const literalIdx = execCalls.findIndex((c) => c.includes('send-keys -t %7 -l'));
+    const firstCaptureIdx = execCalls.findIndex((c) => c.includes('capture-pane -t %7'));
     const enterIdx = execCalls.findIndex((c) => c === 'tmux send-keys -t %7 Enter');
-
-    assert.ok(literalIdx > -1, 'sends the command literally');
-    assert.ok(captureIdx > literalIdx, 'polls the pane after sending');
-    assert.ok(enterIdx > captureIdx, 'sends Enter after the echo is confirmed');
-    // C-u によるクリア＋再送は起きていない
+    assert.ok(firstCaptureIdx < literalIdx, 'looks at the pane before typing');
+    assert.ok(enterIdx > literalIdx, 'sends Enter after typing');
+    assert.equal(literalSendsOf().length, 1);
+    assert.equal(enterCount(), 1);
     assert.ok(!execCalls.some((c) => c.includes('C-u')));
   });
 
-  it('clears the input and resends when the echo does not show up for a while', async () => {
+  it('does not type while the screen is still blank (rc still loading)', async () => {
     let captureCount = 0;
     responses = {
-      // 最初の8回は空（シェルの rc がまだ準備中）、以降はエコーが見える
       'capture-pane': () => {
         captureCount += 1;
-        return captureCount <= 8 ? '' : 'claude --resume abc-123\n';
+        if (literalSendsOf().length) return 'user@host:~$ claude --resume abc-123\n';
+        return captureCount <= 10 ? '' : 'user@host:~$\n';
       },
+      'display-message': shellUntilEnter,
     };
 
-    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { pollMs: 5, timeoutMs: 2000 });
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
 
-    const literalSends = execCalls.filter(
-      (c) => c.includes('send-keys -t %7 -l') && c.includes('claude --resume abc-123'),
-    );
+    const literalIdx = execCalls.findIndex((c) => c.includes('send-keys -t %7 -l'));
+    const capturesBeforeTyping = execCalls.slice(0, literalIdx).filter((c) => c.includes('capture-pane')).length;
+    assert.ok(capturesBeforeTyping > 10, 'keeps waiting until the prompt shows up');
+  });
+
+  it('clears the input and resends when the echo does not show up for a while', async () => {
+    let echoCaptures = 0;
+    responses = {
+      'capture-pane': () => {
+        if (!literalSendsOf().length) return 'user@host:~$\n';
+        echoCaptures += 1;
+        return echoCaptures <= 8 ? 'user@host:~$\n' : 'user@host:~$ claude --resume abc-123\n';
+      },
+      'display-message': shellUntilEnter,
+    };
+
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 2000 });
+
     const clearIdx = execCalls.findIndex((c) => c.includes('C-u'));
     const enterIdx = execCalls.findIndex((c) => c === 'tmux send-keys -t %7 Enter');
-
-    // 初回送信 + リトライ後の再送で最低2回本文を送る
-    assert.ok(literalSends.length >= 2);
+    assert.ok(literalSendsOf().length >= 2);
     assert.ok(clearIdx > -1, 'clears the input line with C-u before resending');
     assert.ok(enterIdx > clearIdx, 'presses Enter only after the retried echo is confirmed');
   });
 
-  it('throws when the echo never appears within timeoutMs', async () => {
+  it('presses Enter again when the command stays on the input line', async () => {
     responses = {
-      'capture-pane': '',
+      'capture-pane': () => (literalSendsOf().length ? 'user@host:~$ claude --resume abc-123\n' : 'user@host:~$\n'),
+      // 1 回目の Enter は取りこぼされ、2 回目で起動する
+      'display-message': () => (enterCount() >= 2 ? 'claude\n' : 'zsh\n'),
     };
 
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
+
+    assert.equal(enterCount(), 2);
+    assert.equal(literalSendsOf().length, 1, 'does not retype the command');
+  });
+
+  it('retypes the command when the typeahead was discarded', async () => {
+    let dropped = false;
+    responses = {
+      'capture-pane': () => {
+        if (!literalSendsOf().length) return 'user@host:~$\n';
+        // 1 回目の Enter の後、入力ごと消えた画面になる
+        if (enterCount() === 1 && literalSendsOf().length === 1) {
+          dropped = true;
+          return 'user@host:~$\n';
+        }
+        return 'user@host:~$ claude --resume abc-123\n';
+      },
+      'display-message': () => (enterCount() >= 2 ? 'claude\n' : 'zsh\n'),
+    };
+
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
+
+    assert.ok(dropped);
+    assert.equal(literalSendsOf().length, 2);
+    assert.equal(enterCount(), 2);
+  });
+
+  it('returns when output follows the command even if the shell stays in the foreground', async () => {
+    responses = {
+      'capture-pane': () => {
+        if (!literalSendsOf().length) return 'user@host:~$\n';
+        return enterCount()
+          ? 'user@host:~$ claude --resume abc-123\nerror: not found\nuser@host:~$\n'
+          : 'user@host:~$ claude --resume abc-123\n';
+      },
+      'display-message': 'zsh\n',
+    };
+
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
+
+    assert.equal(enterCount(), 1, 'does not run the command twice');
+  });
+
+  it('does not retype when the foreground command cannot be read', async () => {
+    responses = {
+      // claude が alt-screen で描いてコマンド行が見えなくなった想定
+      'capture-pane': () =>
+        literalSendsOf().length && !enterCount() ? 'user@host:~$ claude --resume abc-123\n' : 'user@host:~$\n',
+      'display-message': '',
+    };
+
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
+
+    assert.equal(literalSendsOf().length, 1);
+    assert.equal(enterCount(), 1);
+  });
+
+  it('treats a non-shell foreground as started and a login shell as still waiting', async () => {
+    responses = {
+      'capture-pane': () => (literalSendsOf().length ? 'user@host:~$ claude --resume abc-123\n' : 'user@host:~$\n'),
+      // 打鍵前は rc の子プロセス（git）が見えていても、判定はシェル名かどうかで行う
+      'display-message': () => (enterCount() >= 2 ? 'claude\n' : literalSendsOf().length ? '-zsh\n' : 'git\n'),
+    };
+
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
+
+    assert.equal(enterCount(), 2, 're-presses Enter while the login shell is still in the foreground');
+  });
+
+  it('throws when the echo never appears within timeoutMs', async () => {
+    responses = { 'capture-pane': '', 'display-message': 'zsh\n' };
+
     await assert.rejects(
-      () => sendCommandWhenShellReady('%7', 'claude --resume abc-123', { pollMs: 5, timeoutMs: 50 }),
+      () => sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, readyTimeoutMs: 20, timeoutMs: 60 }),
       /シェルの起動を確認できませんでした/,
     );
   });
 
   it('detects the echo even when the pane wraps the command across lines', async () => {
     responses = {
-      // 狭いペイン幅で折り返された想定。空白（改行含む）を除去して比較するので検知できる
-      'capture-pane': 'user@host:~$ claude --resume\nabc-123\n',
+      'capture-pane': () => (literalSendsOf().length ? 'user@host:~$ claude --resume\nabc-123\n' : 'user@host:~$\n'),
+      'display-message': shellUntilEnter,
     };
 
-    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { pollMs: 5, timeoutMs: 200 });
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
 
-    assert.ok(execCalls.some((c) => c === 'tmux send-keys -t %7 Enter'));
+    assert.equal(enterCount(), 1);
   });
 });

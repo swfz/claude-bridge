@@ -249,6 +249,38 @@
   background: var(--success);
 }
 
+/* tmux で再開した直後、claude の起動を確かめるまで（つながったら idle の緑になる） */
+.tab-status-starting {
+  background: transparent;
+  border: 1.5px solid var(--text-secondary);
+  border-top-color: var(--success);
+  box-sizing: border-box;
+  animation: tab-status-spin 0.8s linear infinite;
+}
+
+.tab-status-failed {
+  background: var(--accent);
+}
+
+.tab-badge-starting {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  text-transform: none;
+  animation: tab-status-pulse 1.2s ease-in-out infinite;
+}
+
+.tab-badge-failed {
+  background: var(--accent);
+  text-transform: none;
+}
+
+@keyframes tab-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .tab-status-waiting {
   background: var(--warning, #f0ad4e);
   box-shadow: 0 0 6px 2px var(--warning, #f0ad4e);

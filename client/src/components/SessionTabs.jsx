@@ -31,6 +31,10 @@ function miniLabel(project) {
   return String(project).slice(0, 2).toUpperCase();
 }
 
+// tmux で再開した直後は claude の起動を確かめるまで 'starting'（回転表示）、失敗なら 'failed'
+const STATUS_TITLES = { starting: '起動中…', failed: '起動に失敗しました' };
+const statusTitle = (status) => STATUS_TITLES[status] || status;
+
 export default function SessionTabs({
   sessions,
   activeSessionId,
@@ -151,7 +155,7 @@ export default function SessionTabs({
                 >
                   <span className="tab-mini-avatar">{miniLabel(project)}</span>
                   {session.status && (
-                    <span className={`tab-status tab-status-${session.status}`} title={session.status} />
+                    <span className={`tab-status tab-status-${session.status}`} title={statusTitle(session.status)} />
                   )}
                   {(isStarredTab || isSensitiveTab) && (
                     <span className="tab-mini-marks">
@@ -167,7 +171,7 @@ export default function SessionTabs({
               <div key={session.id} className={className} onClick={() => session.alive && onSelect(session.id)}>
                 <div className="tab-row">
                   {session.status && (
-                    <span className={`tab-status tab-status-${session.status}`} title={session.status} />
+                    <span className={`tab-status tab-status-${session.status}`} title={statusTitle(session.status)} />
                   )}
                   {isStarredTab && (
                     <span className="tab-mark tab-mark-star" title="Star 付き（未解決／続きをやる）">
@@ -181,6 +185,8 @@ export default function SessionTabs({
                   )}
                   {session.type === 'tmux' && <span className="tab-badge">tmux</span>}
                   {session.type === 'readonly' && <span className="tab-badge">閲覧</span>}
+                  {session.status === 'starting' && <span className="tab-badge tab-badge-starting">起動中…</span>}
+                  {session.status === 'failed' && <span className="tab-badge tab-badge-failed">起動失敗</span>}
                   {hasAttention && (
                     <span className="tab-badge tab-badge-attention" title="応答が完了しました（未確認）">
                       完了
