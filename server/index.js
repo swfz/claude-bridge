@@ -1163,30 +1163,36 @@ wss.on('connection', (ws) => {
       case 'resume_in_tmux': {
         // 起動していないセッションを tmux 側で起こす。PTY 直起動（resume_session）と違い
         // ブリッジを落としても生き残り、ターミナルからも操作できる。
+        // window ができた時点でタブを開き、claude の起動を確かめるまで status を 'starting' にする
+        // （シェルの準備待ちに数秒かかるため）。起動後は refreshStatuses が pid を
+        // バックフィルしてステータスファイルの値（idle 等）に置き換える。
+        let resumedSession = null;
         resumeInTmuxWindow({
           claudeSessionId: msg.claudeSessionId,
           cwd: msg.cwd,
-        })
-          .then((pane) => {
-            attachTmuxPaneAsSession(ws, {
+          onWindowCreated: (pane) => {
+            resumedSession = attachTmuxPaneAsSession(ws, {
               paneId: pane.paneId,
               name: msg.name || pane.windowName,
               cwd: msg.cwd,
               target: pane.target,
-              // claude はシェル経由で起動するので pid はまだ分からない。
-              // 起動中一覧のポーリングで拾えるので null のままにする。
+              // claude はシェル経由で起動するので pid はまだ分からない
               claudePid: null,
               claudeSessionId: msg.claudeSessionId,
-              status: null,
+              status: 'starting',
             });
-          })
-          .catch((e) => {
-            console.error('resume_in_tmux failed:', e.message);
-            sendTo(ws, {
-              type: 'home_error',
-              message: `tmux で再開できませんでした: ${e.message}`,
-            });
-          });
+          },
+        }).catch((e) => {
+          console.error('resume_in_tmux failed:', e.message);
+          const message = `tmux で再開できませんでした: ${e.message}`;
+          // タブを開いた後の失敗はタブ側（状態ドットとチャット）で見せる
+          if (resumedSession && resumedSession.claudePid == null) {
+            resumedSession.status = 'failed';
+            broadcastSessionList();
+            sendTo(ws, { type: 'error', message });
+          }
+          sendTo(ws, { type: 'home_error', message });
+        });
         break;
       }
 

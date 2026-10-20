@@ -111,6 +111,28 @@ describe('resumeInTmuxWindow', () => {
     assert.ok(execCalls.some((c) => c === 'tmux send-keys -t %7 Enter'));
   });
 
+  it('reports the created window before typing the resume command', async () => {
+    responses = {
+      'list-sessions': '900\tmain-sess\n',
+      'new-window': '%7\tmain-sess:3.0\n',
+      'capture-pane': 'claude --resume abc-123\n',
+      'display-message': claudeAfterEnter,
+    };
+    let callsAtCreated = null;
+
+    await resumeInTmuxWindow({
+      claudeSessionId: 'abc-123',
+      cwd: '/tmp/work',
+      onWindowCreated: (pane) => {
+        assert.equal(pane.paneId, '%7');
+        callsAtCreated = execCalls.length;
+      },
+    });
+
+    assert.ok(callsAtCreated != null);
+    assert.ok(!execCalls.slice(0, callsAtCreated).some((c) => c.includes('send-keys')));
+  });
+
   it('targets a purely numeric session name as a session, not a window index', async () => {
     // セッション名が「0」のような数字だけの場合、`-t 0` は window index 0 と
     // 解釈され "index 0 in use" で失敗する（実際に起きた回帰）

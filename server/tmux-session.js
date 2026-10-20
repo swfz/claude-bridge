@@ -251,7 +251,9 @@ export function buildResumeWindowName(claudeSessionId) {
 // tmux に新しい window を作り、そこで `claude --resume <id>` を起動する。
 // PTY 直起動（resume_session）と違い、claude は tmux 側のプロセスになるので
 // ブリッジを落としても生き続け、ターミナルからも操作できる。
-export async function resumeInTmuxWindow({ claudeSessionId, cwd }) {
+// シェルの準備待ち＋起動確認に数秒かかるので、window ができた時点で onWindowCreated を呼ぶ
+// （呼び出し側はそこでタブを開いて「起動中」を見せられる）。
+export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated }) {
   if (!/^[\w-]+$/.test(claudeSessionId || '')) {
     throw new Error(`Invalid claudeSessionId: ${claudeSessionId}`);
   }
@@ -290,15 +292,18 @@ export async function resumeInTmuxWindow({ claudeSessionId, cwd }) {
   const [paneId, target] = stdout.trim().split('\t');
   validatePaneId(paneId);
 
-  // シェル経由で流すので rc（mise/nvm 等）を通る。claude を抜けてもペインは残る
-  await sendCommandWhenShellReady(paneId, `claude --resume ${claudeSessionId}`);
-
-  return {
+  const pane = {
     paneId,
     target: target || paneId,
     sessionName: sessionName || FALLBACK_TMUX_SESSION,
     windowName,
   };
+  onWindowCreated?.(pane);
+
+  // シェル経由で流すので rc（mise/nvm 等）を通る。claude を抜けてもペインは残る
+  await sendCommandWhenShellReady(paneId, `claude --resume ${claudeSessionId}`);
+
+  return pane;
 }
 
 export function resolveTmuxJsonlTarget({ claudeSessionId, cwd }) {
