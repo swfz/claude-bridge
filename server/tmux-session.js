@@ -226,8 +226,9 @@ export async function sendCommandWhenShellReady(
 // `tmux list-sessions -F "#{session_last_attached}\t#{session_name}"` の出力から
 // 直近にアタッチされたセッション名を選ぶ。候補がなければ null。
 export function pickTargetSession(stdout) {
+  // 一度もアタッチされていないセッションは last_attached が空で行頭がタブになるので、
+  // 全体を trim() すると先頭行のタブまで消えて名前を取りこぼす
   const rows = (stdout || '')
-    .trim()
     .split('\n')
     .filter((line) => line.trim())
     .map((line) => {

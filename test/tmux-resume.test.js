@@ -42,6 +42,11 @@ describe('pickTargetSession', () => {
     assert.equal(pickTargetSession('0\tdetached-only'), 'detached-only');
   });
 
+  it('keeps a never-attached session listed first (empty last_attached)', () => {
+    // ブリッジが作った受け皿セッションはアタッチされないので行頭がタブになる
+    assert.equal(pickTargetSession('\tbridge\n'), 'bridge');
+  });
+
   it('returns null for empty output (no tmux server)', () => {
     assert.equal(pickTargetSession(''), null);
     assert.equal(pickTargetSession(undefined), null);
