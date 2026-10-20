@@ -890,21 +890,20 @@
 
 /* 人が打っていない human（サブエージェントの報告・タスク通知など）。自分の発言と同じ吹き出しだと
    見分けがつかないので、破線枠にして見出しの色も変える（.chat-message は flex item ではないので
-   align-self は効かない。既存の .chat-message.human と同じく並びは変わらない） */
+   align-self は効かない。既存の .chat-message.human と同じく並びは変わらない）。
+   自分宛ての読むべき発言に見えないよう、文字は一段薄く小さくし、見出しにも目立つ色を付けない */
 .chat-message.human[class*='sender-'] {
   max-width: 95%;
   background: transparent;
   border: 1px dashed var(--border);
   border-bottom-right-radius: 12px;
   border-bottom-left-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .chat-message[class*='sender-'] .chat-role {
   color: var(--text-secondary);
   text-transform: none;
-}
-
-.chat-message.sender-subagent .chat-role,
-.chat-message.sender-peer .chat-role {
-  color: #a371f7;
+  opacity: 0.8;
 }
