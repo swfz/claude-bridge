@@ -198,6 +198,8 @@ TUI に出る「番号つきの選択肢」をブラウザから選べるよう�
 
 拡張子ごとの描き分けは `client/src/utils/previewExts.js` の配列が唯一の定義で、`PreviewDrawer` はそれを見て `isImage` / `isHtml` / `isPdf` / `isVideo` / `isText` / `isMarkdownFile` / `isTable` を決める。
 
+- **右側の「レビュースレッド」欄は見出しのクリックで畳める**（幅 32px の縦帯になり本文に幅を返す。localStorage `previewReviewPaneCollapsed`）。畳んでいても未送信の指摘欄が増えたら（行ピックの Enter 等）自動で開く（書けない欄にフォーカスが飛ばないように）
+
 - **動画**（`VIDEO_EXTS`）は `<video controls preload="metadata">` に `/preview` の URL を渡すだけ。**サイズ上限だけ別扱い**で、`server/index.js` の `maxPreviewSizeFor(ext)` が既定 100MB に対して動画は 2GB を返す（`res.sendFile` が Range に応じるので丸ごと読まれない）。テキストの fetch は走らせず、行ピックの対象にもしない（`pickMax` は 0）
 - **CSV / TSV**（`TABLE_EXTS`）は表とテキストを切り替えられる（ヘッダのトグル・localStorage `previewTableMode`・既定は表）。分解は `client/src/utils/delimited.js` の `parseDelimited(text, delimiter)`（RFC 4180 相当の引用対応・CRLF 両対応・上限 `MAX_TABLE_ROWS`＝2000 行）で、**各行はソース上の開始行番号を持つ**（引用内に改行があるレコードは複数行を占めるので、行ピックが指すのは開始行）。表モードでも行ピックは効くが、**目印は `pre.drawer-text [data-line]` ではなく `.drawer-table [data-line]`**（`tr`）になるので、`isCodeView` を使う箇所は `showTable` で選択子を切り替える。マウス選択は列位置に対応づけられないので `computeLocation` は null を返し、行だけ `tr` の `data-line` から拾う。💬 の行マーカーは `pre` が無いので表モードでは出さない
 - **既知の種別が無いファイル**（拡張子なしを含む）は**テキストとして読む**（`isFallbackText`）。描画・行ピック・選択位置の計算はコードと同じ経路（ハイライトは言語不明なのでプレーン）。この経路だけ、`Content-Length` が 5MB を超えるなら本文を読まずに案内を出し、読んだ後も `client/src/utils/binaryText.js` の `looksBinary()`（先頭 8KB に NUL、または置換文字が 5% 超）でバイナリなら本文を出さない

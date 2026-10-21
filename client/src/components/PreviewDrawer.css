@@ -646,11 +646,52 @@ body.light-mode .drawer-iframe,
 }
 
 .review-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
   padding: 10px 14px;
+  font: inherit;
   font-size: 13px;
   font-weight: 600;
+  text-align: left;
+  background: none;
+  border: none;
   border-bottom: 1px solid var(--border);
   color: var(--text-primary);
+  cursor: pointer;
+}
+
+.review-pane-header:hover {
+  background: var(--bg-surface);
+}
+
+.review-pane-toggle {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* 畳んだときは細い縦帯にして本文に幅を返す */
+.drawer-review-pane.collapsed {
+  width: 32px;
+  min-width: 32px;
+}
+
+.drawer-review-pane.collapsed .review-pane-header {
+  flex-direction: column;
+  flex: 1;
+  padding: 10px 0;
+  border-bottom: none;
+}
+
+.drawer-review-pane.collapsed .review-pane-title {
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+}
+
+.review-pane-collapsed-count {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .review-pane-items {
