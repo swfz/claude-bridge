@@ -9,14 +9,14 @@ Claude Code セッションをブラウザから操作する Web ブリッジ。
 ## コマンド
 
 ```bash
-npm run dev          # ビルド + サーバー起動 (http://localhost:3000)
-npm start            # サーバーのみ起動（ビルド済み前提）
-npm run build        # クライアントビルド
-npm test             # テスト実行
-npm run test:e2e     # Playwright による E2E スモークテスト（ビルド→fixture サーバーで実行）
-npm run install:all  # 全依存インストール
-npm run setup:hooks       # agent view 連携フックを ~/.claude/settings.json に登録
-npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.claude/settings.json に登録
+pnpm dev          # ビルド + サーバー起動 (http://localhost:3000)
+pnpm start        # サーバーのみ起動（ビルド済み前提）
+pnpm build        # クライアントビルド
+pnpm test         # テスト実行
+pnpm test:e2e     # Playwright による E2E スモークテスト（ビルド→fixture サーバーで実行）
+pnpm install:all  # 全依存インストール
+pnpm setup:hooks       # agent view 連携フックを ~/.claude/settings.json に登録
+pnpm setup:statusline  # レート制限表示用の statusLine tee を ~/.claude/settings.json に登録
 ```
 
 ## アーキテクチャ
@@ -53,7 +53,7 @@ npm run setup:statusline  # レート制限表示用の statusLine tee を ~/.cl
 
 ### statusLine tee（レート制限表示のデータ源）
 
-`scripts/statusline/bridge-statusline-tee.js` を `~/.claude/settings.json` の `statusLine.command` に割り込ませ（`npm run setup:statusline`）、stdin で渡ってくる JSON のうち `rate_limits` だけを `<dataDir>/rate-limits.json` に `{ rate_limits, ts }` としてアトミック書き込み（tmp + rename）した上で、元々登録されていた statusLine コマンドへ stdin をそのまま引き継ぐ（表示は一切変えない）。tee 部分の失敗（parse 不能・書き込み失敗）で元コマンドの実行を止めない。依存なし（node 組み込みのみ）で statusLine の呼び出し頻度に耐える軽さを保つ。`scripts/setup-statusline.js` は元の `statusLine.command` を `<dataDir>/statusline-original.json` に退避してから差し替え、`--uninstall` で退避内容に戻す（再実行時はラッパー自身を original として保存しない）。
+`scripts/statusline/bridge-statusline-tee.js` を `~/.claude/settings.json` の `statusLine.command` に割り込ませ（`pnpm setup:statusline`）、stdin で渡ってくる JSON のうち `rate_limits` だけを `<dataDir>/rate-limits.json` に `{ rate_limits, ts }` としてアトミック書き込み（tmp + rename）した上で、元々登録されていた statusLine コマンドへ stdin をそのまま引き継ぐ（表示は一切変えない）。tee 部分の失敗（parse 不能・書き込み失敗）で元コマンドの実行を止めない。依存なし（node 組み込みのみ）で statusLine の呼び出し頻度に耐える軽さを保つ。`scripts/setup-statusline.js` は元の `statusLine.command` を `<dataDir>/statusline-original.json` に退避してから差し替え、`--uninstall` で退避内容に戻す（再実行時はラッパー自身を original として保存しない）。
 
 ### クライアントのコンポーネント構成
 
@@ -187,7 +187,7 @@ TUI に出る「番号つきの選択肢」をブラウザから選べるよう�
   - **コメント＝残す（参照専用）**: `save_comment`/`get_comments`/`delete_comment` ↔ `CommentPanel`（入力欄つき一覧）。`comments-<key>.json` に保存し**送信は一切しない**。セッションに対して残し、再オープン/resume/閲覧をまたいで参照できる。
   - メッセージ単位の Memo/Review ボタンや `CommentPopover`、`send_comment_to_claude` は廃止（`Thread` だけは別機能としてメッセージ単位で残存）。
   - **プレビュー上の選択コメント**: コード/テキスト/Markdown は drawer 本文（`bodyRef`）の `mouseup` で選択を拾う。**HTML は iframe に描画されるため親の選択 API では拾えない**ので、`iframe.contentDocument` に直接 `mouseup` を張る（`/preview` は同一オリジンで `sandbox="allow-scripts allow-same-origin"` なのでアクセスできる）。ポップアップ位置は iframe の矩形分オフセットして本文座標に変換する。行・列は HTML ソースを別途 `fetch` し、表示テキスト上の出現順（`getOccurrenceIndex`）と同じ出現をソース内で探して（`findOccurrenceOffset`）算出する（`buildLocationInfo` の `kind: "html"`）。iframe 内には 💬 ガターは出せないので、位置は保存された `anchor.line`／ラベルで示す
-- **配信**（agent 側で受信）: claude-bridge 同梱フックを**グローバル** `~/.claude/settings.json` に登録（`npm run setup:hooks`）。
+- **配信**（agent 側で受信）: claude-bridge 同梱フックを**グローバル** `~/.claude/settings.json` に登録（`pnpm setup:hooks`）。
   - **turn 配信（Stop hook）に一本化**。応答終了ごとに発火し、inbox の未読をまとめて `{decision:"block", reason}` で注入する。対象が idle の場合は次の応答時に届く。常駐プロセス（monitor）は PID 再利用・サンドボックス・応答途中への割り込みで誤動作が多く廃止した
   - `scripts/hooks/bridge-check-inbox.js` -- Stop hook（turn 配信）の本体。応答終了時に未読を注入。`stop_hook_active` で無限ループ回避
 - 既読位置は `inbox/<sessionId>.offset` で管理（サーバーは書くだけ、offset 更新はフック側）
@@ -257,7 +257,7 @@ TUI に出る「番号つきの選択肢」をブラウザから選べるよう�
 ## テスト
 
 ```bash
-npm test
+pnpm test
 ```
 
 テストファイルは `test/` 配下。tmux コマンドのモックには `mock.module()` (experimental) を使用。

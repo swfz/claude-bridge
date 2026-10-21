@@ -20,37 +20,37 @@ node-pty で新規セッションを起動する方式と、既存の tmux ペ�
 - Node.js 24+(バージョンはリポジトリ直下の `.node-version` が正。CI もこのファイルを参照する)
 - Claude Code CLI (`claude`) がインストール済み
 - tmux ペイン接続を使う場合は tmux が起動中であること
+- pnpm(バージョンは `package.json` の `packageManager`。`corepack enable` などで揃える)
 - node-pty のビルドに C++ コンパイラ (`gcc`/`g++`) と `make` が必要
 
 ## セットアップ
 
 ```bash
-npm run install:all
-npm rebuild node-pty   # ネイティブモジュールのビルド
+pnpm install   # node-pty のネイティブビルドも行う(pnpm-workspace.yaml の allowBuilds)
 ```
 
 ## 起動
 
 ```bash
 # クライアントビルド + サーバー起動（http://localhost:3000）
-npm run dev
+pnpm dev
 
 # サーバーのみ起動（ビルド済み前提）
-npm start
+pnpm start
 ```
 
 ## スクリプト一覧
 
-| スクリプト                 | 説明                                                                        |
-| -------------------------- | --------------------------------------------------------------------------- |
-| `npm run dev`              | クライアントビルド後にサーバー起動                                          |
-| `npm start`                | サーバーのみ起動（`client/dist` 配信）                                      |
-| `npm run build`            | クライアントのプロダクションビルド                                          |
-| `npm run dev:client`       | Vite dev server（ホットリロード開発用）                                     |
-| `npm test`                 | テスト実行                                                                  |
-| `npm run install:all`      | ルート + クライアントの依存インストール                                     |
-| `npm run setup:hooks`      | agent 連携フック（レビュー送信の受信側）を `~/.claude/settings.json` に登録 |
-| `npm run setup:statusline` | レート制限表示用の statusLine tee を `~/.claude/settings.json` に登録       |
+| スクリプト              | 説明                                                                        |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `pnpm dev`              | クライアントビルド後にサーバー起動                                          |
+| `pnpm start`            | サーバーのみ起動（`client/dist` 配信）                                      |
+| `pnpm build`            | クライアントのプロダクションビルド                                          |
+| `pnpm dev:client`       | Vite dev server（ホットリロード開発用）                                     |
+| `pnpm test`             | テスト実行                                                                  |
+| `pnpm install:all`      | ルート + クライアントの依存インストール                                     |
+| `pnpm setup:hooks`      | agent 連携フック（レビュー送信の受信側）を `~/.claude/settings.json` に登録 |
+| `pnpm setup:statusline` | レート制限表示用の statusLine tee を `~/.claude/settings.json` に登録       |
 
 ## agent 連携（レビュー送信 / コメント）
 
@@ -66,7 +66,7 @@ npm start
 inbox 経由の配信は、**届け先の Claude（agent）が動いている環境**にブリッジ同梱フックが登録されている前提。次を実行する：
 
 ```bash
-npm run setup:hooks
+pnpm setup:hooks
 ```
 
 - フックは**グローバル**の `~/.claude/settings.json` にマージ登録される（既存設定は壊さない）。
@@ -82,13 +82,13 @@ npm run setup:hooks
 credentials・外部 API アクセスは一切使わず、Claude Code の statusLine 機構に相乗りしてローカルファイル経由でデータを取る。
 
 ```bash
-npm run setup:statusline
+pnpm setup:statusline
 ```
 
 - `~/.claude/settings.json` の `statusLine.command` に `scripts/statusline/bridge-statusline-tee.js` を割り込ませる。既存の statusLine コマンドは `<dataDir>/statusline-original.json` に退避され、tee は stdin の `rate_limits` だけを `<dataDir>/rate-limits.json` に書き出した後、元のコマンドへ stdin をそのまま引き継ぐ（表示は変わらない）。
 - **ブリッジサーバーを動かす環境ではなく、statusLine を表示させたい Claude セッションを動かす環境**で実行する。
 - 元に戻す場合: `node scripts/setup-statusline.js --uninstall`
-- statusLine 未連携（`npm run setup:statusline` 未実行）でもブリッジ自体は問題なく動作し、ヘッダーのメーターが表示されないだけ。
+- statusLine 未連携（`pnpm setup:statusline` 未実行）でもブリッジ自体は問題なく動作し、ヘッダーのメーターが表示されないだけ。
 
 ## アーキテクチャ
 
@@ -153,7 +153,7 @@ test/                  node:test によるユニット・統合テスト
 ## テスト
 
 ```bash
-npm test
+pnpm test
 ```
 
 `node:test` を使用。`--experimental-test-module-mocks` で tmux コマンドのモックテストを実行。

@@ -1,0 +1,9 @@
+packages:
+  - client
+
+# 公開から 7 日(分単位)経っていないバージョンは解決しない。Renovate の minimumReleaseAge と揃える
+minimumReleaseAge: 10080
+
+# node-pty はネイティブモジュールのビルド(install スクリプト)が必要
+allowBuilds:
+  node-pty: true
