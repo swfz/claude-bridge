@@ -55,7 +55,6 @@ export default function LinkList({ links, onJumpToMessage }) {
     filterRef.current?.focus();
   }, []);
 
-
   // コピー表示を戻すタイマー
   useEffect(() => {
     if (!copied) return;
@@ -91,85 +90,85 @@ export default function LinkList({ links, onJumpToMessage }) {
 
   return (
     <>
-        <div className="link-drawer-toolbar">
-          <input
-            ref={filterRef}
-            className="link-drawer-filter"
-            type="text"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="URL / ラベル / タイトル / 文脈で絞り込み"
-          />
-          <button className="link-drawer-copy" onClick={handleCopy} disabled={visibleLinks.length === 0}>
-            {copied ? 'コピーしました' : 'Markdown でコピー'}
+      <div className="link-drawer-toolbar">
+        <input
+          ref={filterRef}
+          className="link-drawer-filter"
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="URL / ラベル / タイトル / 文脈で絞り込み"
+        />
+        <button className="link-drawer-copy" onClick={handleCopy} disabled={visibleLinks.length === 0}>
+          {copied ? 'コピーしました' : 'Markdown でコピー'}
+        </button>
+      </div>
+
+      <div className="link-drawer-origin">
+        {ORIGIN_FILTERS.map(({ value, label }) => (
+          <button
+            key={value}
+            className={`link-origin-toggle ${origin === value ? 'active' : ''}`}
+            onClick={() => setOrigin(value)}
+            aria-pressed={origin === value}
+          >
+            {label} {originCounts[value]}
           </button>
-        </div>
+        ))}
+      </div>
 
-        <div className="link-drawer-origin">
-          {ORIGIN_FILTERS.map(({ value, label }) => (
-            <button
-              key={value}
-              className={`link-origin-toggle ${origin === value ? 'active' : ''}`}
-              onClick={() => setOrigin(value)}
-              aria-pressed={origin === value}
-            >
-              {label} {originCounts[value]}
-            </button>
-          ))}
-        </div>
-
-        <div className="link-drawer-body">
-          {total === 0 ? (
-            <div className="link-drawer-empty">リンクはまだありません</div>
-          ) : visibleLinks.length === 0 ? (
-            <div className="link-drawer-empty">一致するリンクはありません</div>
-          ) : (
-            visibleLinks.map((link) => (
-              <div className="link-row" key={link.url}>
-                <span className="link-row-icon" title={(ORIGIN_ICONS[link.origin] || ORIGIN_ICONS.claude).title}>
-                  {(ORIGIN_ICONS[link.origin] || ORIGIN_ICONS.claude).icon}
-                </span>
-                <div className="link-row-main">
-                  <a
-                    className="link-row-anchor"
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={link.url}
-                  >
-                    {link.label || link.title || link.url}
-                  </a>
-                  {link.context && (
-                    <div className="link-row-context" title={link.context}>
-                      {link.context}
-                    </div>
-                  )}
-                  <div className="link-row-meta">
-                    {link.host && <span className="link-row-host">{link.host}</span>}
-                    {/* label がアンカーを占めているときだけ、WebFetch で読んだタイトルを別に出す */}
-                    {link.label && link.title && (
-                      <span className="link-row-fetched" title={link.title}>
-                        🌐 {link.title}
-                      </span>
-                    )}
-                    {isNonOkStatus(link.code) && <span className="link-badge link-badge-http">HTTP {link.code}</span>}
-                    {link.sources.map((source) => (
-                      <span className="link-badge" key={source}>
-                        {sourceLabel(source)}
-                      </span>
-                    ))}
-                    {link.count > 1 && <span className="link-row-count">×{link.count}</span>}
+      <div className="link-drawer-body">
+        {total === 0 ? (
+          <div className="link-drawer-empty">リンクはまだありません</div>
+        ) : visibleLinks.length === 0 ? (
+          <div className="link-drawer-empty">一致するリンクはありません</div>
+        ) : (
+          visibleLinks.map((link) => (
+            <div className="link-row" key={link.url}>
+              <span className="link-row-icon" title={(ORIGIN_ICONS[link.origin] || ORIGIN_ICONS.claude).title}>
+                {(ORIGIN_ICONS[link.origin] || ORIGIN_ICONS.claude).icon}
+              </span>
+              <div className="link-row-main">
+                <a
+                  className="link-row-anchor"
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={link.url}
+                >
+                  {link.label || link.title || link.url}
+                </a>
+                {link.context && (
+                  <div className="link-row-context" title={link.context}>
+                    {link.context}
                   </div>
-                </div>
-                {link.lastUuid && (
-                  <button className="link-row-jump" onClick={() => onJumpToMessage(link.lastUuid)}>
-                    会話へ
-                  </button>
                 )}
+                <div className="link-row-meta">
+                  {link.host && <span className="link-row-host">{link.host}</span>}
+                  {/* label がアンカーを占めているときだけ、WebFetch で読んだタイトルを別に出す */}
+                  {link.label && link.title && (
+                    <span className="link-row-fetched" title={link.title}>
+                      🌐 {link.title}
+                    </span>
+                  )}
+                  {isNonOkStatus(link.code) && <span className="link-badge link-badge-http">HTTP {link.code}</span>}
+                  {link.sources.map((source) => (
+                    <span className="link-badge" key={source}>
+                      {sourceLabel(source)}
+                    </span>
+                  ))}
+                  {link.count > 1 && <span className="link-row-count">×{link.count}</span>}
+                </div>
               </div>
-            ))
-          )}
-        </div>
+              {link.lastUuid && (
+                <button className="link-row-jump" onClick={() => onJumpToMessage(link.lastUuid)}>
+                  会話へ
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
     </>
   );
 }

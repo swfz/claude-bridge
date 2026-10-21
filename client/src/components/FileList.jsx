@@ -38,7 +38,6 @@ export default function FileList({ files, cwd, onOpenPreview, onJumpToMessage })
     filterRef.current?.focus();
   }, []);
 
-
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), COPIED_RESET_MS);
@@ -73,76 +72,76 @@ export default function FileList({ files, cwd, onOpenPreview, onJumpToMessage })
 
   return (
     <>
-        <div className="file-drawer-toolbar">
-          <input
-            ref={filterRef}
-            className="file-drawer-filter"
-            type="text"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="パスで絞り込み"
-          />
-          <button className="file-drawer-copy" onClick={handleCopy} disabled={visibleFiles.length === 0}>
-            {copied ? 'コピーしました' : 'パスをコピー'}
+      <div className="file-drawer-toolbar">
+        <input
+          ref={filterRef}
+          className="file-drawer-filter"
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="パスで絞り込み"
+        />
+        <button className="file-drawer-copy" onClick={handleCopy} disabled={visibleFiles.length === 0}>
+          {copied ? 'コピーしました' : 'パスをコピー'}
+        </button>
+      </div>
+
+      <div className="file-drawer-ops">
+        {OP_FILTERS.map(({ value, label }) => (
+          <button
+            key={value}
+            className={`file-op-toggle ${opFilter === value ? 'active' : ''}`}
+            onClick={() => setOpFilter(value)}
+            aria-pressed={opFilter === value}
+          >
+            {label} {opCounts[value]}
           </button>
-        </div>
+        ))}
+      </div>
 
-        <div className="file-drawer-ops">
-          {OP_FILTERS.map(({ value, label }) => (
-            <button
-              key={value}
-              className={`file-op-toggle ${opFilter === value ? 'active' : ''}`}
-              onClick={() => setOpFilter(value)}
-              aria-pressed={opFilter === value}
-            >
-              {label} {opCounts[value]}
-            </button>
-          ))}
-        </div>
-
-        <div className="file-drawer-body">
-          {total === 0 ? (
-            <div className="file-drawer-empty">ファイルはまだありません</div>
-          ) : visibleFiles.length === 0 ? (
-            <div className="file-drawer-empty">一致するファイルはありません</div>
-          ) : (
-            visibleFiles.map((file) => {
-              const { dir, name } = splitPath(relativeToCwd(file.path, cwd));
-              return (
-                <div className="file-row" key={file.path}>
-                  <div className="file-row-main">
-                    <button
-                      className="file-row-name"
-                      title={file.path}
-                      onClick={() => {
-                        onOpenPreview(file.path);
-                      }}
-                    >
-                      {name}
-                    </button>
-                    {dir && (
-                      <div className="file-row-dir" title={file.path}>
-                        {dir}
-                      </div>
-                    )}
-                    <div className="file-row-meta">
-                      {OP_BADGES.filter(({ key }) => file.ops[key] > 0).map(({ key, label }) => (
-                        <span className="file-badge" key={key}>
-                          {label} ×{file.ops[key]}
-                        </span>
-                      ))}
+      <div className="file-drawer-body">
+        {total === 0 ? (
+          <div className="file-drawer-empty">ファイルはまだありません</div>
+        ) : visibleFiles.length === 0 ? (
+          <div className="file-drawer-empty">一致するファイルはありません</div>
+        ) : (
+          visibleFiles.map((file) => {
+            const { dir, name } = splitPath(relativeToCwd(file.path, cwd));
+            return (
+              <div className="file-row" key={file.path}>
+                <div className="file-row-main">
+                  <button
+                    className="file-row-name"
+                    title={file.path}
+                    onClick={() => {
+                      onOpenPreview(file.path);
+                    }}
+                  >
+                    {name}
+                  </button>
+                  {dir && (
+                    <div className="file-row-dir" title={file.path}>
+                      {dir}
                     </div>
-                  </div>
-                  {file.lastUuid && (
-                    <button className="file-row-jump" onClick={() => onJumpToMessage(file.lastUuid)}>
-                      会話へ
-                    </button>
                   )}
+                  <div className="file-row-meta">
+                    {OP_BADGES.filter(({ key }) => file.ops[key] > 0).map(({ key, label }) => (
+                      <span className="file-badge" key={key}>
+                        {label} ×{file.ops[key]}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+                {file.lastUuid && (
+                  <button className="file-row-jump" onClick={() => onJumpToMessage(file.lastUuid)}>
+                    会話へ
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
     </>
   );
 }

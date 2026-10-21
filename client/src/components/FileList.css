@@ -95,11 +95,6 @@
   background: var(--bg-secondary);
 }
 
-.file-row-icon {
-  flex-shrink: 0;
-  font-size: 13px;
-}
-
 .file-row-main {
   flex: 1;
   min-width: 0;
@@ -108,22 +103,32 @@
   gap: 2px;
 }
 
-.file-row-anchor {
+/* ファイル名はプレビューを開くボタン。ブラウザ既定のボタンの見た目を消してリンク風にする */
+.file-row-name {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--accent);
+  font: inherit;
   font-size: 13px;
-  text-decoration: none;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.file-row-anchor:hover {
+.file-row-name:hover {
   text-decoration: underline;
 }
 
-.file-row-context {
+.file-row-dir {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px;
   opacity: 0.85;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -139,31 +144,11 @@
   color: var(--text-secondary);
 }
 
-.file-row-host {
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-}
-
 .file-badge {
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0 6px;
-}
-
-.file-row-fetched {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-badge-http {
-  color: var(--warning);
-  border-color: var(--warning);
-}
-
-.file-row-count {
-  font-weight: 600;
 }
 
 .file-row-jump {

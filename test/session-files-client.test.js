@@ -1,13 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  collectSessionFiles,
-  filesToMarkdown,
-  isModified,
-  relativeToCwd,
-} from '../client/src/utils/sessionFiles.js';
+import { collectSessionFiles, filesToMarkdown, isModified, relativeToCwd } from '../client/src/utils/sessionFiles.js';
 
-const asst = (uuid, toolUses, timestamp) => ({ role: 'assistant', uuid, content: '', toolUses, ...(timestamp ? { timestamp } : {}) });
+const asst = (uuid, toolUses, timestamp) => ({
+  role: 'assistant',
+  uuid,
+  content: '',
+  toolUses,
+  ...(timestamp ? { timestamp } : {}),
+});
 
 describe('collectSessionFiles', () => {
   it('非配列は空配列', () => {
@@ -71,13 +72,19 @@ describe('collectSessionFiles', () => {
       asst('u2', [{ name: 'Read', input: { file_path: '/p/b' } }]),
       asst('u3', [{ name: 'Read', input: { file_path: '/p/a' } }]),
     ]);
-    assert.deepEqual(noTs.map((f) => f.path), ['/p/a', '/p/b']);
+    assert.deepEqual(
+      noTs.map((f) => f.path),
+      ['/p/a', '/p/b'],
+    );
 
     const withTs = collectSessionFiles([
       asst('u1', [{ name: 'Read', input: { file_path: '/p/a' } }], '2026-01-02T00:00:00Z'),
       asst('u2', [{ name: 'Read', input: { file_path: '/p/b' } }], '2026-01-03T00:00:00Z'),
     ]);
-    assert.deepEqual(withTs.map((f) => f.path), ['/p/b', '/p/a']);
+    assert.deepEqual(
+      withTs.map((f) => f.path),
+      ['/p/b', '/p/a'],
+    );
     assert.equal(withTs[0].lastTimestamp, '2026-01-03T00:00:00Z');
   });
 

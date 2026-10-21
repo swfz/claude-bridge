@@ -51,7 +51,6 @@
   gap: 12px;
 }
 
-
 .ref-drawer-close {
   background: none;
   border: none;
@@ -65,7 +64,6 @@
 .ref-drawer-close:hover {
   color: var(--accent);
 }
-
 
 .ref-drawer-tabs {
   display: flex;
