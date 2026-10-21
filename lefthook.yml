@@ -1,0 +1,11 @@
+# コミット前に、ステージしたファイルだけ lint と整形チェックをかける(CI の lint / format:check と同じ内容)。
+# `pnpm install` の prepare で `lefthook install` され、.git/hooks に入る。
+# core.hooksPath を設定している環境では lefthook install が拒否されるため prepare は何もしない(そちらのフックから lefthook を呼ぶ想定)
+pre-commit:
+  parallel: true
+  jobs:
+    - name: eslint
+      glob: '*.{js,jsx}'
+      run: pnpm exec eslint --no-warn-ignored {staged_files}
+    - name: prettier
+      run: pnpm exec prettier --check --ignore-unknown {staged_files}
