@@ -178,6 +178,24 @@ export default function PreviewDrawer({
     });
   }, []);
 
+  // レビュースレッド欄を畳むか。やり取りがあると欄が常に出て本文が狭くなるので畳めるようにする。
+  // 選択は localStorage で記憶する。指摘欄が増えたら（行を選んで欄を開いた等）書けるよう自動で開く
+  const [reviewPaneCollapsed, setReviewPaneCollapsed] = useState(
+    () => localStorage.getItem('previewReviewPaneCollapsed') === '1',
+  );
+  const toggleReviewPane = useCallback(() => {
+    setReviewPaneCollapsed((v) => {
+      localStorage.setItem('previewReviewPaneCollapsed', v ? '0' : '1');
+      return !v;
+    });
+  }, []);
+  const openItemCount = reviewItems.filter((i) => !i.resolved).length;
+  const prevOpenItemCountRef = useRef(openItemCount);
+  useEffect(() => {
+    if (openItemCount > prevOpenItemCountRef.current) setReviewPaneCollapsed(false);
+    prevOpenItemCountRef.current = openItemCount;
+  }, [openItemCount]);
+
   // ユーザーがドラッグで指定した幅(px)。null の間はクラスベースの既定幅を使う
   const [width, setWidth] = useState(null);
   const widthRef = useRef(width);
@@ -1150,174 +1168,193 @@ export default function PreviewDrawer({
 
           {/* レビュースレッド */}
           {(reviewItems.length > 0 || displaySaved.length > 0 || (responses && responses.length > 0)) && (
-            <div className="drawer-review-pane">
-              <div className="review-pane-header">レビュースレッド</div>
-              <div className="review-pane-thread">
-                {/* 未送信コメント */}
-                {reviewItems
-                  .filter((i) => !i.resolved)
-                  .map((item, index) => (
-                    <div key={item.id} className={`review-pane-item ${item.kind === 'save' ? 'save' : ''}`}>
-                      <div className="review-pane-item-header">
-                        <span className="review-pane-num">
-                          #{index + 1} {item.kind === 'save' ? '（残す）' : '（送る）'}
-                        </span>
-                        <button
-                          className="review-pane-remove"
-                          onClick={() => removeItem(item.id)}
-                          title="この指摘を削除（Ctrl+Shift+⌫）"
-                        >
-                          x
-                        </button>
-                      </div>
-                      {item.selectedText ? (
-                        <div className="review-pane-selected">
-                          {item.selectedText.slice(0, 120)}
-                          {item.selectedText.length > 120 ? '...' : ''}
-                        </div>
-                      ) : (
-                        <div className="review-pane-selected empty">（選択なし・ファイル全体への指摘）</div>
-                      )}
-                      <textarea
-                        className="review-pane-input"
-                        value={item.comment}
-                        onChange={(e) => updateComment(item.id, e.target.value)}
-                        onFocus={() => setEditingId(item.id)}
-                        onKeyDown={(e) => {
-                          // Ctrl/Cmd+Enter = この欄を確定（送る＝本文へフォーカスを戻して次の行を選べる状態に /
-                          // 残す＝保存）。Ctrl/Cmd+Shift+Enter = 溜めた指摘を一括送信。通常の Enter は改行。
-                          // Escape も確定と同じ扱いにし、document の「ドロワーを閉じる」には届かせない。
-                          // Ctrl/Cmd+Shift+Backspace = この指摘欄ごと削除して本文へ戻る。
-                          if (isDeleteItemShortcut(e)) {
-                            e.preventDefault();
-                            removeItem(item.id);
-                            blurToBody();
-                          } else if (isSubmitAllShortcut(e)) {
-                            e.preventDefault();
-                            handleSubmitAll();
-                          } else if (isConfirmShortcut(e)) {
-                            e.preventDefault();
-                            confirmItem(item);
-                          } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            confirmItem(item);
-                          }
-                        }}
-                        placeholder={
-                          item.kind === 'save'
-                            ? 'コメントを書く（送信されません / Ctrl+Enterで保存）...'
-                            : '指摘を入力...（Ctrl+Enterで確定 / Ctrl+Shift+Enterで一括送信）'
-                        }
-                        rows={2}
-                        autoFocus={editingId === item.id}
-                      />
-                      {item.kind === 'save' && (
-                        <button
-                          className="review-pane-edit-btn"
-                          onClick={() => saveComment(item.id)}
-                          disabled={!item.comment.trim()}
-                        >
-                          コメントを残す（保存）
-                        </button>
-                      )}
-                    </div>
-                  ))}
-
-                {/* 送信ボタン */}
-                {unresolvedCount > 0 && (
-                  <div className="review-pane-send-area">
-                    {submitStatus && <div className="review-pane-status">{submitStatus}</div>}
-                    <button
-                      className="btn review-pane-add"
-                      onClick={addFreeItem}
-                      title="選択なしで指摘欄を追加（本文で Enter）"
-                    >
-                      + 指摘を追加
-                    </button>
-                    <button
-                      className="btn btn-primary review-pane-submit"
-                      onClick={handleSubmitAll}
-                      title="溜めた指摘を一括送信（Ctrl+Shift+Enter）"
-                    >
-                      {unresolvedCount}件送信
-                    </button>
-                  </div>
+            <div className={`drawer-review-pane ${reviewPaneCollapsed ? 'collapsed' : ''}`}>
+              <button
+                className="review-pane-header"
+                onClick={() => {
+                  // フォーカスを見出しに残すと Enter が開閉になり、数字キーの行ピックも効かなくなる
+                  toggleReviewPane();
+                  blurToBody();
+                }}
+                title={reviewPaneCollapsed ? 'レビュースレッドを開く' : 'レビュースレッドを畳む'}
+                aria-expanded={!reviewPaneCollapsed}
+              >
+                <span className="review-pane-toggle">{reviewPaneCollapsed ? '◂' : '▸'}</span>
+                <span className="review-pane-title">レビュースレッド</span>
+                {reviewPaneCollapsed && (
+                  <span className="review-pane-collapsed-count">
+                    {openItemCount + displaySaved.length + (responses?.length || 0)}
+                  </span>
                 )}
-
-                {/* 残したcomment（送信せず保存）。ファイルプレビューは保存済み全件を表示。 */}
-                {displaySaved.length > 0 && (
-                  <div className="review-thread-saved">
-                    <div className="review-thread-label">💬 残したコメント（送信なし）</div>
-                    {displaySaved.map((c) => (
-                      <div key={c.id} className="review-pane-item saved">
-                        {c.persisted && onDeleteComment && (
-                          <div className="review-pane-item-header">
-                            <span className="review-pane-num">💬</span>
-                            <button
-                              className="review-pane-remove"
-                              onClick={() => onDeleteComment(c.id)}
-                              title="このコメントを削除"
-                            >
-                              x
-                            </button>
-                          </div>
-                        )}
-                        {c.selectedText && (
+              </button>
+              {!reviewPaneCollapsed && (
+                <div className="review-pane-thread">
+                  {/* 未送信コメント */}
+                  {reviewItems
+                    .filter((i) => !i.resolved)
+                    .map((item, index) => (
+                      <div key={item.id} className={`review-pane-item ${item.kind === 'save' ? 'save' : ''}`}>
+                        <div className="review-pane-item-header">
+                          <span className="review-pane-num">
+                            #{index + 1} {item.kind === 'save' ? '（残す）' : '（送る）'}
+                          </span>
+                          <button
+                            className="review-pane-remove"
+                            onClick={() => removeItem(item.id)}
+                            title="この指摘を削除（Ctrl+Shift+⌫）"
+                          >
+                            x
+                          </button>
+                        </div>
+                        {item.selectedText ? (
                           <div className="review-pane-selected">
-                            {c.selectedText.slice(0, 80)}
-                            {c.selectedText.length > 80 ? '...' : ''}
+                            {item.selectedText.slice(0, 120)}
+                            {item.selectedText.length > 120 ? '...' : ''}
                           </div>
+                        ) : (
+                          <div className="review-pane-selected empty">（選択なし・ファイル全体への指摘）</div>
                         )}
-                        <div className="review-pane-comment-sent">{c.comment}</div>
+                        <textarea
+                          className="review-pane-input"
+                          value={item.comment}
+                          onChange={(e) => updateComment(item.id, e.target.value)}
+                          onFocus={() => setEditingId(item.id)}
+                          onKeyDown={(e) => {
+                            // Ctrl/Cmd+Enter = この欄を確定（送る＝本文へフォーカスを戻して次の行を選べる状態に /
+                            // 残す＝保存）。Ctrl/Cmd+Shift+Enter = 溜めた指摘を一括送信。通常の Enter は改行。
+                            // Escape も確定と同じ扱いにし、document の「ドロワーを閉じる」には届かせない。
+                            // Ctrl/Cmd+Shift+Backspace = この指摘欄ごと削除して本文へ戻る。
+                            if (isDeleteItemShortcut(e)) {
+                              e.preventDefault();
+                              removeItem(item.id);
+                              blurToBody();
+                            } else if (isSubmitAllShortcut(e)) {
+                              e.preventDefault();
+                              handleSubmitAll();
+                            } else if (isConfirmShortcut(e)) {
+                              e.preventDefault();
+                              confirmItem(item);
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              confirmItem(item);
+                            }
+                          }}
+                          placeholder={
+                            item.kind === 'save'
+                              ? 'コメントを書く（送信されません / Ctrl+Enterで保存）...'
+                              : '指摘を入力...（Ctrl+Enterで確定 / Ctrl+Shift+Enterで一括送信）'
+                          }
+                          rows={2}
+                          autoFocus={editingId === item.id}
+                        />
+                        {item.kind === 'save' && (
+                          <button
+                            className="review-pane-edit-btn"
+                            onClick={() => saveComment(item.id)}
+                            disabled={!item.comment.trim()}
+                          >
+                            コメントを残す（保存）
+                          </button>
+                        )}
                       </div>
                     ))}
-                  </div>
-                )}
 
-                {/* 送信済み + 返信のスレッド表示 */}
-                {reviewItems.filter((i) => i.resolved).length > 0 && (
-                  <div className="review-thread-sent">
-                    <div className="review-thread-label">送信済み</div>
-                    {reviewItems
-                      .filter((i) => i.resolved)
-                      .map((item, index) => (
-                        <div key={item.id} className="review-pane-item resolved">
-                          <div className="review-pane-item-header">
-                            <span className="review-pane-num sent">#{index + 1}</span>
-                            <button
-                              className="review-pane-resolve"
-                              onClick={() => toggleResolved(item.id)}
-                              title="未解決に戻す"
-                            >
-                              ↩
-                            </button>
-                          </div>
-                          <div className="review-pane-selected">{item.selectedText.slice(0, 80)}...</div>
-                          <div className="review-pane-comment-sent">{item.comment}</div>
+                  {/* 送信ボタン */}
+                  {unresolvedCount > 0 && (
+                    <div className="review-pane-send-area">
+                      {submitStatus && <div className="review-pane-status">{submitStatus}</div>}
+                      <button
+                        className="btn review-pane-add"
+                        onClick={addFreeItem}
+                        title="選択なしで指摘欄を追加（本文で Enter）"
+                      >
+                        + 指摘を追加
+                      </button>
+                      <button
+                        className="btn btn-primary review-pane-submit"
+                        onClick={handleSubmitAll}
+                        title="溜めた指摘を一括送信（Ctrl+Shift+Enter）"
+                      >
+                        {unresolvedCount}件送信
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 残したcomment（送信せず保存）。ファイルプレビューは保存済み全件を表示。 */}
+                  {displaySaved.length > 0 && (
+                    <div className="review-thread-saved">
+                      <div className="review-thread-label">💬 残したコメント（送信なし）</div>
+                      {displaySaved.map((c) => (
+                        <div key={c.id} className="review-pane-item saved">
+                          {c.persisted && onDeleteComment && (
+                            <div className="review-pane-item-header">
+                              <span className="review-pane-num">💬</span>
+                              <button
+                                className="review-pane-remove"
+                                onClick={() => onDeleteComment(c.id)}
+                                title="このコメントを削除"
+                              >
+                                x
+                              </button>
+                            </div>
+                          )}
+                          {c.selectedText && (
+                            <div className="review-pane-selected">
+                              {c.selectedText.slice(0, 80)}
+                              {c.selectedText.length > 80 ? '...' : ''}
+                            </div>
+                          )}
+                          <div className="review-pane-comment-sent">{c.comment}</div>
                         </div>
                       ))}
-                  </div>
-                )}
-
-                {/* Claude の返信 */}
-                {responses &&
-                  responses.map((r, i) => (
-                    <div key={`resp-${i}`} className="review-pane-response">
-                      <div className="review-pane-response-header">
-                        <span className="review-pane-response-role">Claude</span>
-                        <span className="review-pane-response-time">
-                          {r.timestamp ? new Date(r.timestamp).toLocaleTimeString('ja-JP') : ''}
-                        </span>
-                      </div>
-                      <div className="review-pane-response-body">
-                        <Markdown remarkPlugins={[remarkGfm, remarkAlert]} components={markdownComponents}>
-                          {r.content}
-                        </Markdown>
-                      </div>
                     </div>
-                  ))}
-              </div>
+                  )}
+
+                  {/* 送信済み + 返信のスレッド表示 */}
+                  {reviewItems.filter((i) => i.resolved).length > 0 && (
+                    <div className="review-thread-sent">
+                      <div className="review-thread-label">送信済み</div>
+                      {reviewItems
+                        .filter((i) => i.resolved)
+                        .map((item, index) => (
+                          <div key={item.id} className="review-pane-item resolved">
+                            <div className="review-pane-item-header">
+                              <span className="review-pane-num sent">#{index + 1}</span>
+                              <button
+                                className="review-pane-resolve"
+                                onClick={() => toggleResolved(item.id)}
+                                title="未解決に戻す"
+                              >
+                                ↩
+                              </button>
+                            </div>
+                            <div className="review-pane-selected">{item.selectedText.slice(0, 80)}...</div>
+                            <div className="review-pane-comment-sent">{item.comment}</div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Claude の返信 */}
+                  {responses &&
+                    responses.map((r, i) => (
+                      <div key={`resp-${i}`} className="review-pane-response">
+                        <div className="review-pane-response-header">
+                          <span className="review-pane-response-role">Claude</span>
+                          <span className="review-pane-response-time">
+                            {r.timestamp ? new Date(r.timestamp).toLocaleTimeString('ja-JP') : ''}
+                          </span>
+                        </div>
+                        <div className="review-pane-response-body">
+                          <Markdown remarkPlugins={[remarkGfm, remarkAlert]} components={markdownComponents}>
+                            {r.content}
+                          </Markdown>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           )}
         </div>
