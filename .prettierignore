@@ -1,5 +1,4 @@
 client/dist/
-package-lock.json
-client/package-lock.json
+pnpm-lock.yaml
 samples/
 docs/
