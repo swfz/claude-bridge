@@ -58,10 +58,12 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await shellDrawer.locator('.shell-drawer-close').click();
   await expect(shellDrawer).toHaveCount(0);
 
-  // ヘッダの Links で、会話に出てきた URL（本文・ツール入力・Artifact）の一覧がドロワーで開く
-  await page.locator('.thread-toggle', { hasText: 'Links' }).click();
-  const linkDrawer = page.locator('.link-drawer');
+  // ヘッダの Refs で、会話に出てきたリンクとファイルのドロワーが開く（既定はリンクタブ）
+  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  const linkDrawer = page.locator('.ref-drawer');
   await expect(linkDrawer).toBeVisible();
+  await expect(linkDrawer.locator('.ref-drawer-tab.active')).toContainText('リンク');
+  // 会話に出てきた URL（本文・ツール入力・Artifact）の一覧
   const linkRows = linkDrawer.locator('.link-row');
   await expect(linkRows).toHaveCount(3);
   const prUrl = 'https://github.com/swfz/claude-bridge/pull/1';
@@ -90,6 +92,20 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await linkRows.first().getByRole('button', { name: '会話へ' }).click();
   await expect(linkDrawer).toHaveCount(0);
   await expect(page.locator('[data-message-uuid="e2e-uuid-links"]')).toBeInViewport();
+
+  // 再度 Refs を開いてファイルタブに切り替えると、Claude が触ったファイルの一覧が出る
+  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  const fileDrawer = page.locator('.ref-drawer');
+  await expect(fileDrawer).toBeVisible();
+  await fileDrawer.locator('.ref-drawer-tab', { hasText: 'ファイル' }).click();
+  await expect(fileDrawer.locator('.ref-drawer-tab.active')).toContainText('ファイル');
+  // 切り替えても絞り込み欄にフォーカスが当たる
+  await expect(fileDrawer.locator('.link-drawer-filter, .file-drawer-filter').first()).toBeFocused();
+  const fileRows = fileDrawer.locator('.file-row');
+  expect(await fileRows.count()).toBeGreaterThan(0);
+  await expect(fileRows.filter({ hasText: 'README.md' }).locator('.file-badge', { hasText: '読 ×1' })).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(fileDrawer).toHaveCount(0);
 
   // 開いたセッションはサイドバーのタブとしても残る
   const tab = page.locator('.tab', { hasText: FIXTURE_TITLE });

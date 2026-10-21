@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { linksToMarkdown } from '../utils/links.js';
-import './LinkDrawer.css';
+import './LinkList.css';
 
 // 「コピーしました」を出しておく時間
 const COPIED_RESET_MS = 1500;
@@ -40,10 +40,10 @@ function isNonOkStatus(code) {
   return typeof code === 'number' && (code < 200 || code >= 300);
 }
 
-// セッション内でやり取りされた URL の一覧を右サイドのドロワーで見せる。
+// セッション内でやり取りされた URL の一覧の一覧（Refs ドロワーのタブの中身）。
 // links は utils/links.js の collectLinks() の結果（チャットの messages からクライアント側で抽出したもの）。
 // 各行はアンカー（label → WebFetch のタイトル → URL）、その下に URL が出てきた行の文脈、meta 行の順
-export default function LinkDrawer({ links, onJumpToMessage, onClose }) {
+export default function LinkList({ links, onJumpToMessage }) {
   const [filter, setFilter] = useState('');
   const [copied, setCopied] = useState(false);
   // 自分が渡した / Claude が探した の絞り込み（その場限りで保存しない）
@@ -55,16 +55,6 @@ export default function LinkDrawer({ links, onJumpToMessage, onClose }) {
     filterRef.current?.focus();
   }, []);
 
-  // Escape で閉じる（絞り込み欄にフォーカスがあっても閉じる）
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
 
   // コピー表示を戻すタイマー
   useEffect(() => {
@@ -93,22 +83,14 @@ export default function LinkDrawer({ links, onJumpToMessage, onClose }) {
       await navigator.clipboard.writeText(linksToMarkdown(visibleLinks));
       setCopied(true);
     } catch (err) {
-      console.warn('[LinkDrawer] クリップボードへのコピーに失敗しました', err);
+      console.warn('[LinkList] クリップボードへのコピーに失敗しました', err);
     }
   };
 
   const total = (links || []).length;
 
   return (
-    <div className="link-drawer-overlay" onClick={onClose}>
-      <div className="link-drawer" onClick={(e) => e.stopPropagation()}>
-        <div className="link-drawer-header">
-          <span className="link-drawer-title">リンク {total} 件</span>
-          <button className="link-drawer-close" onClick={onClose} title="閉じる (Esc)">
-            ×
-          </button>
-        </div>
-
+    <>
         <div className="link-drawer-toolbar">
           <input
             ref={filterRef}
@@ -188,7 +170,6 @@ export default function LinkDrawer({ links, onJumpToMessage, onClose }) {
             ))
           )}
         </div>
-      </div>
-    </div>
+    </>
   );
 }

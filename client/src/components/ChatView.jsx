@@ -346,7 +346,7 @@ export const ChatMessage = memo(function ChatMessage({
     );
   }
 
-  // WebFetch の結果はリンク一覧（LinkDrawer）のタイトル用。チャットには WebFetch の tool_use が
+  // WebFetch の結果はリンク一覧（LinkList）のタイトル用。チャットには WebFetch の tool_use が
   // すでに出ているので二重に描かない
   if (message.role === 'webfetch') return null;
 
