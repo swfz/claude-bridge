@@ -5,5 +5,7 @@ packages:
 minimumReleaseAge: 10080
 
 # node-pty はネイティブモジュールのビルド(install スクリプト)が必要
+# lefthook の postinstall(フックの自動インストール)は使わず、package.json の prepare で入れる
 allowBuilds:
+  lefthook: false
   node-pty: true

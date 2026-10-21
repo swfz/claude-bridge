@@ -16,7 +16,8 @@
     "setup:statusline": "node scripts/setup-statusline.js",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "git config --get core.hooksPath >/dev/null || lefthook install"
   },
   "dependencies": {
     "@xterm/headless": "^6.0.0",
@@ -31,6 +32,7 @@
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.11.0",
+    "lefthook": "2.2.2",
     "prettier": "3.9.6"
   },
   "engines": {

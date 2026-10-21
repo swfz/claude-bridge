@@ -20,6 +20,8 @@ pnpm setup:statusline  # レート制限表示用の statusLine tee を ~/.claud
 pnpm run dev:client    # Vite dev server（クライアントのホットリロード開発用。API はサーバー側を別途起動）
 pnpm run lint          # ESLint（CI でも実行）
 pnpm run format:check  # Prettier の整形チェック（CI でも実行）。整形するときは pnpm run format
+# コミット時は lefthook(lefthook.yml)がステージしたファイルに ESLint と Prettier --check をかける。
+# フックは pnpm install の prepare で .git/hooks に入る(core.hooksPath を設定している環境では入れない。そちらのフックから lefthook を呼ぶ)
 ```
 
 ## 前提ツール
