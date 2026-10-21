@@ -17,7 +17,7 @@ node-pty で新規セッションを起動する方式と、既存の tmux ペ�
 
 ## 前提条件
 
-- Node.js 24+
+- Node.js 24+(バージョンはリポジトリ直下の `.node-version` が正。CI もこのファイルを参照する)
 - Claude Code CLI (`claude`) がインストール済み
 - tmux ペイン接続を使う場合は tmux が起動中であること
 - node-pty のビルドに C++ コンパイラ (`gcc`/`g++`) と `make` が必要
