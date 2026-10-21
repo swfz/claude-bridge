@@ -36,12 +36,14 @@ export default defineConfig({
   // 常に直列実行にする（実際の利用も「一人のユーザーが一つのブラウザ」を想定しており妥当）。
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // リトライで失敗を隠すと flaky なテストが見えなくなるため、CI でもリトライしない
+  retries: 0,
   workers: 1,
   reporter: 'html',
   use: {
     baseURL: `http://localhost:${PORT}`,
-    trace: 'on-first-retry',
+    // リトライしないので「初回リトライ時に取る」設定ではトレースが残らない。失敗時だけ残す
+    trace: 'retain-on-failure',
   },
   projects: [
     {
