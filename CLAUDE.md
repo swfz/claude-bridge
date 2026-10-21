@@ -17,7 +17,33 @@ pnpm test:e2e     # Playwright による E2E スモークテスト（ビルド�
 pnpm install:all  # 全依存インストール
 pnpm setup:hooks       # agent view 連携フックを ~/.claude/settings.json に登録
 pnpm setup:statusline  # レート制限表示用の statusLine tee を ~/.claude/settings.json に登録
+pnpm run dev:client    # Vite dev server（クライアントのホットリロード開発用。API はサーバー側を別途起動）
+pnpm run lint          # ESLint（CI でも実行）
+pnpm run format:check  # Prettier の整形チェック（CI でも実行）。整形するときは pnpm run format
 ```
+
+## 前提ツール
+
+- **Node.js 24+** -- バージョンはリポジトリ直下の `.node-version` が正（CI も参照）。pnpm は `package.json` の `packageManager` に合わせる（`corepack enable` 等）
+- **gcc / g++ / make** -- `node-pty` のネイティブビルドに必須。`pnpm install` でビルドされる。Node を上げた後などに `node-pty` の読み込みで落ちたら `pnpm rebuild node-pty`
+- **tmux** -- 任意。tmux ペイン接続・「tmux で再開」を使うときだけ必要（テストは `mock.module` でモックするので不要）
+- **`claude` CLI** -- 任意。セッションの起動・resume（実行時）にだけ必要で、テスト・E2E では使わない
+- **`gh`** -- 任意。ホームのやり残し判定で PR のマージ状態を引くのに使う。無い・未ログインなら判定は `unknown`（完了扱い）に倒れる
+
+## 環境変数
+
+`.env` は読まない。必要なときだけ起動時に指定する。
+
+| 変数                             | 用途                                                                                                                                    | 既定値                       | 使う場面                  |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------- |
+| `PORT`                           | サーバーの待ち受けポート（`server/index.js`）                                                                                           | `3000`                       | 本番                      |
+| `E2E_PORT`                       | E2E 用 fixture サーバーのポート（`playwright.config.js`）。手元の 3199 が埋まっているとき逃がす                                         | `3199`                       | E2E                       |
+| `CLAUDE_BRIDGE_DIR`              | ブリッジのデータディレクトリ（inbox・レビュー・コメント・レート制限・ヒートマップのキャッシュ）。サーバー・フック・setup スクリプト共通 | `~/.claude-bridge`           | 本番 / テスト / E2E       |
+| `CLAUDE_BRIDGE_PROJECTS_DIR`     | Claude の JSONL の置き場（`CLAUDE_PROJECTS_DIR`）                                                                                       | `~/.claude/projects`         | E2E（fixture に差し替え） |
+| `CLAUDE_BRIDGE_SESSIONS_DIR`     | Claude のセッションステータスファイルの置き場（`<pid>.json`）                                                                           | `~/.claude/sessions`         | E2E（fixture に差し替え） |
+| `CLAUDE_BRIDGE_SHELL_TASKS_ROOT` | Bash 出力ファイル（`tasks/<taskId>.output`）の起点（`SHELL_TASKS_ROOT`）                                                                | `<os.tmpdir()>/claude-<uid>` | E2E（fixture に差し替え） |
+| `CLAUDE_BRIDGE_WATCH_INTERVAL`   | `scripts/hooks/bridge-watch.js` の inbox ポーリング間隔（秒）                                                                           | `5`                          | 本番（フック）            |
+| `CLAUDE_BRIDGE_DISABLE_GH`       | `1` で `gh` を呼ばず PR 状態を常に `unknown` にする                                                                                     | 未設定（`gh` を呼ぶ）        | テスト / E2E              |
 
 ## アーキテクチャ
 
