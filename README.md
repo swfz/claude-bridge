@@ -48,6 +48,8 @@ pnpm start
 | `pnpm build`            | クライアントのプロダクションビルド                                          |
 | `pnpm dev:client`       | Vite dev server（ホットリロード開発用）                                     |
 | `pnpm test`             | テスト実行                                                                  |
+| `pnpm lint`             | ESLint                                                                      |
+| `pnpm format:check`     | Prettier の整形チェック（整形は `pnpm format`）                             |
 | `pnpm install:all`      | ルート + クライアントの依存インストール                                     |
 | `pnpm setup:hooks`      | agent 連携フック（レビュー送信の受信側）を `~/.claude/settings.json` に登録 |
 | `pnpm setup:statusline` | レート制限表示用の statusLine tee を `~/.claude/settings.json` に登録       |
