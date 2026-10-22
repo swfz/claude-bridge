@@ -24,7 +24,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
       - run: pnpm run format:check
-      - run: pnpm test
+      # テストに加えて lines 90% のカバレッジ閾値を検査する
+      - run: pnpm run test:coverage
       - run: pnpm run build
 
   e2e:
