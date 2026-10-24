@@ -13,6 +13,7 @@ pnpm dev          # ビルド + サーバー起動 (http://localhost:3000)
 pnpm start        # サーバーのみ起動（ビルド済み前提）
 pnpm build        # クライアントビルド
 pnpm test         # テスト実行
+pnpm test:coverage # テスト + カバレッジ計測(server/ と client/src/utils/ の lines 90% 未満で失敗。CI はこちらを実行)
 pnpm test:e2e     # Playwright による E2E スモークテスト（ビルド→fixture サーバーで実行）
 pnpm install:all  # 全依存インストール
 pnpm setup:hooks       # agent view 連携フックを ~/.claude/settings.json に登録
