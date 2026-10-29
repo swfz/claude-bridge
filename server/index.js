@@ -415,6 +415,12 @@ function sessionKeyOf(msg) {
   return /^[\w-]+$/.test(key) ? key : null;
 }
 
+// ピンの対象（JSONL の uuid）。保存するだけだが、長さと文字種は絞っておく
+const PIN_EXCERPT_MAX = 300;
+function sanitizePinUuid(value) {
+  return typeof value === 'string' && /^[\w-]{1,128}$/.test(value) ? value : null;
+}
+
 // ping/pong で接続切れを検知
 const PING_INTERVAL = 30_000;
 const pingInterval = setInterval(() => {
@@ -858,6 +864,51 @@ wss.on('connection', (ws) => {
             comments,
           }),
         );
+        break;
+      }
+
+      // --- ピン（後から見返すメッセージのしおり。送信はしない）---
+      case 'get_pins': {
+        const key = sessionKeyOf(msg);
+        ws.send(
+          JSON.stringify({
+            type: 'pins_update',
+            sessionId: msg.sessionId,
+            pins: key ? storage.loadPins(key) : [],
+          }),
+        );
+        break;
+      }
+
+      case 'pin_message': {
+        // 対象は JSONL の uuid。抜粋は一覧表示用（メッセージが読み込まれていなくても中身が分かるように）
+        const key = sessionKeyOf(msg);
+        const messageUuid = sanitizePinUuid(msg.messageUuid);
+        if (!key || !messageUuid) break;
+        const pins = storage.loadPins(key);
+        if (!pins.some((p) => p.messageUuid === messageUuid)) {
+          pins.push({
+            messageUuid,
+            role: msg.role === 'human' ? 'human' : 'assistant',
+            // 一覧の見出し（サブエージェントの報告などは「You」ではなく送り手を出す）
+            label: typeof msg.label === 'string' ? msg.label.slice(0, 60) : null,
+            excerpt: typeof msg.excerpt === 'string' ? msg.excerpt.slice(0, PIN_EXCERPT_MAX) : '',
+            messageTimestamp: typeof msg.messageTimestamp === 'string' ? msg.messageTimestamp : null,
+            pinnedAt: new Date().toISOString(),
+          });
+          storage.savePins(key, pins);
+        }
+        ws.send(JSON.stringify({ type: 'pins_update', sessionId: msg.sessionId, pins }));
+        break;
+      }
+
+      case 'unpin_message': {
+        const key = sessionKeyOf(msg);
+        if (!key) break;
+        const current = storage.loadPins(key);
+        const pins = current.filter((p) => p.messageUuid !== msg.messageUuid);
+        if (pins.length !== current.length) storage.savePins(key, pins);
+        ws.send(JSON.stringify({ type: 'pins_update', sessionId: msg.sessionId, pins }));
         break;
       }
 

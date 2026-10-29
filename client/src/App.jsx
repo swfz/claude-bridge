@@ -34,6 +34,8 @@ import { pickNotifyTargets } from './utils/notifications.js';
 import { latestContextUsage } from './utils/contextUsage.js';
 import { collectLinks } from './utils/links.js';
 import { collectSessionFiles } from './utils/sessionFiles.js';
+import { pinExcerpt } from './utils/pins.js';
+import { humanSenderLabel } from './utils/messageSender.js';
 import './App.css';
 import { readonlyDeliveryState } from './utils/runningSessions.js';
 
@@ -141,6 +143,8 @@ export default function App() {
   const [threads, setThreads] = useState([]);
   // セッションに対して残すコメント（送信しない・参照専用）
   const [comments, setComments] = useState([]);
+  // ピン留めしたメッセージ（サーバーの pins-<sessionKey>.json）
+  const [pins, setPins] = useState([]);
   // セッション横断の pending review（Submit するまで溜める下書き）
   const [reviewItems, setReviewItems] = useState([]);
   const activeSessionIdRef = useRef(null);
@@ -401,6 +405,14 @@ export default function App() {
     return on('thread_update', (msg) => {
       if (msg.sessionId === activeSessionId) {
         setThreads(msg.threads);
+      }
+    });
+  }, [on, activeSessionId]);
+
+  useEffect(() => {
+    return on('pins_update', (msg) => {
+      if (msg.sessionId === activeSessionId) {
+        setPins(msg.pins);
       }
     });
   }, [on, activeSessionId]);
@@ -746,6 +758,7 @@ export default function App() {
     if (activeSessionId) {
       send({ type: 'get_threads', sessionId: activeSessionId });
       send({ type: 'get_comments', sessionId: activeSessionId, sessionKey });
+      send({ type: 'get_pins', sessionId: activeSessionId, sessionKey });
       send({ type: 'get_review', sessionId: activeSessionId, sessionKey });
     }
   }, [activeSessionId, sessionKey, send]);
@@ -1034,6 +1047,7 @@ export default function App() {
       setActiveSessionId(sessionId);
       setThreads([]);
       setComments([]);
+      setPins([]);
       setReviewItems([]);
       clearAttention(sessionId);
     },
@@ -1152,6 +1166,34 @@ export default function App() {
       if (activeSessionId && t) {
         send({ type: 'save_comment', sessionId: activeSessionId, sessionKey, text: t, anchor });
       }
+    },
+    [send, activeSessionId, sessionKey],
+  );
+
+  const handleTogglePin = useCallback(
+    (message, pin) => {
+      if (!activeSessionId || !message?.uuid) return;
+      if (pin) {
+        send({
+          type: 'pin_message',
+          sessionId: activeSessionId,
+          sessionKey,
+          messageUuid: message.uuid,
+          role: message.role,
+          label: message.role === 'human' ? humanSenderLabel(message.sender) : 'Claude',
+          excerpt: pinExcerpt(message.content),
+          messageTimestamp: message.timestamp || null,
+        });
+      } else {
+        send({ type: 'unpin_message', sessionId: activeSessionId, sessionKey, messageUuid: message.uuid });
+      }
+    },
+    [send, activeSessionId, sessionKey],
+  );
+
+  const handleUnpin = useCallback(
+    (messageUuid) => {
+      if (activeSessionId) send({ type: 'unpin_message', sessionId: activeSessionId, sessionKey, messageUuid });
     },
     [send, activeSessionId, sessionKey],
   );
@@ -1408,11 +1450,11 @@ export default function App() {
               <button
                 className={`toggle-btn thread-toggle ${showRefDrawer ? 'active' : ''}`}
                 onClick={() => setShowRefDrawer(!showRefDrawer)}
-                title="このセッションでやり取りしたリンクとファイル"
+                title="このセッションでやり取りしたリンク・ファイルと、ピン留めしたメッセージ"
               >
                 Refs
-                {links.length + sessionFiles.length > 0 && (
-                  <span className="thread-count-badge">{links.length + sessionFiles.length}</span>
+                {links.length + sessionFiles.length + pins.length > 0 && (
+                  <span className="thread-count-badge">{links.length + sessionFiles.length + pins.length}</span>
                 )}
               </button>
             </>
@@ -1553,6 +1595,8 @@ export default function App() {
                     onPreviewMarkdown={handlePreviewMarkdown}
                     onOpenFileReview={handleOpenFileReview}
                     onPickMessageForReview={handlePickMessageForReview}
+                    pins={pins}
+                    onTogglePin={handleTogglePin}
                     readonly={isReadonly}
                     sessionId={activeSessionId}
                   />
@@ -1682,9 +1726,12 @@ export default function App() {
         <RefDrawer
           links={links}
           files={sessionFiles}
+          pins={pins}
+          messages={activeMessages}
           cwd={activeSession?.cwd}
           onOpenPreview={handleOpenPreview}
           onJumpToMessage={handleJumpFromRefs}
+          onUnpin={handleUnpin}
           onClose={handleCloseRefDrawer}
         />
       )}

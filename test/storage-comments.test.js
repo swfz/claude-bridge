@@ -73,3 +73,23 @@ describe('Storage review draft (pending review の永続化)', () => {
     assert.deepEqual(storage.loadReviewDraft('rk3').items, []);
   });
 });
+
+describe('Storage pins (ピン留めの永続化)', () => {
+  let storage;
+  before(() => {
+    storage = new Storage();
+  });
+  after(() => {
+    rmSync(TMP, { recursive: true, force: true });
+  });
+
+  it('returns [] for an unknown key', () => {
+    assert.deepEqual(storage.loadPins('nope'), []);
+  });
+
+  it('round-trips pins for a key', () => {
+    const pins = [{ messageUuid: 'u1', role: 'assistant', excerpt: 'x', messageTimestamp: 't', pinnedAt: 'p' }];
+    storage.savePins('claude-uuid', pins);
+    assert.deepEqual(storage.loadPins('claude-uuid'), pins);
+  });
+});

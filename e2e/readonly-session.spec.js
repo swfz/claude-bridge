@@ -107,6 +107,25 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await page.keyboard.press('Escape');
   await expect(fileDrawer).toHaveCount(0);
 
+  // 📌 で返答をピン留めすると枠が付き、Refs の「ピン」タブから見返せる（「外す」で元に戻る）
+  const pinTarget = page.locator('.chat-message.assistant').first();
+  await pinTarget.locator('.pin-toggle').click();
+  await expect(pinTarget).toHaveClass(/pinned/);
+  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  const pinDrawer = page.locator('.ref-drawer');
+  await pinDrawer.locator('.ref-drawer-tab', { hasText: 'ピン' }).click();
+  const pinRows = pinDrawer.locator('.pin-row');
+  await expect(pinRows).toHaveCount(1);
+  await expect(pinRows.first()).toContainText('ヘルスチェックのエンドポイントを追加します');
+  await pinRows.first().getByRole('button', { name: '会話へ' }).click();
+  await expect(pinDrawer).toHaveCount(0);
+  await expect(pinTarget).toBeInViewport();
+  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  await pinDrawer.locator('.pin-row').first().getByRole('button', { name: '外す' }).click();
+  await expect(pinDrawer.locator('.pin-row')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(pinTarget).not.toHaveClass(/pinned/);
+
   // 開いたセッションはサイドバーのタブとしても残る
   const tab = page.locator('.tab', { hasText: FIXTURE_TITLE });
   await expect(tab).toHaveCount(1);
