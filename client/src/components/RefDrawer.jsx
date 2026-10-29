@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import LinkList from './LinkList.jsx';
 import FileList from './FileList.jsx';
+import PinList from './PinList.jsx';
 import './RefDrawer.css';
 
 const TAB_STORAGE_KEY = 'refDrawerTab';
-const TABS = ['links', 'files'];
+const TABS = ['links', 'files', 'pins'];
 
 function loadTab() {
   try {
@@ -16,10 +17,20 @@ function loadTab() {
   return 'links';
 }
 
-// このセッションでやり取りしたリンクとファイルを右サイドのドロワーで見せる（ヘッダの「Refs」トグル）。
-// 外枠（overlay・Esc・ヘッダのタブ）だけを持ち、中身は LinkList / FileList に任せる。
-// links / files は App がチャットの messages からクライアント側で抽出したもの
-export default function RefDrawer({ links, files, cwd, onOpenPreview, onJumpToMessage, onClose }) {
+// このセッションでやり取りしたリンク・ファイルと、ピン留めしたメッセージを右サイドのドロワーで見せる（ヘッダの「Refs」トグル）。
+// 外枠（overlay・Esc・ヘッダのタブ）だけを持ち、中身は LinkList / FileList / PinList に任せる。
+// links / files は App がチャットの messages からクライアント側で抽出したもの。pins はサーバー保存分
+export default function RefDrawer({
+  links,
+  files,
+  pins,
+  messages,
+  cwd,
+  onOpenPreview,
+  onJumpToMessage,
+  onUnpin,
+  onClose,
+}) {
   const [tab, setTab] = useState(loadTab);
 
   const selectTab = useCallback((next) => {
@@ -53,6 +64,7 @@ export default function RefDrawer({ links, files, cwd, onOpenPreview, onJumpToMe
 
   const linkCount = (links || []).length;
   const fileCount = (files || []).length;
+  const pinCount = (pins || []).length;
 
   return (
     <div className="ref-drawer-overlay" onClick={onClose}>
@@ -75,16 +87,26 @@ export default function RefDrawer({ links, files, cwd, onOpenPreview, onJumpToMe
             >
               ファイル {fileCount}
             </button>
+            <button
+              role="tab"
+              aria-selected={tab === 'pins'}
+              className={`ref-drawer-tab ${tab === 'pins' ? 'active' : ''}`}
+              onClick={() => selectTab('pins')}
+            >
+              ピン {pinCount}
+            </button>
           </div>
           <button className="ref-drawer-close" onClick={onClose} title="閉じる (Esc)">
             ×
           </button>
         </div>
 
-        {tab === 'links' ? (
-          <LinkList links={links} onJumpToMessage={onJumpToMessage} />
-        ) : (
+        {tab === 'links' && <LinkList links={links} onJumpToMessage={onJumpToMessage} />}
+        {tab === 'files' && (
           <FileList files={files} cwd={cwd} onOpenPreview={handleOpenPreview} onJumpToMessage={onJumpToMessage} />
+        )}
+        {tab === 'pins' && (
+          <PinList pins={pins} messages={messages} onJumpToMessage={onJumpToMessage} onUnpin={onUnpin} />
         )}
       </div>
     </div>

@@ -51,6 +51,23 @@ export class Storage {
     }
   }
 
+  // ピン留めしたメッセージ（後から見返す用のしおり）。コメントと同じく送信はせず、
+  // claudeSessionId 単位で保存して再オープン/resume をまたいで参照できるようにする。
+  savePins(sessionId, pins) {
+    const file = join(DATA_DIR, `pins-${sessionId}.json`);
+    writeFileSync(file, JSON.stringify(pins, null, 2));
+  }
+
+  loadPins(sessionId) {
+    try {
+      const file = join(DATA_DIR, `pins-${sessionId}.json`);
+      const pins = JSON.parse(readFileSync(file, 'utf-8'));
+      return Array.isArray(pins) ? pins : [];
+    } catch {
+      return [];
+    }
+  }
+
   // pending review（送信前に溜めた指摘）の下書き。Submit するまで保持し、
   // リロード/再オープン後も復元できるよう claudeSessionId 単位で永続化する。
   saveReviewDraft(sessionId, draft) {

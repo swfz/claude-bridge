@@ -15,6 +15,7 @@ import FilePreview from './FilePreview.jsx';
 import CodeBlock from './CodeBlock.jsx';
 import ArtifactStrip from './ArtifactStrip.jsx';
 import { humanSenderLabel } from '../utils/messageSender.js';
+import { pinnedUuidSet } from '../utils/pins.js';
 import './ChatView.css';
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
@@ -260,6 +261,8 @@ export const ChatMessage = memo(function ChatMessage({
   pickTarget,
   pickLine,
   expandCmd,
+  pinned,
+  onTogglePin,
 }) {
   const [expanded, setExpanded] = useState(false);
   // 範囲選択時に出すアクションメニュー（レビューに追加 / コメントに残す / スレッド）
@@ -430,7 +433,9 @@ export const ChatMessage = memo(function ChatMessage({
     <div
       className={`chat-message ${isHuman ? 'human' : 'assistant'} ${
         message.sender ? `sender-${message.sender.kind}` : ''
-      } ${isHistory ? 'history' : ''} ${pickTarget ? 'msg-pick-target' : ''} ${lineMode ? 'msg-line-mode' : ''}`}
+      } ${isHistory ? 'history' : ''} ${pickTarget ? 'msg-pick-target' : ''} ${lineMode ? 'msg-line-mode' : ''} ${
+        pinned ? 'pinned' : ''
+      }`}
       data-message-uuid={message.uuid || undefined}
     >
       <div className="chat-message-header">
@@ -443,6 +448,16 @@ export const ChatMessage = memo(function ChatMessage({
           {isHuman ? senderLabel : 'Claude'}
         </span>
         <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
+        {onTogglePin && message.uuid && (
+          <button
+            className={`pin-toggle ${pinned ? 'active' : ''}`}
+            onClick={() => onTogglePin(message, !pinned)}
+            title={pinned ? 'ピンを外す' : 'ピン留め（Refs の「ピン」から見返せる）'}
+            aria-pressed={!!pinned}
+          >
+            📌
+          </button>
+        )}
         {messageComments.length > 0 && (
           <button
             className="comment-marker"
@@ -623,6 +638,8 @@ export default function ChatView({
   onPreviewMarkdown,
   onOpenFileReview,
   onPickMessageForReview,
+  pins,
+  onTogglePin,
   readonly,
   sessionId,
 }) {
@@ -632,6 +649,9 @@ export default function ChatView({
 
   // 最下部にいる間だけ新着に追従する（上を読んでいる最中に引き戻さない）
   const { scrollRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(shown, sessionId);
+
+  // ピン留め済みの uuid。ChatMessage には真偽値だけ渡して memo を崩さない
+  const pinnedUuids = useMemo(() => pinnedUuidSet(pins), [pins]);
 
   // このセッションで公開した Artifact（URL ごとに 1 件）
   const artifacts = useMemo(() => collectArtifacts(messages), [messages]);
@@ -861,6 +881,8 @@ export default function ChatView({
                     : undefined
                 }
                 expandCmd={expandCmd?.uuid === msg.uuid ? expandCmd : undefined}
+                pinned={!!msg.uuid && pinnedUuids.has(msg.uuid)}
+                onTogglePin={onTogglePin}
               />
               {showDivider && <div className="history-divider">--- 過去の会話 / ここから新規 ---</div>}
             </div>
