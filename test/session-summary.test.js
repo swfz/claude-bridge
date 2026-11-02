@@ -224,6 +224,41 @@ describe('readSessionSummary', () => {
     ]);
   });
 
+  it('prefers the latest /rename title over ai-title, wherever it appears', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'cb-summary-'));
+    const file = join(dir, 's.jsonl');
+    // head (40 lines) にも tail にも入らない位置に置く
+    const filler = Array.from({ length: 60 }, (_, i) => userRecord(`作業 ${i}`));
+    const padding = { type: 'assistant', message: { content: [{ type: 'text', text: 'x'.repeat(140 * 1024) }] } };
+    await writeFile(
+      file,
+      jsonl([
+        { type: 'ai-title', aiTitle: 'とりあえず起動' },
+        ...filler,
+        { type: 'custom-title', customTitle: '古い名前', sessionId: 's' },
+        { type: 'custom-title', customTitle: '  タイトル更新の改善  ', sessionId: 's' },
+        padding,
+        userRecord('最後の指示'),
+      ]),
+    );
+    const summary = await readSessionSummary(file);
+    assert.equal(summary.title, 'タイトル更新の改善');
+  });
+
+  it('falls back to ai-title when the custom title is empty', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'cb-summary-'));
+    const file = join(dir, 's.jsonl');
+    await writeFile(
+      file,
+      jsonl([
+        { type: 'ai-title', aiTitle: 'ホーム改修' },
+        { type: 'custom-title', customTitle: '' },
+        userRecord('依頼'),
+      ]),
+    );
+    assert.equal((await readSessionSummary(file)).title, 'ホーム改修');
+  });
+
   it('returns an empty summary for a missing file', async () => {
     const summary = await readSessionSummary(join(tmpdir(), 'cb-nope.jsonl'));
     assert.equal(summary.title, '');
