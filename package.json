@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.13.0",
+  "packageManager": "pnpm@12.17.0",
   "scripts": {
     "dev": "pnpm run build && node server/index.js",
     "dev:client": "pnpm --filter ./client run dev",
