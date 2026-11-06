@@ -22,6 +22,7 @@ import { listShellTasks, readShellTaskOutput } from './shell-tasks.js';
 import { readRateLimits } from './rate-limits.js';
 import { listSlashCommands } from './slash-commands.js';
 import { getActivityCalendar, getActivityHeatmap, listActiveSessionIds } from './activity-heatmap.js';
+import { isSensitivePath } from './sensitive-paths.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -90,6 +91,11 @@ function validateSafePath(filePath) {
 function validatePreviewPath(filePath) {
   const safe = validateSafePath(filePath);
   if (safe.error) return safe;
+  // /preview は dotfiles を許可して配信するので、資格情報の置き場（~/.ssh、.env 等）は
+  // ここで明示的に拒否する（判定は server/sensitive-paths.js）
+  if (isSensitivePath(safe.canonical)) {
+    return { status: 403, error: 'Access denied: sensitive file' };
+  }
 
   try {
     // シンボリックリンクを辿らず検査（リンク先への脱出を防止）
@@ -122,7 +128,11 @@ app.get('/preview', (req, res) => {
   const ext = extname(result.canonical).toLowerCase();
   const mime = MIME_MAP[ext] || 'application/octet-stream';
   res.setHeader('Content-Type', mime);
-  res.sendFile(result.canonical);
+  // dotfiles は既定 'ignore'（ドット始まりのセグメントを含むパスを 404 にする）なので明示的に許可する。
+  // git worktree（.claude/worktrees/ 配下）のファイルがこれで開けなかった。
+  // 到達できる範囲は validatePreviewPath()（home / /tmp 配下・非シンボリックリンク・
+  // 機微なパスの拒否）で絞ってある
+  res.sendFile(result.canonical, { dotfiles: 'allow' });
 });
 
 // ファイル存在確認 (プレビューボタンを出すべきかの判定用)
