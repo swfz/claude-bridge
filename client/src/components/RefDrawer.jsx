@@ -106,7 +106,14 @@ export default function RefDrawer({
           <FileList files={files} cwd={cwd} onOpenPreview={handleOpenPreview} onJumpToMessage={onJumpToMessage} />
         )}
         {tab === 'pins' && (
-          <PinList pins={pins} messages={messages} onJumpToMessage={onJumpToMessage} onUnpin={onUnpin} />
+          <PinList
+            pins={pins}
+            messages={messages}
+            cwd={cwd}
+            onOpenPreview={handleOpenPreview}
+            onJumpToMessage={onJumpToMessage}
+            onUnpin={onUnpin}
+          />
         )}
       </div>
     </div>

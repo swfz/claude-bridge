@@ -66,6 +66,14 @@ describe('resolvePins', () => {
     assert.equal(b.excerpt, '保存した抜粋');
   });
 
+  it('読み込まれているメッセージは content に本文全体、未読込は null', () => {
+    const pins = [{ messageUuid: 'u1' }, { messageUuid: 'u2' }];
+    const messages = [{ uuid: 'u1', content: '| a |\n|---|\n| b |' }];
+    const [a, b] = resolvePins(pins, messages);
+    assert.equal(a.content, '| a |\n|---|\n| b |');
+    assert.equal(b.content, null);
+  });
+
   it('読み込まれていても本文が空なら保存した抜粋を使う', () => {
     const [a] = resolvePins([{ messageUuid: 'u1', excerpt: '保存' }], [{ uuid: 'u1', content: '' }]);
     assert.equal(a.excerpt, '保存');

@@ -50,7 +50,27 @@
   padding: 0 6px;
 }
 
-/* 抜粋は 3 行まで */
+/* 読み込み済みメッセージは Markdown 本文。長いものは折りたたむ */
+.pin-row-body {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.pin-row-body.pin-collapsed {
+  max-height: 200px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+
+.pin-row-body table {
+  display: block;
+  overflow-x: auto;
+}
+
+/* 未読込の抜粋は 3 行まで */
 .pin-row-excerpt {
   color: var(--text-primary);
   font-size: 13px;
@@ -70,6 +90,7 @@
 }
 
 .pin-row-jump,
+.pin-row-expand,
 .pin-row-unpin {
   background: none;
   border: 1px solid var(--border);
@@ -80,7 +101,13 @@
   padding: 2px 8px;
 }
 
-.pin-row-jump:hover {
+.pin-row-expand {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.pin-row-jump:hover,
+.pin-row-expand:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
