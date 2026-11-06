@@ -113,6 +113,79 @@ describe('getActivityHeatmap', () => {
     );
   });
 
+  it('counts the usage of one API response only once even when it spans several lines', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    const now = Date.now();
+    const today = noonIso(0, now);
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    // 1 回の応答が thinking / text / tool_use の 3 行に分かれ、各行に同じ usage がコピーされる。
+    // 間に tool_result（user）や attachment が挟まっても同じ応答として扱う
+    const same = (content) => ({
+      ...reply(today, usage(10, 20, 30, 40)),
+      message: { ...reply(today).message, id: 'msg_1', content, usage: usage(10, 20, 30, 40) },
+      requestId: 'req_1',
+    });
+    const other = {
+      ...reply(today, usage(1, 2, 3, 4)),
+      message: { ...reply(today).message, id: 'msg_2', usage: usage(1, 2, 3, 4) },
+      requestId: 'req_2',
+    };
+    await writeFile(
+      join(dir, '-home-me-a', 's1.jsonl'),
+      jsonl([
+        same([{ type: 'thinking', thinking: '…' }]),
+        same([{ type: 'text', text: 'はい' }]),
+        same([{ type: 'tool_use', id: 'x', name: 'Read', input: {} }]),
+        toolResult(today),
+        { type: 'attachment', timestamp: today },
+        same([{ type: 'tool_use', id: 'y', name: 'Read', input: {} }]),
+        other,
+      ]),
+    );
+
+    const day = findDay(await getActivityHeatmap({ days: 7, dir, cacheFile, now }), dateKey(new Date(now)));
+    // 応答数は行ごと（従来どおり）、トークンは応答ごと
+    assert.equal(day.replies, 5);
+    assert.deepEqual(
+      { input: day.inputTokens, output: day.outputTokens, create: day.cacheCreationTokens, read: day.cacheReadTokens },
+      { input: 11, output: 22, create: 33, read: 44 },
+    );
+  });
+
+  it('does not double count a response whose lines straddle an incremental scan', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    const now = Date.now();
+    const today = noonIso(0, now);
+    const file = join(dir, '-home-me-a', 's1.jsonl');
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    const line = {
+      ...reply(today, usage(10, 20)),
+      message: { ...reply(today).message, id: 'msg_1', usage: usage(10, 20) },
+      requestId: 'req_1',
+    };
+    await writeFile(file, jsonl([line]));
+    const first = await getActivityHeatmap({ days: 7, dir, cacheFile, now });
+    assert.equal(findDay(first, dateKey(new Date(now))).tokens, 30);
+
+    // 同じ応答の続きの行が後から書き足されても、キャッシュが前回のキーを覚えているので足さない
+    resetActivityHeatmapState();
+    await appendFile(file, jsonl([line]));
+    const second = await getActivityHeatmap({ days: 7, dir, cacheFile, now });
+    assert.equal(findDay(second, dateKey(new Date(now))).replies, 2);
+    assert.equal(findDay(second, dateKey(new Date(now))).tokens, 30);
+  });
+
+  it('keeps summing every line when records carry no message.id (old format)', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    const now = Date.now();
+    const today = noonIso(0, now);
+    await mkdir(join(dir, '-home-me-a'), { recursive: true });
+    await writeFile(join(dir, '-home-me-a', 's1.jsonl'), jsonl([reply(today, usage(1, 1)), reply(today, usage(1, 1))]));
+
+    const day = findDay(await getActivityHeatmap({ days: 7, dir, cacheFile, now }), dateKey(new Date(now)));
+    assert.equal(day.tokens, 4);
+  });
+
   it('includes subagent transcripts', async () => {
     const { dir, cacheFile } = await makeEnv();
     const now = Date.now();

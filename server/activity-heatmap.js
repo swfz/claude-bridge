@@ -20,7 +20,8 @@ import { turnPrompt } from './session-turns.js';
 
 // 2: 週間カレンダー用に 10 分枠の集計（slots）を追加
 // 3: カレンダーの点（指示した時刻）用に、人の指示の時刻を分単位で持つ（prompts）
-const CACHE_VERSION = 3;
+// 4: 同じ API 応答の行を 1 回だけ数えるため、最後に加算した応答のキー（lastUsageKey）を持つ
+const CACHE_VERSION = 4;
 const MINUTE_MS = 60 * 1000;
 const CACHE_FILE = join(DATA_DIR, 'activity-heatmap.json');
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -134,6 +135,16 @@ function isUserPrompt(record) {
   return content.some((block) => block?.type === 'text');
 }
 
+// 1 回の API 応答は content ブロック（thinking / text / tool_use …）ごとに別行で書かれ、
+// 各行の message.usage には応答全体の usage がそのままコピーされる。行ごとに足すと
+// ツールを並列に呼ぶ応答ほど何倍にも数えるので、(message.id, requestId) が同じ行は
+// 最初の 1 行だけ加算する（ccusage などと同じ名寄せ）。message.id の無い古い形式は null。
+function usageKeyOf(record) {
+  const id = record.message?.id;
+  if (typeof id !== 'string' || !id) return null;
+  return `${id}\t${typeof record.requestId === 'string' ? record.requestId : ''}`;
+}
+
 // 1 行を日別集計と 10 分枠の集計に足す
 function accumulateLine(line, entry, dateKeyOf) {
   const { daily, slots } = entry;
@@ -172,6 +183,11 @@ function accumulateLine(line, entry, dateKeyOf) {
   }
   const usage = record.message?.usage;
   if (!usage) return;
+  // 同じ応答の行は連続して書かれる（間に挟まるのは tool_result などの非 assistant 行）ので、
+  // 直前に加算したキーを覚えておけば足りる。キーが無い行は従来どおり毎回足す
+  const usageKey = usageKeyOf(record);
+  if (usageKey && usageKey === entry.lastUsageKey) return;
+  entry.lastUsageKey = usageKey;
   cell[INPUT] += usage.input_tokens || 0;
   cell[OUTPUT] += usage.output_tokens || 0;
   cell[CACHE_CREATE] += usage.cache_creation_input_tokens || 0;
@@ -265,8 +281,10 @@ async function refreshDaily({ dir, cacheFile }) {
           daily: { ...cached.daily },
           slots: { ...cached.slots },
           prompts: [...(cached.prompts || [])],
+          // 差分走査の切れ目が同じ応答の途中に来ても二重に足さないよう引き継ぐ
+          lastUsageKey: cached.lastUsageKey ?? null,
         }
-      : { offset: 0, daily: {}, slots: {}, prompts: [] };
+      : { offset: 0, daily: {}, slots: {}, prompts: [], lastUsageKey: null };
 
     if (entry.offset < file.size) {
       try {
