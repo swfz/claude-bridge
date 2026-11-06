@@ -279,7 +279,7 @@ TUI に出る「番号つきの選択肢」をブラウザから選べるよう�
 
 ## セキュリティ
 
-- `/preview` エンドポイント: `path.resolve()` で正規化、`lstatSync()` でシンボリックリンク拒否
+- `/preview` エンドポイント: `path.resolve()` で正規化、`lstatSync()` でシンボリックリンク拒否。`res.sendFile()` は `dotfiles: 'allow'` を明示する（既定の `'ignore'` だと `.claude/worktrees/` 配下＝git worktree のファイルが 404 になる。到達範囲はサンドボックス判定で絞っている）。代わりに `sensitive-paths.js` の `isSensitivePath()` が資格情報の置き場（`.ssh` / `.aws` / `.gnupg` / `.kube` / `.docker` / `.azure` の配下、`.netrc` / `.git-credentials` / `.npmrc` / `.pypirc` / `.credentials.json` / `.env*`、`.config/gh` / `.config/gcloud` / `.git/config` など。比較は小文字化してから）を 403 で拒否する（`/file-exists` も同じ判定なのでボタンも出ない）
 - tmux コマンド: paneId は `validatePaneId()` で `%<数字>` 形式を検証してからシェルに渡す
 - `escapeForShell()` でテキストをシングルクォートエスケープ
 - 選択肢プロンプトへ送るキーは `choice-keys.js` のホワイトリストのみ（数字1桁と `Enter` / `Escape` / `Tab` / `BTab` / `Space` / 矢印）。tmux では数字を `-l` でリテラル送信し、それ以外はキー名として渡す
