@@ -219,7 +219,7 @@ function MdAnchor({ href, children, node, ...props }) {
 
 const MARKDOWN_COMPONENTS = { code: MdCode, a: MdAnchor };
 
-function MarkdownContent({ content, sessionCwd, onOpenPreview, onOpenFileReview }) {
+export function MarkdownContent({ content, sessionCwd, onOpenPreview, onOpenFileReview }) {
   const processed = useMemo(() => preprocessFileUrls(content), [content]);
   const handlers = useMemo(
     () => ({ sessionCwd, onOpenPreview, onOpenFileReview }),

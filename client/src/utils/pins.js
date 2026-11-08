@@ -27,6 +27,11 @@ export function resolvePins(pins, messages) {
   for (const m of messages || []) if (m?.uuid) byUuid.set(m.uuid, m);
   return sortPins(pins).map((p) => {
     const m = byUuid.get(p.messageUuid);
-    return { ...p, loaded: !!m, excerpt: m ? pinExcerpt(m.content) || p.excerpt : p.excerpt };
+    return {
+      ...p,
+      loaded: !!m,
+      excerpt: m ? pinExcerpt(m.content) || p.excerpt : p.excerpt,
+      content: m ? m.content || '' : null,
+    };
   });
 }
