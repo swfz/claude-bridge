@@ -5,6 +5,7 @@ import { existsSync, lstatSync, readdirSync } from 'fs';
 import { extname, join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { SessionManager, ReadonlySessionManager } from './session.js';
+import { resolveResumeCwd, isValidProjectDir } from './resume-cwd.js';
 import { Storage } from './storage.js';
 import { ThreadStore } from './thread-store.js';
 import { listClaudeSessions, listRecentSessions, loadSessionHistory } from './claude-sessions.js';
@@ -354,6 +355,11 @@ function allSessions() {
 
 function broadcastSessionList() {
   broadcast({ type: 'session_list', sessions: allSessions() });
+}
+
+// resume 時に cwd を元リポジトリへ差し替えたことを知らせる文言（home_notice）
+function relocatedNotice({ originalCwd, cwd }) {
+  return `worktree ${originalCwd} が見つからないため、元のリポジトリ ${cwd} で再開しました`;
 }
 
 // 閉じた WebSocket への送信は 'error' を emit してプロセスを落とし得るので、
@@ -1035,7 +1041,27 @@ wss.on('connection', (ws) => {
       }
 
       case 'resume_session': {
-        const resumeCwd = msg.cwd || process.env.HOME;
+        // cwd が消えている（worktree 削除済み）と node-pty もホームで起動してしまうので先に確かめる
+        let resumeCwd = process.env.HOME;
+        if (msg.cwd) {
+          try {
+            const resolvedCwd = await resolveResumeCwd({
+              cwd: msg.cwd,
+              claudeSessionId: msg.claudeSessionId,
+              projectDir: msg.projectDir,
+            });
+            resumeCwd = resolvedCwd.cwd;
+            if (resolvedCwd.relocated) {
+              console.log(`resume_session: worktree が消えているので ${resolvedCwd.originalCwd} → ${resumeCwd} で再開`);
+              sendTo(ws, { type: 'home_notice', message: relocatedNotice(resolvedCwd) });
+            }
+          } catch (e) {
+            const message = `再開できませんでした: ${e.message}`;
+            sendTo(ws, { type: 'home_error', message });
+            sendTo(ws, { type: 'error', message });
+            break;
+          }
+        }
         const session = sessionManager.createSessionWithArgs({
           name: msg.name || `Resume: ${msg.claudeSessionId.slice(0, 8)}`,
           cwd: resumeCwd,
@@ -1171,13 +1197,7 @@ wss.on('connection', (ws) => {
         // ホームの「セッション詳細」。JSONL を全文読むので、パネルを開いたときだけ呼ばれる。
         // パスはクライアントから受け取らず、検証した projectDir と sessionId から組み立てる
         const { sessionId, projectDir } = msg;
-        if (
-          typeof sessionId !== 'string' ||
-          !/^[\w-]+$/.test(sessionId) ||
-          typeof projectDir !== 'string' ||
-          !/^[\w.-]+$/.test(projectDir) ||
-          projectDir.startsWith('..')
-        ) {
+        if (typeof sessionId !== 'string' || !/^[\w-]+$/.test(sessionId) || !isValidProjectDir(projectDir)) {
           ws.send(JSON.stringify({ type: 'session_turns', sessionId, error: 'セッションの指定が不正です' }));
           break;
         }
@@ -1227,23 +1247,40 @@ wss.on('connection', (ws) => {
         // window ができた時点でタブを開き、claude の起動を確かめるまで status を 'starting' にする
         // （シェルの準備待ちに数秒かかるため）。起動後は refreshStatuses が pid を
         // バックフィルしてステータスファイルの値（idle 等）に置き換える。
+        // tmux の `new-window -c` は存在しないディレクトリだと黙ってホームに落ちるので、
+        // cwd は resolveResumeCwd で確かめてから渡す（worktree が消えていれば元リポジトリへ）。
         let resumedSession = null;
-        resumeInTmuxWindow({
-          claudeSessionId: msg.claudeSessionId,
-          cwd: msg.cwd,
-          onWindowCreated: (pane) => {
-            resumedSession = attachTmuxPaneAsSession(ws, {
-              paneId: pane.paneId,
-              name: msg.name || pane.windowName,
-              cwd: msg.cwd,
-              target: pane.target,
-              // claude はシェル経由で起動するので pid はまだ分からない
-              claudePid: null,
+        try {
+          let cwd = msg.cwd;
+          if (cwd) {
+            const resolvedCwd = await resolveResumeCwd({
+              cwd,
               claudeSessionId: msg.claudeSessionId,
-              status: 'starting',
+              projectDir: msg.projectDir,
             });
-          },
-        }).catch((e) => {
+            cwd = resolvedCwd.cwd;
+            if (resolvedCwd.relocated) {
+              console.log(`resume_in_tmux: worktree が消えているので ${resolvedCwd.originalCwd} → ${cwd} で再開`);
+              sendTo(ws, { type: 'home_notice', message: relocatedNotice(resolvedCwd) });
+            }
+          }
+          await resumeInTmuxWindow({
+            claudeSessionId: msg.claudeSessionId,
+            cwd,
+            onWindowCreated: (pane) => {
+              resumedSession = attachTmuxPaneAsSession(ws, {
+                paneId: pane.paneId,
+                name: msg.name || pane.windowName,
+                cwd,
+                target: pane.target,
+                // claude はシェル経由で起動するので pid はまだ分からない
+                claudePid: null,
+                claudeSessionId: msg.claudeSessionId,
+                status: 'starting',
+              });
+            },
+          });
+        } catch (e) {
           console.error('resume_in_tmux failed:', e.message);
           const message = `tmux で再開できませんでした: ${e.message}`;
           // タブを開いた後の失敗はタブ側（状態ドットとチャット）で見せる
@@ -1253,7 +1290,7 @@ wss.on('connection', (ws) => {
             sendTo(ws, { type: 'error', message });
           }
           sendTo(ws, { type: 'home_error', message });
-        });
+        }
         break;
       }
 

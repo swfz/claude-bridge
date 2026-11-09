@@ -52,6 +52,19 @@
   background: rgba(192, 82, 82, 0.12);
 }
 
+/* ホームへの情報（worktree が消えていたので元リポジトリで再開した等）。エラーではないので控えめな色にする */
+.home-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-secondary);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-secondary) 10%, transparent);
+}
+
 .home-error-text {
   flex: 1;
   font-size: 12px;
