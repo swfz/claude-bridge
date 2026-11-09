@@ -183,6 +183,24 @@ export function detectTurnState(records) {
   return sawTurnEnd ? 'ended' : null;
 }
 
+// `claude -w`（worktree）で起動したセッションの「元のリポジトリ」の cwd。
+// 終了時に worktree が clean だと Claude Code が worktree ごと消し、`relocated` に戻り先を書く。
+// それが無ければセッション中の `worktree-state.worktreeSession.originalCwd` を使う。
+// resume で消えた worktree のパスを渡すと tmux / node-pty がホームに落ちるので、その差し替え先になる
+export function findRelocatedCwd(records) {
+  for (let i = records.length - 1; i >= 0; i--) {
+    const record = records[i];
+    if (record.type === 'relocated' && typeof record.relocatedCwd === 'string' && record.relocatedCwd) {
+      return record.relocatedCwd;
+    }
+  }
+  for (let i = records.length - 1; i >= 0; i--) {
+    const originalCwd = records[i].type === 'worktree-state' ? records[i].worktreeSession?.originalCwd : undefined;
+    if (typeof originalCwd === 'string' && originalCwd) return originalCwd;
+  }
+  return '';
+}
+
 // 末尾行群から: 直近のユーザー指示 / 直近のアシスタント発話 / 最終更新時刻
 export function summarizeTail(lines) {
   const records = parseLines(lines);
@@ -221,6 +239,7 @@ export function summarizeTail(lines) {
     }
   }
   return {
+    relocatedCwd: findRelocatedCwd(records),
     lastUserMessage: lastUserMessage.slice(0, TEXT_MAX),
     lastAssistantMessage: lastAssistantMessage.slice(0, TEXT_MAX),
     lastAssistantQuestion: endsWithQuestion(lastAssistantText || ''),
@@ -236,6 +255,7 @@ const EMPTY_SUMMARY = {
   firstUserMessage: '',
   gitBranch: '',
   cwd: '',
+  relocatedCwd: '',
   lastUserMessage: '',
   lastAssistantMessage: '',
   lastAssistantQuestion: false,

@@ -267,6 +267,68 @@ describe('readSessionSummary', () => {
   });
 });
 
+describe('summarizeTail relocatedCwd', () => {
+  const worktreeState = (originalCwd) => ({
+    type: 'worktree-state',
+    worktreeSession: originalCwd
+      ? { originalCwd, worktreePath: `${originalCwd}/.claude/worktrees/x`, worktreeBranch: 'x', originalBranch: 'main' }
+      : null,
+  });
+
+  it('prefers the last relocated record', () => {
+    const lines = jsonl([
+      worktreeState('/repo-a'),
+      userRecord('作業'),
+      { type: 'relocated', relocatedCwd: '/repo-old' },
+      { type: 'relocated', relocatedCwd: '/repo-b' },
+      worktreeState(null),
+    ]).split('\n');
+    assert.equal(summarizeTail(lines).relocatedCwd, '/repo-b');
+  });
+
+  it('falls back to worktree-state originalCwd', () => {
+    const lines = jsonl([worktreeState('/repo-a'), userRecord('作業'), worktreeState(null)]).split('\n');
+    assert.equal(summarizeTail(lines).relocatedCwd, '/repo-a');
+  });
+
+  it('is empty without either record', () => {
+    assert.equal(summarizeTail(jsonl([userRecord('作業')]).split('\n')).relocatedCwd, '');
+  });
+});
+
+describe('readSessionSummary relocatedCwd', () => {
+  const write = async (records) => {
+    const dir = await mkdtemp(join(tmpdir(), 'cb-summary-'));
+    const file = join(dir, 's.jsonl');
+    await writeFile(file, jsonl(records));
+    return file;
+  };
+
+  it('carries the relocated cwd', async () => {
+    const file = await write([
+      userRecord('作業', { cwd: '/repo/.claude/worktrees/x' }),
+      { type: 'relocated', relocatedCwd: '/repo' },
+      { type: 'worktree-state', worktreeSession: null },
+    ]);
+    const summary = await readSessionSummary(file);
+    assert.equal(summary.cwd, '/repo/.claude/worktrees/x');
+    assert.equal(summary.relocatedCwd, '/repo');
+  });
+
+  it('uses worktree-state originalCwd when there is no relocated record', async () => {
+    const file = await write([
+      userRecord('作業'),
+      { type: 'worktree-state', worktreeSession: { originalCwd: '/repo', worktreePath: '/repo/.claude/worktrees/x' } },
+    ]);
+    assert.equal((await readSessionSummary(file)).relocatedCwd, '/repo');
+  });
+
+  it('is empty for a plain session and a missing file', async () => {
+    assert.equal((await readSessionSummary(await write([userRecord('作業')]))).relocatedCwd, '');
+    assert.equal((await readSessionSummary(join(tmpdir(), 'cb-nope.jsonl'))).relocatedCwd, '');
+  });
+});
+
 describe('readSessionSummaryFor', () => {
   it('resolves the JSONL path from cwd and sessionId', async () => {
     const projects = await mkdtemp(join(tmpdir(), 'cb-projects-'));

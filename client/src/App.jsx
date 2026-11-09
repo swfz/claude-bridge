@@ -90,6 +90,8 @@ export default function App() {
   const calendarRequestRef = useRef(null);
   // ホーム画面の操作エラー（tmux 再開の失敗など）。チャット欄には出せないのでバナーで見せる
   const [homeError, setHomeError] = useState(null);
+  // ホーム画面への情報（worktree が消えていたので元リポジトリで再開した、など）。エラーではない
+  const [homeNotice, setHomeNotice] = useState(null);
   // セッションごとの選択肢プロンプト（id -> {prompt, waitingFor}）。
   // JSONL には回答後にしか出ないので、サーバーが画面から読んだものをそのまま持つ。
   const [choicePrompts, setChoicePrompts] = useState({});
@@ -286,6 +288,10 @@ export default function App() {
   // ホーム画面の操作エラー（tmux window 作成の失敗など）
   useEffect(() => {
     return on('home_error', (msg) => setHomeError(msg.message));
+  }, [on]);
+
+  useEffect(() => {
+    return on('home_notice', (msg) => setHomeNotice(msg.message));
   }, [on]);
 
   // TUI に出ている選択肢プロンプト（AskUserQuestion / ツール許可 / trust 確認）。
@@ -842,7 +848,9 @@ export default function App() {
         projectDir,
       });
       // セッションを resume で起動
-      send({ type: 'resume_session', claudeSessionId, name, cwd });
+      setHomeError(null);
+      setHomeNotice(null);
+      send({ type: 'resume_session', claudeSessionId, name, cwd, projectDir });
       setShowNewSession(false);
       setClaudeSessions(null);
     },
@@ -852,9 +860,10 @@ export default function App() {
   // tmux に新しい window を作って `claude --resume` で起こす。
   // PTY 直起動（handleResumeSession）と違い、ブリッジを落としても生き残る。
   const handleResumeInTmux = useCallback(
-    ({ claudeSessionId, name, cwd }) => {
+    ({ claudeSessionId, name, cwd, projectDir }) => {
       setHomeError(null);
-      send({ type: 'resume_in_tmux', claudeSessionId, name, cwd });
+      setHomeNotice(null);
+      send({ type: 'resume_in_tmux', claudeSessionId, name, cwd, projectDir });
       setShowNewSession(false);
     },
     [send],
@@ -1377,6 +1386,7 @@ export default function App() {
               claudeSessionId: activeSession.claudeSessionId,
               name: activeSession.name,
               cwd: activeSession.cwd,
+              projectDir: activeSession.projectDir,
             });
           }}
         >
@@ -1558,8 +1568,11 @@ export default function App() {
                   onRequestSessionTurns={requestSessionTurns}
                   error={homeError}
                   onDismissError={() => setHomeError(null)}
+                  notice={homeNotice}
+                  onDismissNotice={() => setHomeNotice(null)}
                   onRefresh={() => {
                     setHomeError(null);
+                    setHomeNotice(null);
                     send({ type: 'list_running_sessions' });
                     send({
                       type: 'list_recent_sessions',

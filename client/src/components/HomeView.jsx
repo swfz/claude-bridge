@@ -170,6 +170,8 @@ export default function HomeView({
   onRequestSessionTurns,
   error,
   onDismissError,
+  notice,
+  onDismissNotice,
   onRefresh,
   onSelectTab,
   onAttachTmux,
@@ -258,6 +260,7 @@ export default function HomeView({
       claudeSessionId: r.sessionId,
       name: tabName(r),
       cwd: r.cwd,
+      projectDir: r.projectDir,
     });
   };
 
@@ -376,6 +379,15 @@ export default function HomeView({
         <div className="home-error">
           <span className="home-error-text">{error}</span>
           <button className="home-error-close" onClick={onDismissError} title="閉じる">
+            ×
+          </button>
+        </div>
+      )}
+
+      {notice && (
+        <div className="home-notice">
+          <span className="home-error-text">{notice}</span>
+          <button className="home-error-close" onClick={onDismissNotice} title="閉じる">
             ×
           </button>
         </div>
