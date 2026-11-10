@@ -116,6 +116,52 @@ describe('listSubagentTasks', () => {
     assert.equal(tasks[0].status, 'completed');
   });
 
+  it('judges a nested subagent by the JSONL of the agent that spawned it', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    // 孫の tool_result は本体ではなく、呼んだ側（チームメイト）の JSONL に書かれる
+    await writeAgent(subagents, 'aimpl-1', { agentType: 'impl', description: '実装' }, [
+      ...agentRecords,
+      toolResult('toolu_nested_done'),
+    ]);
+    await writeAgent(
+      subagents,
+      'n1',
+      { description: '終わった孫', toolUseId: 'toolu_nested_done', parentAgentId: 'aimpl-1' },
+      agentRecords,
+    );
+    await writeAgent(
+      subagents,
+      'n2',
+      { description: '動いている孫', toolUseId: 'toolu_nested_open', parentAgentId: 'aimpl-1' },
+      agentRecords,
+    );
+
+    const tasks = await listSubagentTasks({ projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir });
+    const statusOf = (id) => tasks.find((t) => t.agentId === id).status;
+    assert.equal(statusOf('n1'), 'completed');
+    assert.equal(statusOf('n2'), 'running');
+  });
+
+  it('falls back to the session JSONL when parentAgentId is not a valid agent id', async () => {
+    const { projectsDir, subagents } = await setupProject({ parentRecords: [toolResult('toolu_bad_parent')] });
+    await writeAgent(subagents, 'p1', {
+      description: '不正な親 ID',
+      toolUseId: 'toolu_bad_parent',
+      parentAgentId: '../../etc/x',
+    });
+
+    const tasks = await listSubagentTasks({ projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir });
+    assert.equal(tasks[0].status, 'completed');
+  });
+
+  it('reports completed when the meta says finished, even without a tool_result', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'f1', { description: '終了済み', toolUseId: 'toolu_nowhere', finished: true });
+
+    const tasks = await listSubagentTasks({ projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir });
+    assert.equal(tasks[0].status, 'completed');
+  });
+
   it('picks up a tool_result appended after the first call (incremental scan)', async () => {
     const { projectsDir, subagents, parentJsonl } = await setupProject({
       parentRecords: [{ type: 'assistant', message: { role: 'assistant', content: '作業中' } }],
