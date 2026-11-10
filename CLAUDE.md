@@ -121,7 +121,7 @@ pnpm run format:check  # Prettier の整形チェック（CI でも実行）。�
 セッションが起動したサブエージェント（Agent ツール）を入力欄直上のチップで並べ、クリックで右サイドのドロワーに会話を出す。
 
 - **データ源は `~/.claude/projects/<projectDir>/<claudeSessionId>/subagents/`**。`agent-<agentId>.meta.json`（`{agentType, description, toolUseId, spawnDepth}`）が一覧、`agent-<agentId>.jsonl` が会話（通常セッションと同じ形式・`isSidechain: true`）。ファイルを読むだけなので **readonly セッションでも動く**（PTY 不要）
-- **完了判定は親 JSONL の tool_result**。サブエージェントが終わると親（`<claudeSessionId>.jsonl`）に meta の `toolUseId` を `tool_use_id` として持つ tool_result が書かれる。あれば `completed`、無ければ `running`。親 JSONL は数十 MB になり得るので `Map<jsonlPath, {offset, ids}>` に溜め、**追記分（前回オフセット以降）だけ読み足す**（末尾の書きかけ行は最後の改行までで打ち切る）。`toolUseId` を持たない古い meta は判定できないので completed 扱い
+- **完了判定は親 JSONL の tool_result**。サブエージェントが終わると親（`<claudeSessionId>.jsonl`）に meta の `toolUseId` を `tool_use_id` として持つ tool_result が書かれる。あれば `completed`、無ければ `running`。親 JSONL は数十 MB になり得るので `Map<jsonlPath, {offset, ids}>` に溜め、**追記分（前回オフセット以降）だけ読み足す**（末尾の書きかけ行は最後の改行までで打ち切る）。`toolUseId` を持たない meta（古い形式・`taskKind: in_process_teammate` のチームメイト）は判定できないので completed 扱い。**tool_result が書かれるのは「その Agent ツールを呼んだ側」の JSONL**なので、サブエージェント（チームメイト等）が起こした孫（meta に `parentAgentId`）は本体ではなく `agent-<parentAgentId>.jsonl` を見る（本体だけ見ると永久に running になる）。meta に `finished: true` があればそれだけで completed
 - WS メッセージ: `list_subagent_tasks {sessionId}` → `subagent_tasks {tasks}` / `get_subagent_transcript {sessionId, agentId}` → `subagent_transcript {agentId, status, messages}`。読み先（`projectDir` / `claudeSessionId`）は `resolveClaudeTarget()` が readonly セッション自身か `jsonlWatcher.getSessionMeta()` から解決する（解決できなければ `tasks: []`）
 - 一覧は作業中タブを見ている間だけ 5 秒間隔でポーリング（ホーム表示中は止める）。ドロワーは開いている agent が `running` の間だけ 4 秒間隔で会話を取り直し、タブ切替・ホーム表示で閉じる
 

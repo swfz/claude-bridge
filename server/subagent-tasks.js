@@ -91,7 +91,21 @@ export async function listSubagentTasks({ projectDir, claudeSessionId, projectsD
     return [];
   }
 
-  const doneIds = await collectToolResultIds(join(projectsDir, projectDir, `${claudeSessionId}.jsonl`));
+  const sessionJsonl = join(projectsDir, projectDir, `${claudeSessionId}.jsonl`);
+
+  // 完了の tool_result は「その Agent ツールを呼んだ側」の JSONL に書かれる。
+  // セッション本体が呼んだものは本体の JSONL、サブエージェント（チームメイト等）が呼んだ
+  // 孫は meta.parentAgentId の agent-<id>.jsonl。本体だけを見ると孫は永久に running になる。
+  const isDone = async (meta) => {
+    // 新しい Claude Code は終了時に meta へ finished: true を書く
+    if (meta.finished === true) return true;
+    // toolUseId が無い形式（古い meta・チームメイト）は判定できないので完了扱いにする
+    if (!meta.toolUseId) return true;
+    const parent = meta.parentAgentId;
+    const callerJsonl =
+      typeof parent === 'string' && AGENT_ID_RE.test(parent) ? join(dir, `agent-${parent}.jsonl`) : sessionJsonl;
+    return (await collectToolResultIds(callerJsonl)).has(meta.toolUseId);
+  };
 
   const tasks = [];
   for (const file of metaFiles) {
@@ -122,8 +136,7 @@ export async function listSubagentTasks({ projectDir, claudeSessionId, projectsD
       agentId,
       agentType: meta.agentType || '',
       description: meta.description || '',
-      // toolUseId が無い古い形式は完了判定ができないので完了扱いにする
-      status: !meta.toolUseId || doneIds.has(meta.toolUseId) ? 'completed' : 'running',
+      status: (await isDone(meta)) ? 'completed' : 'running',
       updatedAt,
       size,
     });
