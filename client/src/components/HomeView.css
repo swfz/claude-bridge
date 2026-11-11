@@ -93,63 +93,88 @@
   gap: 10px;
 }
 
-/* カードの色は 2 系統だけに絞る。
-   左の縦帯（::before）＝ ブリッジとの関係（表示中 / タブで開き済）、
-   タイトル左のドット ＝ Claude プロセスの状態（busy / idle）。
-   位置で役割が分かれているので、色の意味が混ざらない。 */
+/* 起動中セッションのカード。枠は控えめにし、色はディレクトリのドットと注意喚起（状態ドット・
+   しきい値を超えた使用率）にだけ使う。Bridge 未接続は破線＋薄い文字で、接続済み（大半）は印なし */
 .home-card {
   position: relative;
-  overflow: hidden;
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   border-radius: 8px;
-  padding: 10px 12px 10px 15px;
+  padding: 10px 12px;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-}
-
-.home-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--rail, transparent);
+  gap: 6px;
+  min-width: 0;
 }
 
 .home-card:hover {
-  border-color: var(--accent);
+  background: var(--bg-surface);
 }
 
-/* 今タブで表示しているセッション */
-.home-card.rail-active {
-  --rail: var(--accent);
+/* 今タブで表示しているセッション。細い枠を一段濃くする */
+.home-card.current {
+  border-color: var(--text-secondary);
 }
 
-/* タブとして開いてはいるが、表示していないセッション */
-.home-card.rail-open {
-  --rail: var(--accent-secondary);
+.home-card.unlinked {
+  background: transparent;
+  border: 1px dashed var(--border);
 }
 
-/* パス行と印。タイトルより先に来るが、視線の起点はタイトルなので一段薄くする */
+.home-card.unlinked:hover {
+  background: var(--bg-secondary);
+}
+
+.home-card.unlinked .home-card-name,
+.home-card.unlinked .home-card-snippets {
+  opacity: 0.7;
+}
+
+/* ディレクトリ行。右端に例外の印（Star・ロック・未接続）だけを置く */
 .home-card-top {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 16px;
+  min-height: 18px;
+}
+
+.home-card-marks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.home-mark-star {
+  color: #f0ad4e;
+}
+
+.home-unlinked-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
 }
 
 /* 視線の起点。1 行に固定して全カードで同じ位置に置く */
+.home-card-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .home-card-name {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: 500;
+  font-size: 14px;
   line-height: 1.35;
   color: var(--text-primary);
   white-space: nowrap;
@@ -157,54 +182,83 @@
   text-overflow: ellipsis;
 }
 
-/* パス行。フルパスは title 属性へ逃がし、識別に効く末尾だけ出す */
-/* 親/プロジェクトは 1 つのパスとして読ませたいので間を空けない（gap は付けない） */
+/* ディレクトリ表記（ドット＋リポジトリ名＋ブランチ）。フルパスは title 属性へ逃がす */
 .home-card-path {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.home-path-parent {
-  color: var(--text-secondary);
-  opacity: 0.7;
-}
-
-.home-path-project {
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.home-path-worktree,
-.home-path-branch {
-  margin-left: 6px;
-  color: var(--text-secondary);
-  opacity: 0.8;
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.home-status {
+/* ディレクトリ色のドット。サイドバーにそのグループが無いときは輪郭だけ */
+.home-dir-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--text-secondary);
 }
 
-.home-status-busy {
-  background: #f0ad4e;
-  box-shadow: 0 0 4px #f0ad4e;
+.home-dir-dot.none {
+  border: 1px solid var(--text-secondary);
+  opacity: 0.6;
+}
+
+.home-path-project {
+  color: var(--text-secondary);
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-path-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-path-branch svg {
+  flex-shrink: 0;
+}
+
+/* Claude プロセスの状態。サイドバーの行頭ドットと同じ表現（処理中は緑から波紋、黄は回答・許可待ち） */
+.home-status {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--success);
+}
+
+.home-status-busy::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--success);
+  animation: home-status-ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.home-status-waiting {
+  background: var(--warning);
   animation: home-status-pulse 1.2s ease-in-out infinite;
 }
 
-.home-status-idle {
-  background: var(--success);
+@keyframes home-status-ping {
+  75%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
 }
 
 @keyframes home-status-pulse {
@@ -214,6 +268,13 @@
   }
   50% {
     opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-status-busy::after,
+  .home-status-waiting {
+    animation: none;
   }
 }
 
@@ -237,24 +298,30 @@
   border: 1px dashed var(--border);
 }
 
-/* Star（未解決／続きをやる）。カードの右上に置き、付いているものは金色で塗る */
-.home-star {
+/* Star（未解決／続きをやる）とセンシティブ指定のトグル。カードでは右上のホバーアクション、行では先頭の列 */
+.home-star,
+.home-sensitive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
-  padding: 0 2px;
+  padding: 2px;
+  border-radius: 6px;
   cursor: pointer;
-  opacity: 0.5;
+  opacity: 0.6;
   transition:
     opacity 0.15s,
     color 0.15s;
 }
 
-.home-star:hover {
+.home-star:hover,
+.home-sensitive:hover {
   opacity: 1;
-  color: #f0ad4e;
+  color: var(--text-primary);
 }
 
 .home-star.on {
@@ -262,29 +329,12 @@
   color: #f0ad4e;
 }
 
-/* Star 付きは並び順（先頭寄せ）と ★ の金色で示す。
-   カード上辺のラインは左の帯と競合して「色の意味」が読めなくなるので引かない。 */
+.home-sensitive.on {
+  opacity: 1;
+}
 
 .home-count.starred-count {
   color: #f0ad4e;
-}
-
-/* センシティブ指定（共有モードで隠す印）。Star の隣に並べるので margin-left は持たせない */
-.home-sensitive {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1;
-  padding: 0 2px;
-  cursor: pointer;
-  opacity: 0.4;
-  transition: opacity 0.15s;
-}
-
-.home-sensitive:hover,
-.home-sensitive.on {
-  opacity: 1;
 }
 
 /* 共有モードで隠した件数の注記（中身は出さないので件数だけ） */
@@ -302,7 +352,7 @@
   gap: 2px;
 }
 
-/* 会話抜粋は 1 行ずつ。近接でひとまとまりに見せたいので行間を詰める */
+/* 会話抜粋は 1 行ずつ。人／AI のアイコンで区別する */
 .home-card-snippets {
   display: flex;
   flex-direction: column;
@@ -311,6 +361,7 @@
 
 .home-snippet {
   display: flex;
+  align-items: center;
   gap: 6px;
   font-size: 12px;
   line-height: 1.45;
@@ -321,12 +372,11 @@
   color: var(--text-secondary);
 }
 
-/* ラベルは枠を外してテキストだけに（枠付きバッジが並ぶと視覚ノイズになる） */
-.home-snippet-label {
+.home-snippet-icon {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .home-snippet-text {
@@ -358,8 +408,8 @@
 }
 
 .home-day.active {
-  background: var(--accent-secondary);
-  color: #fff;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 /* `claude -p` のセッションを含めるかのトグル。プリセット群と同じ枠で単独のボタンにする */
@@ -376,8 +426,8 @@
   gap: 4px;
   padding: 3px 4px 3px 9px;
   border-radius: 5px;
-  background: var(--accent-secondary);
-  color: #fff;
+  background: var(--bg-surface);
+  color: var(--text-primary);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -386,55 +436,88 @@
   background: none;
   border: none;
   padding: 0 2px;
-  color: #fff;
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
 }
 
-/* カードの Artifact チップ。無いカードでは要素自体が空になるので隙間を作らない */
-.home-card-artifacts:empty {
-  display: none;
-}
-
-/* メタ行は "·" 区切りの一列。カードで一番弱い情報なのでさらに薄く落とす */
+/* フッター: 使用率・状態（薄い文字）・Artifact の件数・右端に更新時刻 */
 .home-card-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font-size: 10px;
+  gap: 10px;
+  font-size: 11px;
   color: var(--text-secondary);
-  opacity: 0.85;
   margin-top: auto;
+  min-height: 16px;
 }
 
-.home-meta-item + .home-meta-item::before {
-  content: '·';
-  margin-right: 6px;
-  opacity: 0.5;
+.home-card-time {
+  margin-left: auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-/* 「タブで表示中」は左帯の色の言い換え。色と同じ意味なので同じ色で置く */
+.home-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.home-usage-bar {
+  display: inline-block;
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--meter-track);
+  overflow: hidden;
+}
+
+.home-usage-fill {
+  display: block;
+  height: 100%;
+}
+
+.home-usage-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.home-artifact-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.home-artifact-count:hover {
+  color: var(--text-primary);
+}
+
+/* 「タブで開いている」印（直近の行の更新列） */
 .home-open-mark {
-  color: var(--accent-secondary);
-  font-weight: 600;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
-/* アクションはカード下部にホバーで重ねる（常時 1 行を占有させない）。
-   主要動作はカード全体のクリックで足りるので、隠れても操作は詰まらない。 */
+/* 操作は右上にアイコンで重ねる（ディレクトリ行の印の上に被せるだけなのでレイアウトは変わらない） */
 .home-card-actions {
   position: absolute;
-  left: 3px;
-  right: 0;
-  bottom: 0;
+  top: 6px;
+  right: 8px;
   display: flex;
-  gap: 6px;
-  padding: 14px 12px 10px;
-  background: linear-gradient(to bottom, transparent, var(--bg-secondary) 45%);
+  align-items: center;
+  gap: 2px;
+  padding-left: 12px;
+  background: linear-gradient(to right, transparent, var(--bg-surface) 12px);
   opacity: 0;
   transition: opacity 0.12s;
   pointer-events: none;
+}
+
+.home-card.unlinked .home-card-actions {
+  background: linear-gradient(to right, transparent, var(--bg-secondary) 12px);
 }
 
 .home-card:hover .home-card-actions,
@@ -446,12 +529,36 @@
 /* ホバーできない環境（タッチ）では隠すと操作不能になるので常時出す */
 @media (hover: none) {
   .home-card-actions {
-    position: static;
-    padding: 0;
-    background: none;
     opacity: 1;
     pointer-events: auto;
   }
+}
+
+.home-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.home-icon-action:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.home-card-actions .home-action.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 8px;
+  font-size: 11px;
+  margin-right: 4px;
 }
 
 .home-action {
@@ -466,26 +573,28 @@
 }
 
 .home-action:hover {
-  border-color: var(--accent);
+  border-color: var(--text-secondary);
+  background: var(--bg-primary);
   color: var(--text-primary);
 }
 
 .home-action.primary {
-  border-color: var(--accent-secondary);
+  border-color: var(--text-secondary);
   color: var(--text-primary);
 }
 
-/* claude を終了してペインを閉じる（取り消せない操作なので危険色） */
-.home-action.danger {
-  /* 他の操作と離して右端に置き、押し間違えにくくする */
-  margin-left: auto;
-  border-color: var(--accent);
-  color: var(--accent);
+/* claude を終了してペインを閉じる（取り消せない操作なので、少し離してホバーで危険色にする） */
+.home-icon-action.danger {
+  margin-left: 4px;
+  /* E2E の目印として .home-action も付けているので、その枠と余白は打ち消す */
+  border: none;
+  padding: 2px;
+  font-size: 14px;
 }
 
-.home-action.danger:hover {
-  background: var(--accent);
-  color: #fff;
+.home-icon-action.danger:hover {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  color: var(--danger);
 }
 
 .home-section {
@@ -580,34 +689,72 @@
   color: var(--text-primary);
 }
 
-/* プロジェクトフィルタのチップ列。期間プリセット（.home-day）と同じトーン */
+/* プロジェクトフィルタ。起動中のあるものだけを件数順に 1 行で並べ、溢れたら横スクロール */
 .home-projects {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-bottom: 16px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
 }
 
 .home-project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 0.5px solid var(--border);
   color: var(--text-secondary);
-  border-radius: 5px;
+  border-radius: 8px;
   padding: 3px 9px;
   font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
-  transition: all 0.15s;
 }
 
 .home-project-chip:hover {
   color: var(--text-primary);
-  border-color: var(--accent);
+  background: var(--bg-secondary);
 }
 
 .home-project-chip.active {
-  background: var(--accent-secondary);
-  border-color: var(--accent-secondary);
-  color: #fff;
+  background: var(--bg-surface);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.home-project-count {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.home-project-other,
+.home-completion-filter {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.home-project-other.active,
+.home-completion-filter.active {
+  background: var(--bg-surface);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.home-project-other option,
+.home-completion-filter option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 /* 直近のセッションは「探す」一覧なので、カードではなく列の揃った行で並べる。
@@ -673,27 +820,14 @@
   background: var(--bg-secondary);
 }
 
-.home-row::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--rail, transparent);
-}
-
-.home-row.rail-active {
-  --rail: var(--accent);
-}
-
-.home-row.rail-open {
-  --rail: var(--accent-secondary);
+/* 今タブで表示しているセッションの行 */
+.home-row.current {
+  background: var(--bg-secondary);
 }
 
 /* 行の見出し。ここだけコントラストを上げて走査の手掛かりにする */
 .home-row-name {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -753,17 +887,18 @@
 }
 
 /* センシティブ指定は付いている行以外では畳んでおく（アイコンが並ぶと走査の邪魔になる） */
-.home-row .home-sensitive {
+.home-row .home-star:not(.on),
+.home-row .home-sensitive:not(.on) {
   opacity: 0;
 }
 
-.home-row:hover .home-sensitive,
-.home-row .home-sensitive.on {
-  opacity: 0.4;
+.home-row:hover .home-star:not(.on),
+.home-row:hover .home-sensitive:not(.on) {
+  opacity: 0.5;
 }
 
-.home-row:hover .home-sensitive:hover,
-.home-row .home-sensitive.on {
+.home-row:hover .home-star:hover,
+.home-row:hover .home-sensitive:hover {
   opacity: 1;
 }
 
@@ -806,47 +941,13 @@
   }
 }
 
-/* やり残し判定のバッジ。目立たせたいのは「やり残し」「途中で終了」で、完了は沈める */
+/* やり残し判定は自動判定の参考情報なので、色もピルも付けず薄い文字で置く（内訳は tooltip） */
 .home-completion {
   display: inline-block;
-  padding: 0 6px;
-  border: 1px solid currentColor;
-  border-radius: 8px;
-  font-size: 10px;
-  line-height: 15px;
+  font-size: 11px;
+  color: var(--text-secondary);
   white-space: nowrap;
   cursor: help;
-}
-
-.home-completion.unfinished {
-  color: var(--warning);
-}
-
-.home-completion.unpushed {
-  color: var(--warning);
-}
-
-.home-completion.interrupted {
-  color: var(--accent);
-}
-
-.home-completion.merging,
-.home-completion.asking {
-  color: var(--accent-secondary);
-}
-
-.home-completion.waiting {
-  color: var(--accent-secondary);
-}
-
-.home-completion.working {
-  color: var(--success);
-}
-
-.home-completion.done,
-.home-completion.consult {
-  color: var(--text-secondary);
-  border-color: var(--border);
 }
 
 .home-row-completion {
@@ -862,53 +963,4 @@
   background: var(--bg-surface);
   color: var(--text-primary);
   font-size: 10px;
-}
-
-/* 直近一覧の状態絞り込み。期間プリセット（.home-day）と並ぶので同じトーンにする */
-.home-completion-filter {
-  display: flex;
-  gap: 2px;
-}
-
-.home-completion-chip {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  padding: 1px 8px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.home-completion-chip:hover {
-  color: var(--text-primary);
-}
-
-.home-completion-chip.active {
-  border-color: currentColor;
-}
-
-.home-completion-chip.unfinished.active {
-  color: var(--warning);
-}
-
-.home-completion-chip.unpushed.active {
-  color: var(--warning);
-}
-
-.home-completion-chip.interrupted.active {
-  color: var(--accent);
-}
-
-.home-completion-chip.merging.active,
-.home-completion-chip.asking.active {
-  color: var(--accent-secondary);
-}
-
-.home-completion-chip.consult.active {
-  color: var(--text-primary);
-}
-
-.home-completion-chip.done.active {
-  color: var(--text-primary);
 }

@@ -59,7 +59,7 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await expect(shellDrawer).toHaveCount(0);
 
   // ヘッダの Refs で、会話に出てきたリンクとファイルのドロワーが開く（既定はリンクタブ）
-  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  await page.locator('.panel-tab', { hasText: 'Refs' }).click();
   const linkDrawer = page.locator('.ref-drawer');
   await expect(linkDrawer).toBeVisible();
   await expect(linkDrawer.locator('.ref-drawer-tab.active')).toContainText('リンク');
@@ -94,7 +94,7 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await expect(page.locator('[data-message-uuid="e2e-uuid-links"]')).toBeInViewport();
 
   // 再度 Refs を開いてファイルタブに切り替えると、Claude が触ったファイルの一覧が出る
-  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  await page.locator('.panel-tab', { hasText: 'Refs' }).click();
   const fileDrawer = page.locator('.ref-drawer');
   await expect(fileDrawer).toBeVisible();
   await fileDrawer.locator('.ref-drawer-tab', { hasText: 'ファイル' }).click();
@@ -111,7 +111,7 @@ test('行をクリックすると readonly セッションが開き、会話が�
   const pinTarget = page.locator('.chat-message.assistant').first();
   await pinTarget.locator('.pin-toggle').click();
   await expect(pinTarget).toHaveClass(/pinned/);
-  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  await page.locator('.panel-tab', { hasText: 'Refs' }).click();
   const pinDrawer = page.locator('.ref-drawer');
   await pinDrawer.locator('.ref-drawer-tab', { hasText: 'ピン' }).click();
   const pinRows = pinDrawer.locator('.pin-row');
@@ -120,7 +120,7 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await pinRows.first().getByRole('button', { name: '会話へ' }).click();
   await expect(pinDrawer).toHaveCount(0);
   await expect(pinTarget).toBeInViewport();
-  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  await page.locator('.panel-tab', { hasText: 'Refs' }).click();
   await pinDrawer.locator('.pin-row').first().getByRole('button', { name: '外す' }).click();
   await expect(pinDrawer.locator('.pin-row')).toHaveCount(0);
   await page.keyboard.press('Escape');

@@ -164,3 +164,22 @@ export function representativeDirOf(group) {
   const root = i >= 0 ? cwd.slice(0, i + project.length + 1) : cwd;
   return root.replace(/^\/(?:home|Users)\/[^/]+(?=\/|$)/, '~');
 }
+
+// サイドバーに出すグループ。共有モードで隠すタブを除き、自動グループは中身が無ければ落とす
+// （手動グループは空でも D&D の落とし先として出す）。グループ色の並び順もこれで決まる
+export function shownTabGroups(groups, isHidden = () => false) {
+  return (groups || [])
+    .map((group) => ({ ...group, sessions: group.sessions.filter((s) => !isHidden(s)) }))
+    .filter((group) => group.manual || group.sessions.length > 0);
+}
+
+// グループ色（--cal-0〜7）を表示順で回す。サイドバー・ホーム・トップバーで同じ色を使う
+export function groupColorMap(groups) {
+  return new Map((groups || []).map((group, index) => [group.key, `var(--cal-${index % 8})`]));
+}
+
+// cwd に対応するディレクトリグループの色。サイドバーにそのグループが無ければ null（色を付けない）
+export function dirColorOf(colorMap, cwd) {
+  if (!colorMap || !cwd) return null;
+  return colorMap.get(autoGroupKeyOf({ cwd })) || null;
+}

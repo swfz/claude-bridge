@@ -19,7 +19,14 @@ import {
 } from 'react-icons/tb';
 import { parseCwd } from '../utils/cwdLabel.js';
 import { contextPercent, formatTokens, sidebarUsageColor } from '../utils/contextUsage.js';
-import { autoGroupKeyOf, representativeDirOf, shouldShowDir, visibleTabsOf } from '../utils/tabGroups.js';
+import {
+  autoGroupKeyOf,
+  groupColorMap,
+  representativeDirOf,
+  shouldShowDir,
+  shownTabGroups,
+  visibleTabsOf,
+} from '../utils/tabGroups.js';
 import ShortcutHints from './ShortcutHints.jsx';
 import './SessionTabs.css';
 
@@ -199,13 +206,14 @@ export default function SessionTabs({
   // 共有モード中のセンシティブ指定はタブごと出さない（マスク表示だと
   // 「隠しているセッションがある」事実自体が見えてしまうため）。
   const isHidden = (session) => shareMode && session.claudeSessionId && sensitiveIds?.has(session.claudeSessionId);
-  const shownGroups = (groups || [{ key: '', label: '', manual: false, collapsed: false, sessions }])
-    .map((group) => ({ ...group, sessions: group.sessions.filter((s) => !isHidden(s)) }))
-    // 自動グループは中身が無ければ出さない。手動グループは空でも落とし先として出す
-    .filter((group) => group.manual || group.sessions.length > 0);
+  // 自動グループは中身が無ければ出さない。手動グループは空でも落とし先として出す
+  const shownGroups = shownTabGroups(
+    groups || [{ key: '', label: '', manual: false, collapsed: false, sessions }],
+    isHidden,
+  );
 
-  // グループ色はドット（見出しとディレクトリ前）にだけ使う。並び順でパレットを回す
-  const colorByKey = new Map(shownGroups.map((group, index) => [group.key, `var(--cal-${index % 8})`]));
+  // グループ色はドット（見出しとディレクトリ前）にだけ使う。並び順でパレットを回す（ホーム・トップバーも同じ規則）
+  const colorByKey = groupColorMap(shownGroups);
 
   const shownWidth = collapsed ? COLLAPSED_WIDTH : width;
 

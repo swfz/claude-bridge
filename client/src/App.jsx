@@ -19,8 +19,7 @@ import PreviewPip, { isDocumentPipSupported, openPreviewPipWindow } from './comp
 import FileExplorer from './components/FileExplorer.jsx';
 import AgentSidePanel from './components/AgentSidePanel.jsx';
 import HomeView from './components/HomeView.jsx';
-import RateLimitMeter from './components/RateLimitMeter.jsx';
-import ContextMeter from './components/ContextMeter.jsx';
+import TopBar from './components/TopBar.jsx';
 import { loadStarred, saveStarred, toggleStarred } from './utils/starredSessions.js';
 import { applyTabOrder, loadTabOrder, moveTab, saveTabOrder } from './utils/tabOrder.js';
 import {
@@ -28,10 +27,13 @@ import {
   buildTabGroups,
   createGroup,
   deleteGroup,
+  dirColorOf,
   flattenTabGroups,
+  groupColorMap,
   loadTabGroups,
   renameGroup,
   saveTabGroups,
+  shownTabGroups,
   toggleGroupCollapsed,
   visibleTabsOf,
 } from './utils/tabGroups.js';
@@ -42,6 +44,7 @@ import {
   toggleSensitive,
   loadShareMode,
   saveShareMode,
+  countHiddenSensitive,
 } from './utils/sensitiveSessions.js';
 import { statusMapOf, updateAttention } from './utils/attention.js';
 import { pickNotifyTargets } from './utils/notifications.js';
@@ -50,6 +53,7 @@ import { collectLinks } from './utils/links.js';
 import { collectSessionFiles } from './utils/sessionFiles.js';
 import { pinExcerpt } from './utils/pins.js';
 import { humanSenderLabel } from './utils/messageSender.js';
+import { TbBookmarks, TbChecklist, TbFiles, TbMessages, TbNote, TbRobot } from 'react-icons/tb';
 import './App.css';
 import { readonlyDeliveryState, terminateConfirmMessage } from './utils/runningSessions.js';
 
@@ -185,6 +189,11 @@ export default function App() {
   }, [showHome]);
   // session_list ハンドラの effect は [on] 依存のみで stale closure になるため
   const notifyEnabledRef = useRef(notifyEnabled);
+  // 通知を伏せるかの判定用（session_list のハンドラは初回に 1 度だけ登録されるので ref で最新を読む）
+  const shareModeRef = useRef(shareMode);
+  shareModeRef.current = shareMode;
+  const sensitiveIdsRef = useRef(sensitiveIds);
+  sensitiveIdsRef.current = sensitiveIds;
   useEffect(() => {
     notifyEnabledRef.current = notifyEnabled;
   }, [notifyEnabled]);
@@ -260,8 +269,10 @@ export default function App() {
           prev: prevStatuses,
           sessions: msg.sessions,
         })) {
-          const n = new Notification(s.name || 'Claude Bridge', {
-            body: 'ターンが完了しました',
+          // 通知は OS の画面端に出て画面共有の相手にも見えるので、共有モード中のセンシティブ指定は名前を伏せる
+          const masked = shareModeRef.current && s.claudeSessionId && sensitiveIdsRef.current.has(s.claudeSessionId);
+          const n = new Notification(masked ? 'Claude Bridge' : s.name || 'Claude Bridge', {
+            body: masked ? 'セッションの応答が完了しました' : 'ターンが完了しました',
             tag: `bridge-attention-${s.id}`, // 同一セッションの通知は上書きして溜めない
           });
           n.onclick = () => {
@@ -1255,13 +1266,27 @@ export default function App() {
         .map((s) => s.id),
     [tabGroups, showHome, activeSessionId, shareMode, sensitiveIds],
   );
+  const handleToggleShareMode = useCallback(() => setShareMode((on) => !on), []);
   useGlobalKeys({
     tabs: keyboardTabIds,
     activeId: showHome ? null : activeSessionId,
     onSelectTab: handleSwitchSession,
     onHome: () => setShowHome(true),
+    onToggleShareMode: handleToggleShareMode,
   });
 
+  // ディレクトリ色。サイドバーのグループ色（表示順で --cal-N を回す）と同じものをホーム・トップバーでも使う。
+  // 共有モードで隠したタブを除いた並びで作る（SessionTabs と同じ規則）
+  const dirColors = useMemo(
+    () =>
+      groupColorMap(
+        shownTabGroups(tabGroups, (s) => shareMode && s.claudeSessionId && sensitiveIds.has(s.claudeSessionId)),
+      ),
+    [tabGroups, shareMode, sensitiveIds],
+  );
+  const dirColorOfCwd = useCallback((cwd) => dirColorOf(dirColors, cwd), [dirColors]);
+
+  const handleToggleTheme = useCallback(() => setAppTheme((t) => (t === 'light' ? 'dark' : 'light')), []);
   const handleToggleNotify = useCallback(async () => {
     if (notifyEnabled) {
       setNotifyEnabled(false);
@@ -1671,121 +1696,99 @@ export default function App() {
     );
   }
 
+  // トップバーのパネルのタブ。出す条件は従来のボタンと同じ（ホーム表示中はセッション固有のものを出さない）
+  const reviewCount = reviewItems.filter((it) => (it.text || '').trim()).length;
+  const headerPanels = [
+    sessionUiVisible &&
+      !isReadonly && {
+        key: 'files',
+        label: 'Files',
+        icon: TbFiles,
+        active: showFileExplorer,
+        onClick: () => setShowFileExplorer(!showFileExplorer),
+        title: 'ファイラを表示/非表示',
+      },
+    sessionUiVisible &&
+      !isReadonly &&
+      viewMode === 'chat' && {
+        key: 'threads',
+        label: 'Threads',
+        icon: TbMessages,
+        active: showThreadPanel,
+        onClick: () => setShowThreadPanel(!showThreadPanel),
+        count: unresolvedCount,
+        title: 'スレッド',
+      },
+    chatPanelsVisible && {
+      key: 'review',
+      label: 'Review',
+      icon: TbChecklist,
+      active: showReviewPanel,
+      onClick: () => setShowReviewPanel(!showReviewPanel),
+      count: reviewCount,
+      title: 'レビュー（指摘を溜めて Submit で一括送信）',
+    },
+    chatPanelsVisible && {
+      key: 'memo',
+      label: 'Memo',
+      icon: TbNote,
+      active: showCommentPanel,
+      onClick: () => setShowCommentPanel(!showCommentPanel),
+      count: comments.length,
+      title: 'コメント（送信せずセッションに残す・参照専用）',
+    },
+    chatPanelsVisible && {
+      key: 'refs',
+      label: 'Refs',
+      icon: TbBookmarks,
+      active: showRefDrawer,
+      onClick: () => setShowRefDrawer(!showRefDrawer),
+      count: links.length + sessionFiles.length + pins.length,
+      title: 'このセッションでやり取りしたリンク・ファイルと、ピン留めしたメッセージ',
+    },
+    {
+      key: 'agents',
+      label: 'Agents',
+      icon: TbRobot,
+      active: showAgentPanel,
+      onClick: () => {
+        const next = !showAgentPanel;
+        setShowAgentPanel(next);
+        if (next) handleRefreshAgents();
+      },
+      title: 'agent view のセッション一覧とコメント',
+    },
+  ].filter(Boolean);
+  // トップバーの「今見ているセッション」。共有モードでセンシティブ指定のものは名前を出さない
+  // （表示中なら effect がホームへ退避させるが、その 1 フレームでも出さないよう表示側でも弾く）
+  const activeHidden = shareMode && activeSession?.claudeSessionId && sensitiveIds.has(activeSession.claudeSessionId);
+  const currentSessionForBar =
+    sessionUiVisible && activeSession && !activeHidden
+      ? { title: activeSession.name, cwd: activeSession.cwd, color: dirColorOfCwd(activeSession.cwd) }
+      : null;
+  const hiddenSensitiveCount = shareMode
+    ? countHiddenSensitive(sensitiveSessions, { tabs: sessions, running: runningSessions, recent: recentSessions })
+    : 0;
+
   return (
     <div className="app">
-      <header className="app-header">
-        <h1 className="app-title">Claude Bridge</h1>
-        <div className="header-controls">
-          {sessionUiVisible && !isReadonly && (
-            <>
-              <button
-                className={`toggle-btn thread-toggle ${showFileExplorer ? 'active' : ''}`}
-                onClick={() => setShowFileExplorer(!showFileExplorer)}
-                title="ファイラを表示/非表示"
-              >
-                Files
-              </button>
-              <div className="view-toggle">
-                <button
-                  className={`toggle-btn ${viewMode === 'raw' ? 'active' : ''}`}
-                  onClick={() => setViewMode('raw')}
-                >
-                  Raw
-                </button>
-                <button
-                  className={`toggle-btn ${viewMode === 'chat' ? 'active' : ''}`}
-                  onClick={() => setViewMode('chat')}
-                >
-                  Chat
-                </button>
-              </div>
-              {viewMode === 'chat' && (
-                <button
-                  className={`toggle-btn thread-toggle ${showThreadPanel ? 'active' : ''}`}
-                  onClick={() => setShowThreadPanel(!showThreadPanel)}
-                >
-                  Threads
-                  {unresolvedCount > 0 && <span className="thread-count-badge">{unresolvedCount}</span>}
-                </button>
-              )}
-            </>
-          )}
-          {chatPanelsVisible && (
-            <>
-              <button
-                className={`toggle-btn thread-toggle ${showReviewPanel ? 'active' : ''}`}
-                onClick={() => setShowReviewPanel(!showReviewPanel)}
-                title="レビュー（指摘を溜めて Submit で一括送信）"
-              >
-                Review
-                {reviewItems.filter((it) => (it.text || '').trim()).length > 0 && (
-                  <span className="thread-count-badge">
-                    {reviewItems.filter((it) => (it.text || '').trim()).length}
-                  </span>
-                )}
-              </button>
-              <button
-                className={`toggle-btn thread-toggle ${showCommentPanel ? 'active' : ''}`}
-                onClick={() => setShowCommentPanel(!showCommentPanel)}
-                title="コメント（送信せずセッションに残す・参照専用）"
-              >
-                Memo
-                {comments.length > 0 && <span className="thread-count-badge">{comments.length}</span>}
-              </button>
-              <button
-                className={`toggle-btn thread-toggle ${showRefDrawer ? 'active' : ''}`}
-                onClick={() => setShowRefDrawer(!showRefDrawer)}
-                title="このセッションでやり取りしたリンク・ファイルと、ピン留めしたメッセージ"
-              >
-                Refs
-                {links.length + sessionFiles.length + pins.length > 0 && (
-                  <span className="thread-count-badge">{links.length + sessionFiles.length + pins.length}</span>
-                )}
-              </button>
-            </>
-          )}
-          <button
-            className={`toggle-btn thread-toggle ${showAgentPanel ? 'active' : ''}`}
-            onClick={() => {
-              const next = !showAgentPanel;
-              setShowAgentPanel(next);
-              if (next) handleRefreshAgents();
-            }}
-            title="agent view のセッション一覧とコメント"
-          >
-            Agents
-          </button>
-          <button
-            className={`toggle-btn thread-toggle share-toggle ${shareMode ? 'active' : ''}`}
-            onClick={() => setShareMode((on) => !on)}
-            title="共有モード: センシティブ指定したセッションを隠す"
-          >
-            {shareMode ? '🙈' : '👁'} 共有
-          </button>
-          <button
-            className="toggle-btn thread-toggle"
-            onClick={() => setAppTheme((t) => (t === 'light' ? 'dark' : 'light'))}
-            title="アプリ全体のテーマを切り替え（ライト/ダーク）"
-          >
-            {appTheme === 'light' ? 'Dark' : 'Light'}
-          </button>
-          {'Notification' in window && (
-            <button
-              className={`toggle-btn thread-toggle ${notifyEnabled ? 'active' : ''}`}
-              onClick={handleToggleNotify}
-              title="ターン完了時のデスクトップ通知を ON/OFF"
-            >
-              {notifyEnabled ? '🔔' : '🔕'}
-            </button>
-          )}
-          {sessionUiVisible && <ContextMeter usage={latestContextUsage(messages)} />}
-          <RateLimitMeter rateLimits={rateLimits} />
-          <div className="connection-status">
-            <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
-            {connected ? 'Connected' : 'Disconnected'}
-          </div>
-        </div>
-      </header>
+      <TopBar
+        connected={connected}
+        currentSession={currentSessionForBar}
+        viewMode={viewMode}
+        onChangeViewMode={sessionUiVisible && !isReadonly ? setViewMode : null}
+        panels={headerPanels}
+        contextUsage={sessionUiVisible ? latestContextUsage(messages) : null}
+        rateLimits={rateLimits}
+        shareMode={shareMode}
+        onToggleShareMode={handleToggleShareMode}
+        hiddenCount={hiddenSensitiveCount}
+        notifySupported={'Notification' in window}
+        notifyEnabled={notifyEnabled}
+        onToggleNotify={handleToggleNotify}
+        appTheme={appTheme}
+        onToggleTheme={handleToggleTheme}
+      />
 
       <div className="app-body">
         <SessionTabs
@@ -1825,6 +1828,7 @@ export default function App() {
             <main className="app-main">
               {showHome ? (
                 <HomeView
+                  dirColorOf={dirColorOfCwd}
                   runningSessions={runningSessions}
                   recentSessions={recentSessions}
                   recentDays={recentDays}

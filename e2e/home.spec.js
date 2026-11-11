@@ -12,8 +12,9 @@ test.describe('ホーム画面', () => {
   test('直近セッション一覧に fixture のタイトルと cwd が表示される', async ({ page }) => {
     await page.goto('/');
 
-    // WS 接続後にヘッダーの接続状態が Connected になる
-    await expect(page.locator('.connection-status')).toContainText('Connected');
+    // WS 接続後にヘッダーの接続状態が connected になる（接続中は緑の点だけで文字は出さない）
+    await expect(page.locator('.connection-status.connected')).toBeVisible();
+    await expect(page.locator('.connection-status')).not.toContainText('Disconnected');
 
     const row = page.locator('.home-row', { hasText: FIXTURE_TITLE });
     await expect(row).toBeVisible();
@@ -123,22 +124,23 @@ test.describe('ホーム画面', () => {
     await expect(interrupted).toContainText('次はビルドを流し直して計測してください');
     await expect(consult.locator('.home-row-away-label')).toHaveCount(0);
 
-    const filter = page.locator('.home-completion-filter');
-    await expect(filter.getByRole('button', { name: '途中で終了 1' })).toBeVisible();
-    await expect(filter.getByRole('button', { name: '相談のみ 2' })).toBeVisible();
-    await expect(filter.getByRole('button', { name: '回答待ち 1' })).toBeVisible();
-    await expect(filter.getByRole('button', { name: '完了 0' })).toBeVisible();
+    // 状態ごとの件数はプルダウン 1 つに畳んである
+    const filter = page.locator('select.home-completion-filter');
+    await expect(filter.locator('option', { hasText: '途中で終了 1' })).toHaveCount(1);
+    await expect(filter.locator('option', { hasText: '相談のみ 2' })).toHaveCount(1);
+    await expect(filter.locator('option', { hasText: '回答待ち 1' })).toHaveCount(1);
+    await expect(filter.locator('option', { hasText: '完了 0' })).toHaveCount(1);
 
-    await filter.getByRole('button', { name: '途中で終了 1' }).click();
+    await filter.selectOption({ label: '途中で終了 1' });
     await expect(page.locator('.home-row')).toHaveCount(1);
     await expect(interrupted).toBeVisible();
 
-    // もう一度押すと解除
-    await filter.getByRole('button', { name: '途中で終了 1' }).click();
+    // 「すべて」に戻すと解除
+    await filter.selectOption('');
     await expect(consult).toBeVisible();
     await expect(interrupted).toBeVisible();
 
-    await filter.getByRole('button', { name: '回答待ち 1' }).click();
+    await filter.selectOption({ label: '回答待ち 1' });
     await expect(page.locator('.home-row')).toHaveCount(1);
     await expect(asking).toBeVisible();
   });

@@ -45,7 +45,7 @@ test.describe('起動中セッションの終了', () => {
     await expect(card).toBeVisible({ timeout: 15_000 });
     await card.hover();
     const button = card.locator('.home-action.danger');
-    await expect(button).toHaveText('終了');
+    await expect(button).toHaveAccessibleName('終了');
 
     const dialogs = [];
     page.once('dialog', async (dialog) => {

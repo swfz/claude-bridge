@@ -65,6 +65,7 @@ const GLOBAL_HINTS = [
   ['Alt+1-9 / 0', 'n 番目のタブ / ホーム'],
   ['Ctrl+D U', '半画面スクロール'],
   ['Alt+I', '送信欄へ'],
+  ['Alt+Shift+S', '共有モード'],
 ];
 
 function detectMode() {

@@ -9,6 +9,7 @@ import {
   halfPageScrollKey,
   tabNavKey,
   isFocusInputShortcut,
+  isShareModeShortcut,
 } from '../client/src/utils/keys.js';
 
 const ev = (o) => ({ key: '', code: '', ctrlKey: false, metaKey: false, shiftKey: false, isComposing: false, ...o });
@@ -122,4 +123,19 @@ describe('keys: tabNavKey（Alt+Shift+J/K・Alt+数字）', () => {
     assert.equal(tabNavKey({ ...alt('Digit3', '3'), ctrlKey: true }), null);
     assert.equal(tabNavKey(alt('KeyJ', 'j')), null);
   });
+});
+
+describe('keys: isShareModeShortcut（Alt+Shift+S）', () => {
+  it('Alt+Shift+S は真', () =>
+    assert.equal(isShareModeShortcut(ev({ key: 'S', code: 'KeyS', altKey: true, shiftKey: true })), true));
+  it('レイアウトで key が別文字でも code（KeyS）で拾う', () =>
+    assert.equal(isShareModeShortcut(ev({ key: 'Í', code: 'KeyS', altKey: true, shiftKey: true })), true));
+  it('Shift なしの Alt+S は偽', () =>
+    assert.equal(isShareModeShortcut(ev({ key: 's', code: 'KeyS', altKey: true })), false));
+  it('Ctrl 併用は偽', () =>
+    assert.equal(
+      isShareModeShortcut(ev({ key: 'S', code: 'KeyS', altKey: true, shiftKey: true, ctrlKey: true })),
+      false,
+    ));
+  it('null は偽', () => assert.equal(isShareModeShortcut(null), false));
 });

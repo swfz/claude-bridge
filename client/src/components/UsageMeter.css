@@ -1,0 +1,124 @@
+.usage-meter {
+  position: relative;
+}
+
+/* 3 本のメーターを 1 つの塊として押せるようにする。枠は付けず、ホバー・開いている間だけ背景で浮かせる */
+.usage-meter-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 0.5px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.usage-meter-trigger:hover,
+.usage-meter-trigger.open {
+  background: var(--bg-surface);
+}
+
+.usage-meter-trigger.open {
+  border-color: var(--border);
+}
+
+.usage-meter-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* statusline 連携が止まっている（fetchedAt が古い）レート制限は薄くする */
+.usage-meter-item.stale {
+  opacity: 0.5;
+}
+
+.usage-meter-label {
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-meter-bar {
+  display: inline-block;
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--meter-track);
+  overflow: hidden;
+}
+
+.usage-meter-bar.wide {
+  width: 64px;
+}
+
+.usage-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.usage-meter-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.usage-meter-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 320px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.usage-meter-row {
+  display: grid;
+  grid-template-columns: 28px 64px 36px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.usage-meter-row-label {
+  color: var(--text-secondary);
+}
+
+.usage-meter-row-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-meter-row-detail {
+  display: flex;
+  flex-direction: column;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.usage-meter-row-sub {
+  font-size: 10px;
+  opacity: 0.8;
+  white-space: normal;
+}
+
+.usage-meter-foot {
+  padding-top: 6px;
+  border-top: 0.5px solid var(--border);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.usage-meter-foot.stale {
+  color: var(--warning);
+}
