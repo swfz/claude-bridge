@@ -5,6 +5,7 @@ import { readStatusByPid } from './claude-session-meta.js';
 import { findLiveSessionsByPaneIds, mapPaneIdsToPids, readLivePids } from './running-sessions.js';
 import { cwdToProjectDir } from './jsonl-utils.js';
 import { assertValidChoiceKeys, sanitizeChoiceText, CHOICE_KEY_DELAY_MS } from './choice-keys.js';
+import { isVimEditorEnabled, isVimNormalMode } from './vim-mode.js';
 
 const execAsync = promisify(exec);
 
@@ -79,6 +80,26 @@ export async function sendKeysToPane(paneId, text) {
     await execAsync(`tmux send-keys -t ${paneId} Enter`);
   } catch (e) {
     console.error(`Failed to send keys to pane ${paneId}:`, e.message);
+  }
+}
+
+// vim モードの入力欄が NORMAL のままなら `i` で INSERT に戻す（送った本文がコマンドとして食われるため）。
+// 判定できない・失敗したときは何もしない（本文の送信は止めない）
+const INSERT_MODE_DELAY_MS = 80;
+
+export async function ensureInsertMode(paneId, { vimEnabled = isVimEditorEnabled } = {}) {
+  validatePaneId(paneId);
+  try {
+    if (!(await vimEnabled())) return false;
+    const screen = await capturePane(paneId);
+    if (!isVimNormalMode(screen)) return false;
+    await execAsync(`tmux send-keys -t ${paneId} -l i`);
+    await delay(INSERT_MODE_DELAY_MS);
+    console.log(`tmux ${paneId}: vim NORMAL モードだったので INSERT に戻しました`);
+    return true;
+  } catch (e) {
+    console.error(`Failed to check vim mode of pane ${paneId}:`, e.message);
+    return false;
   }
 }
 
@@ -413,7 +434,13 @@ export class TmuxSession {
   }
 
   write(text) {
-    sendKeysToPane(this.paneId, text);
+    // INSERT への切り替えと本文の送信が、続けて来た別の write と入れ違わないよう直列にする。
+    // 選択肢プロンプト待ちの間は入力欄が出ていないので vim の判定はしない
+    const waiting = Boolean(this.waitingFor);
+    this.writeChain = (this.writeChain || Promise.resolve())
+      .then(() => (waiting ? null : ensureInsertMode(this.paneId)))
+      .then(() => sendKeysToPane(this.paneId, text));
+    return this.writeChain;
   }
 
   // 選択肢プロンプトの現在の状態を読むための画面テキスト

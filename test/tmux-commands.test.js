@@ -19,7 +19,8 @@ mock.module('child_process', {
 });
 
 // モック後に import
-const { listClaudeTmuxPanes, sendKeysToPane, validateSessionName } = await import('../server/tmux-session.js');
+const { listClaudeTmuxPanes, sendKeysToPane, validateSessionName, ensureInsertMode, TmuxSession } =
+  await import('../server/tmux-session.js');
 
 describe('listClaudeTmuxPanes', () => {
   beforeEach(() => {
@@ -127,6 +128,57 @@ describe('sendKeysToPane', () => {
 
     // should not throw
     await sendKeysToPane('%99', 'test');
+  });
+});
+
+const RULE = '─'.repeat(40);
+const NORMAL_SCREEN = ['応答', RULE, '❯ ', RULE, '  ⏵⏵ auto mode on'].join('\n');
+const INSERT_SCREEN = ['応答', RULE, '❯ ', RULE, '  -- INSERT -- ⏵⏵ auto mode on'].join('\n');
+
+describe('ensureInsertMode', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = '';
+    execError = null;
+  });
+
+  it('sends `i` when the input box is in vim NORMAL mode', async () => {
+    execCalls._mockStdout = NORMAL_SCREEN;
+    const changed = await ensureInsertMode('%0', { vimEnabled: async () => true });
+    assert.equal(changed, true);
+    assert.deepEqual([...execCalls], ['tmux capture-pane -t %0 -p', 'tmux send-keys -t %0 -l i']);
+  });
+
+  it('does nothing in INSERT mode', async () => {
+    execCalls._mockStdout = INSERT_SCREEN;
+    assert.equal(await ensureInsertMode('%0', { vimEnabled: async () => true }), false);
+    assert.deepEqual([...execCalls], ['tmux capture-pane -t %0 -p']);
+  });
+
+  it('does not read the screen when vim mode is not configured', async () => {
+    execCalls._mockStdout = NORMAL_SCREEN;
+    assert.equal(await ensureInsertMode('%0', { vimEnabled: async () => false }), false);
+    assert.equal(execCalls.length, 0);
+  });
+
+  it('swallows capture failures', async () => {
+    execError = new Error('pane not found');
+    assert.equal(await ensureInsertMode('%0', { vimEnabled: async () => true }), false);
+  });
+});
+
+describe('TmuxSession.write', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = '';
+    execError = null;
+  });
+
+  it('skips the vim check while waiting for a choice prompt', async () => {
+    const s = new TmuxSession({ id: 'a', name: 'a', paneId: '%1', target: '0:1.1', waitingFor: 'input needed' });
+    await s.write('1\r');
+    assert.ok(execCalls.every((c) => !c.includes('capture-pane')));
+    assert.equal(execCalls[execCalls.length - 1], 'tmux send-keys -t %1 Enter');
   });
 });
 
