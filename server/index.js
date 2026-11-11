@@ -1672,11 +1672,22 @@ wss.on('connection', (ws) => {
         // タブから来たら paneId / claudeSessionId はクライアントの値ではなくサーバー側から引く。
         // ホームの起動中カード（タブ未オープン）からは paneId + claudeSessionId を受ける。
         // 実際に kill するかは killClaudePane() が直前の照合で決める
+        // タブの ⏻ はホーム表示中でも押せる（error はアクティブなチャットにしか出ない）ので、
+        // タブからの失敗は error と home_error の両方で返す
         const fromTab = Boolean(msg.sessionId);
-        const fail = (message) => sendTo(ws, { type: fromTab ? 'error' : 'home_error', message });
+        const fail = (message) => {
+          if (fromTab) sendTo(ws, { type: 'error', message });
+          sendTo(ws, { type: 'home_error', message });
+        };
         try {
           let paneId = msg.paneId;
           let claudeSessionId = msg.claudeSessionId || null;
+          // ホームからの要求はセッション ID の照合を必須にする（コマンド名だけの確認で
+          // kill してよいのは、サーバーが paneId を引くタブ経路で ID が未解決のときだけ）
+          if (!fromTab && !claudeSessionId) {
+            fail('終了するセッションの ID がありません');
+            break;
+          }
           if (fromTab) {
             const tab = tmuxSessionManager.getSession(msg.sessionId);
             if (!tab) {

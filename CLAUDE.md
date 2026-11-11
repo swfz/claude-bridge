@@ -207,10 +207,10 @@ TUI の補完はブラウザからは使えないので、入力欄でスキル�
   - **「再開（内蔵）」＝ `resume_session`**: node-pty でブリッジの子プロセスとして `claude --resume` を起動する従来モード。ブリッジを落とすと claude も死に、ターミナルからは触れず、シェルの rc を通らないので env が違う。手軽さ用に残してあるが既定にはしない
   - **起動中の tmux 上の claude はブラウザから終了できる**（ペインも閉じる。tmux の × は切り離すだけ）。入口は 2 つで、どちらも `window.confirm` で確認し、busy なら「作業中です」を文言に足す（`utils/runningSessions.js` の `terminateConfirmMessage()`）
     - タブの ⏻（`.tab-terminate`。tmux タブだけ）は `terminate_tmux_session {sessionId}` を送る。paneId / claudeSessionId はクライアントの値を使わず、サーバーが `tmuxSessionManager` と `jsonlWatcher.getSessionMeta()` から引く
-    - ホーム上段のカードの「終了」（`.home-action.danger`。paneId があるものだけ）は `terminate_tmux_session {paneId, claudeSessionId}` を送る
+    - ホーム上段のカードの「終了」（`.home-action.danger`。paneId があるものだけ）は `terminate_tmux_session {paneId, claudeSessionId}` を送る（claudeSessionId は必須。コマンド名だけの確認で kill するのは、タブ経路で ID が未解決のときだけ）
     - 実際に kill するかは `killClaudePane()` の照合で決まる。成功したら同じ paneId のタブを全部閉じ（detach と同じ後始末）、`paneSnapshot` から外し（`removePaneSnapshot`。再起動時に再開待ちへ入らないように）、`dropPending` してから `tmux_session_terminated {paneId, claudeSessionId, closedSessionIds}` を配る
     - **クライアントの後始末（`messagesBySession` と `historyBoundary:<id>` の削除）はこの通知を受けてから行う**（照合で拒否されたときに、タブが残って履歴だけ消えないように）。kill 直後は pid が残っていることがあるので、起動中一覧は 1.5 秒後に取り直す
-    - 失敗はタブからなら `error`、ホームからなら `home_error`
+    - 失敗はホームからなら `home_error`、タブからなら `error` と `home_error` の両方（⏻ はホーム表示中でも押せるため）
 - 失敗時は `home_error` を返し、HomeView 上部の `.home-error` バナーで見せる（チャット欄の `error` はホーム表示中に見えないため別経路）。tmux 未インストールはコマンド全文ではなく短文にする
   - シェルに渡す値の検証: `claudeSessionId` は `/^[\w-]+$/`、tmux セッション名は `validateSessionName()` 相当の `/^[\w.:-]+$/`、生成された paneId は `validatePaneId()`（`%<数字>`）、cwd と window 名は `escapeForShell()`
 - 期間は 1/3/7/30 日のプリセット（既定 7 日、localStorage `homeRecentDays`）。サーバー側は `clampDays()` で 1〜365 に丸める
