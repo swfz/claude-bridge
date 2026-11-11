@@ -75,6 +75,10 @@ export default function App() {
   // ホームの「直近のセッション」（終了済みを含む JSONL 由来）。null = 未取得
   const [recentSessions, setRecentSessions] = useState(null);
   const [recentDays, setRecentDays] = useState(() => Number(localStorage.getItem('homeRecentDays')) || 7);
+  // `claude -p`（スケジュール実行など）のセッションを直近一覧に含めるか。既定は含めない
+  const [includeHeadless, setIncludeHeadless] = useState(() => localStorage.getItem('homeIncludeHeadless') === '1');
+  const includeHeadlessRef = useRef(includeHeadless);
+  includeHeadlessRef.current = includeHeadless;
   // 活動グラフの棒・升目で選んだ期間 {from, to, label}。その場限りの絞り込みなので保存しない
   const [recentPeriod, setRecentPeriod] = useState(null);
   const recentPeriodRef = useRef(recentPeriod);
@@ -483,6 +487,9 @@ export default function App() {
       const current = recentPeriodRef.current;
       const echoed = msg.period || null;
       if (!!echoed !== !!current || (echoed && !periodEquals(echoed, current))) return;
+      // `claude -p` を除外する要求は先頭行の読み込みを待つぶん遅く、トグル直後の
+      // 「含める」応答を追い越して上書きし得るので、こちらも食い違う応答は捨てる
+      if (!!msg.includeHeadless !== includeHeadlessRef.current) return;
       setRecentSessions(msg.sessions || []);
     });
   }, [on]);
@@ -612,7 +619,7 @@ export default function App() {
   // 取得の effect に混ぜると往復のたびに「読み込み中」に戻り、送信が失敗すると復帰できない）
   useEffect(() => {
     setRecentSessions(null);
-  }, [recentDays, recentPeriod]);
+  }, [recentDays, recentPeriod, includeHeadless]);
 
   // 直近セッションは JSONL 全走査になるので、ホームを開いた時と日数・期間の変更時だけ取る。
   // starred は「期間外でも一覧に含める対象」としてサーバーに渡す
@@ -622,9 +629,10 @@ export default function App() {
       type: 'list_recent_sessions',
       days: recentDays,
       starred: starredRef.current,
+      includeHeadless,
       ...(recentPeriod ? { period: { from: recentPeriod.from, to: recentPeriod.to } } : {}),
     });
-  }, [showHome, connected, recentDays, recentPeriod, send]);
+  }, [showHome, connected, recentDays, recentPeriod, includeHeadless, send]);
 
   // 活動ヒートマップも JSONL 由来なので、ホームを開いた時と「更新」時だけ取る。
   // サーバー側はファイル単位のキャッシュを持つので 2 回目以降は差分だけ読む
@@ -661,6 +669,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('homeRecentDays', String(recentDays));
   }, [recentDays]);
+
+  useEffect(() => {
+    localStorage.setItem('homeIncludeHeadless', includeHeadless ? '1' : '0');
+  }, [includeHeadless]);
 
   useEffect(() => {
     saveStarred(starredSessions);
@@ -1547,6 +1559,8 @@ export default function App() {
                   recentSessions={recentSessions}
                   recentDays={recentDays}
                   onChangeRecentDays={setRecentDays}
+                  includeHeadless={includeHeadless}
+                  onChangeIncludeHeadless={setIncludeHeadless}
                   recentPeriod={recentPeriod}
                   onChangeRecentPeriod={setRecentPeriod}
                   starred={starredSessions}
@@ -1578,6 +1592,7 @@ export default function App() {
                       type: 'list_recent_sessions',
                       days: recentDays,
                       starred: starredSessions,
+                      includeHeadless,
                       ...(recentPeriod ? { period: { from: recentPeriod.from, to: recentPeriod.to } } : {}),
                     });
                     requestHeatmap();

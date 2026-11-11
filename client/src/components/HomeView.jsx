@@ -149,6 +149,8 @@ export default function HomeView({
   recentSessions,
   recentDays,
   onChangeRecentDays,
+  includeHeadless,
+  onChangeIncludeHeadless,
   recentPeriod,
   onChangeRecentPeriod,
   starred,
@@ -520,6 +522,19 @@ export default function HomeView({
                 </button>
               </span>
             )}
+            {/* `claude -p` のセッション（スケジュール実行など）は数が多く一覧を埋めるので既定で隠す */}
+            <button
+              className={`home-day home-headless-toggle ${includeHeadless ? 'active' : ''}`}
+              onClick={() => onChangeIncludeHeadless(!includeHeadless)}
+              aria-pressed={!!includeHeadless}
+              title={
+                includeHeadless
+                  ? 'claude -p（非対話実行）のセッションを表示中。クリックで隠す'
+                  : 'claude -p（非対話実行）のセッションは隠しています。クリックで表示'
+              }
+            >
+              claude -p
+            </button>
             <div className="home-completion-filter">
               {FILTERABLE_STATES.map((state) => (
                 <button

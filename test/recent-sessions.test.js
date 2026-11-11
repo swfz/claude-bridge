@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, utimes } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { listRecentSessions } from '../server/claude-sessions.js';
+import { listRecentSessions, readSessionEntrypoint } from '../server/claude-sessions.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -170,5 +170,56 @@ describe('listRecentSessions', () => {
       dir: join(tmpdir(), 'cb-recent-does-not-exist'),
     });
     assert.deepEqual(result, []);
+  });
+
+  describe('claude -p (entrypoint: sdk-cli) sessions', () => {
+    const headless = (text) =>
+      jsonl([
+        { type: 'session-owner', sessionId: 'x' },
+        { type: 'user', entrypoint: 'sdk-cli', message: { role: 'user', content: text } },
+      ]);
+    const interactive = (text) =>
+      jsonl([{ type: 'user', entrypoint: 'cli', message: { role: 'user', content: text } }]);
+
+    it('excludes headless sessions before applying the limit when includeHeadless is false', async () => {
+      const dir = await makeProjects([
+        { projectDir: '-home-me-a', sessionId: 'p1', daysAgo: 0.1, content: headless('定期実行') },
+        { projectDir: '-home-me-a', sessionId: 'p2', daysAgo: 0.2, content: headless('定期実行') },
+        { projectDir: '-home-me-b', sessionId: 'i1', daysAgo: 0.3, content: interactive('対話') },
+        { projectDir: '-home-me-b', sessionId: 'i2', daysAgo: 0.4, content: interactive('対話') },
+      ]);
+      const excluded = await listRecentSessions({ days: 7, dir, limit: 2, includeHeadless: false });
+      assert.deepEqual(
+        excluded.map((s) => s.sessionId),
+        ['i1', 'i2'],
+      );
+      const included = await listRecentSessions({ days: 7, dir, limit: 2 });
+      assert.deepEqual(
+        included.map((s) => s.sessionId),
+        ['p1', 'p2'],
+      );
+    });
+
+    it('keeps starred headless sessions even when excluding', async () => {
+      const dir = await makeProjects([
+        { projectDir: '-home-me-a', sessionId: 'p1', daysAgo: 0.1, content: headless('定期実行') },
+        { projectDir: '-home-me-b', sessionId: 'i1', daysAgo: 0.3, content: interactive('対話') },
+      ]);
+      const result = await listRecentSessions({ days: 7, dir, includeHeadless: false, includeSessionIds: ['p1'] });
+      assert.deepEqual(
+        result.map((s) => s.sessionId),
+        ['p1', 'i1'],
+      );
+    });
+
+    it('treats sessions without an entrypoint as interactive', async () => {
+      const dir = await makeProjects([{ projectDir: '-home-me-a', sessionId: 'old', daysAgo: 0.1 }]);
+      const result = await listRecentSessions({ days: 7, dir, includeHeadless: false });
+      assert.deepEqual(
+        result.map((s) => s.sessionId),
+        ['old'],
+      );
+      assert.equal(await readSessionEntrypoint(join(dir, '-home-me-a', 'old.jsonl')), null);
+    });
   });
 });

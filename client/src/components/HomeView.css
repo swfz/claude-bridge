@@ -362,6 +362,13 @@
   color: #fff;
 }
 
+/* `claude -p` のセッションを含めるかのトグル。プリセット群と同じ枠で単独のボタンにする */
+.home-headless-toggle {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+}
+
 /* 活動グラフの棒・升目で選んだ期間。プリセットと同じトーンで隣に並べる */
 .home-period-chip {
   display: inline-flex;

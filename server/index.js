@@ -1144,16 +1144,26 @@ wss.on('connection', (ws) => {
         const days = clampDays(msg.days);
         const starred = sanitizeSessionIds(msg.starred);
         const period = sanitizePeriod(msg.period);
+        // `claude -p` のセッションは既定で除外し、クライアントが明示したときだけ含める
+        const includeHeadless = msg.includeHeadless === true;
         // 期間指定のときは活動グラフと同じ日別集計で「その期間に動いたセッション」を出し、
         // mtime の期間フィルタの代わりに使う（既に絞り込み済みなので上限だけ掛ける）
         const load = period
           ? listActiveSessionIds(period).then((sessionIds) =>
-              listRecentSessions({ days, limit: 500, includeSessionIds: starred, sessionIds }),
+              listRecentSessions({ days, limit: 500, includeSessionIds: starred, sessionIds, includeHeadless }),
             )
-          : listRecentSessions({ days, limit: recentSessionLimit(days), includeSessionIds: starred });
+          : listRecentSessions({ days, limit: recentSessionLimit(days), includeSessionIds: starred, includeHeadless });
         load
           .then((recent) => {
-            ws.send(JSON.stringify({ type: 'recent_sessions', days, ...(period ? { period } : {}), sessions: recent }));
+            ws.send(
+              JSON.stringify({
+                type: 'recent_sessions',
+                days,
+                includeHeadless,
+                ...(period ? { period } : {}),
+                sessions: recent,
+              }),
+            );
           })
           .catch((err) => {
             ws.send(
