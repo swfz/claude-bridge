@@ -143,3 +143,24 @@ export function saveTabGroups(state) {
 export function visibleTabsOf(group, activeId) {
   return group.collapsed ? group.sessions.filter((s) => s.id === activeId) : group.sessions;
 }
+
+// セッション行にディレクトリを出すか。既定値（グループの代表ディレクトリと同じ）は出さず、例外だけ出す。
+// 手動グループは代表ディレクトリを持たないので全行に出す。自動グループでは別のディレクトリから
+// D&D で移ってきたタブだけが該当する
+export function shouldShowDir(session, group) {
+  if (!group) return false;
+  return Boolean(group.manual) || autoGroupKeyOf(session) !== group.key;
+}
+
+// 自動グループの代表ディレクトリ（元になったリポジトリのフルパス）。worktree はリポジトリ側に戻す。
+// ホーム配下は `~` に畳む。手動グループや cwd 不明は null
+export function representativeDirOf(group) {
+  if (!group || group.manual) return null;
+  const source = group.sessions?.find((s) => s.cwd && autoGroupKeyOf(s) === group.key);
+  if (!source) return null;
+  const { project } = parseCwd(source.cwd);
+  const cwd = source.cwd.replace(/\/+$/, '');
+  const i = cwd.lastIndexOf(`/${project}/`);
+  const root = i >= 0 ? cwd.slice(0, i + project.length + 1) : cwd;
+  return root.replace(/^\/(?:home|Users)\/[^/]+(?=\/|$)/, '~');
+}

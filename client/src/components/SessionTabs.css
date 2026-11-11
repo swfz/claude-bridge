@@ -1,4 +1,9 @@
+/* セッションサイドバー。方針は「既定値は表示しない、例外だけ表示する」。
+   枠・背景色は使わず、色はグループ識別（ドット）と注意喚起（状態ドット・使用率バー）だけに使う。 */
 .session-tabs {
+  --tab-hover-bg: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --tab-selected-bg: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --tab-faint: color-mix(in srgb, var(--text-secondary) 80%, transparent);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -28,11 +33,10 @@
 
 /* ホームは常に最上段に固定 */
 .tab-home {
-  background: var(--tab-inactive);
-  border: none;
-  border-left: 3px solid transparent;
+  background: none;
+  border: 0.5px solid transparent;
   color: var(--text-secondary);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 6px 10px;
   font-size: 13px;
   text-align: left;
@@ -43,51 +47,77 @@
 }
 
 .tab-home:hover {
-  background: var(--bg-surface);
+  background: var(--tab-hover-bg);
 }
 
 .tab-home.active {
-  background: var(--tab-active);
-  color: var(--tab-active-text);
-  font-weight: 600;
-  border-left-color: var(--accent);
+  background: var(--tab-selected-bg);
+  border-color: var(--border);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.tab-new {
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  text-align: left;
+  width: 100%;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.tab-new:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .tabs-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   overflow-y: auto;
   /* min-height: 0 が無いとタブが増えたときに縮まず、下のカンペを押し出す */
   flex: 1 1 auto;
   min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 
+.tabs-list:hover {
+  scrollbar-color: var(--border) transparent;
+}
+
+/* ==== セッション行（2 行構成・カード枠なし） ==== */
+
 .tab {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px 10px;
-  background: var(--tab-inactive);
-  border-radius: 6px;
-  border-left: 3px solid transparent;
+  padding: 6px 8px;
+  border: 0.5px solid transparent;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
   transition: background 0.15s;
 }
 
 .tab:hover {
-  background: var(--bg-surface);
+  background: var(--tab-hover-bg);
 }
 
 .tab.active {
-  background: var(--tab-active);
-  color: var(--tab-active-text);
-  border-left-color: var(--accent);
+  background: var(--tab-selected-bg);
+  border-color: var(--border);
 }
 
 .tab.dead {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: default;
 }
 
@@ -107,12 +137,14 @@
 .tab-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 /* AI タイトル（サマリー）をそのままタブ名にするため、長文はここで省略する */
 .tab-name {
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-primary);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -120,168 +152,170 @@
   white-space: nowrap;
 }
 
-.tab-cwd {
-  font-size: 11px;
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.tab.active .tab-name,
+.tab.tab-attention .tab-name {
+  font-weight: 500;
+}
+
+/* 2 行目のメタ情報。行頭ドットの幅だけ字下げしてタイトルと頭を揃える */
+.tab-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.tab-cwd-project {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 1;
+  gap: 8px;
   min-width: 0;
-}
-
-/* 親ディレクトリは識別の補助なので薄く（同名プロジェクトの区別用） */
-.tab-cwd-parent {
-  color: var(--text-secondary);
-  font-weight: 400;
-}
-
-/* worktree 名はプロジェクト名と区別できるようバッジ風に */
-.tab-cwd-worktree {
-  flex-shrink: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--accent);
-  background: var(--bg-primary);
-  padding: 0 5px;
-  border-radius: 3px;
-  font-size: 10px;
+  padding-left: 14px;
+  font-size: 11px;
   line-height: 16px;
+  color: var(--tab-faint);
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-/* コンテキスト使用率。cwd 行の右端に寄せ、幅が足りなくても最初に潰れないよう縮ませない */
+.tab-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.tab-meta-icon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+}
+
+.tab-meta-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-meta-text.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* 自作グループや移動してきたタブのディレクトリ。出どころのグループ色の小ドット */
+.tab-dir-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 使用率。右寄せの細いバー＋数値 */
 .tab-context {
   margin-left: auto;
   flex-shrink: 0;
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-variant-numeric: tabular-nums;
 }
 
-/* tmux タブは rename されていないこともあるため cwd を識別子として強調 */
-.tab-cwd-strong {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  background: var(--bg-primary);
-  padding: 1px 6px;
-  border-radius: 3px;
+.tab-context-bar {
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--meter-track);
+  overflow: hidden;
+}
+
+.tab-context-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.tab-context-num {
+  min-width: 3ch;
+  text-align: right;
+}
+
+/* ==== 行の操作ボタン（右上に重ね、ホバー時だけ出す） ==== */
+
+.tab-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: none;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.tab:hover .tab-actions,
+.tab:focus-within .tab-actions {
   display: inline-flex;
 }
 
-.tab-close {
-  background: none;
+@media (hover: none) {
+  .tab-actions {
+    display: inline-flex;
+  }
+}
+
+.tab-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   border: none;
+  border-radius: 4px;
+  background: none;
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 14px;
-  padding: 0 2px;
-  line-height: 1;
-  margin-left: auto;
+  padding: 0;
 }
 
-.tab-close:hover {
-  color: var(--accent);
-}
-
-/* tmux 上の claude を終了してペインを閉じる。× の左に寄せる（× の margin-left: auto を引き継ぐ） */
-.tab-terminate {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0 2px;
-  line-height: 1;
-  margin-left: auto;
-  opacity: 0.6;
+.tab-action:hover {
+  background: var(--tab-hover-bg);
+  color: var(--text-primary);
 }
 
 .tab-terminate:hover {
-  color: var(--accent);
-  opacity: 1;
+  color: var(--danger);
 }
 
-.tab-terminate + .tab-close {
-  margin-left: 0;
-}
-
-.tab-dead-actions {
-  display: flex;
-  gap: 2px;
-  margin-left: auto;
-}
-
-.tab-restart {
-  background: none;
-  border: none;
-  color: var(--success);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0 2px;
-  line-height: 1;
-}
-
-.tab-restart:hover {
-  color: var(--accent-hover);
-}
-
-.tab-new {
-  background: none;
-  border: 1px dashed var(--border);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 13px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  text-align: left;
-  width: 100%;
-  flex-shrink: 0;
-  transition: all 0.15s;
-}
-
-.tab-new:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.tab-badge {
-  font-size: 9px;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: var(--accent-secondary);
-  color: white;
-  font-weight: 600;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
+/* ==== 行頭の状態ドット（状態はここ 1 か所だけで表す） ==== */
 
 .tab-status {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--text-secondary);
+  box-sizing: border-box;
+  background: var(--success);
 }
 
+/* 入力待ち（応答済み・確認済み） */
+.tab-status-idle {
+  background: var(--success);
+}
+
+/* 処理中 */
 .tab-status-busy {
-  background: #f0ad4e;
-  box-shadow: 0 0 4px #f0ad4e;
   animation: tab-status-pulse 1.2s ease-in-out infinite;
 }
 
-.tab-status-idle {
-  background: var(--success);
+/* 応答完了・未確認（tmux のベル通知相当）。光の輪で処理中の点滅と見分ける */
+.tab-status-attention {
+  animation: tab-status-glow 1.6s ease-in-out infinite;
+}
+
+/* 権限確認など、ユーザーの操作が必要 */
+.tab-status-waiting {
+  background: var(--warning);
+  box-shadow: 0 0 5px 1px var(--warning);
+  animation: tab-status-pulse 1.2s ease-in-out infinite;
+}
+
+.tab-status-failed {
+  background: var(--danger);
 }
 
 /* tmux で再開した直後、claude の起動を確かめるまで（つながったら idle の緑になる） */
@@ -289,59 +323,18 @@
   background: transparent;
   border: 1.5px solid var(--text-secondary);
   border-top-color: var(--success);
-  box-sizing: border-box;
   animation: tab-status-spin 0.8s linear infinite;
 }
 
-.tab-status-failed {
-  background: var(--accent);
+/* プロセスが止まっている内蔵セッション */
+.tab-status-dead {
+  background: var(--text-secondary);
 }
 
-.tab-badge-starting {
+/* 状態の取れない閲覧タブなど */
+.tab-status-none {
   background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  text-transform: none;
-  animation: tab-status-pulse 1.2s ease-in-out infinite;
-}
-
-.tab-badge-failed {
-  background: var(--accent);
-  text-transform: none;
-}
-
-@keyframes tab-status-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.tab-status-waiting {
-  background: var(--warning, #f0ad4e);
-  box-shadow: 0 0 6px 2px var(--warning, #f0ad4e);
-  animation: tab-status-pulse 1.2s ease-in-out infinite;
-}
-
-.tab-badge-waiting {
-  background: var(--warning, #f0ad4e);
-  color: #1a1200;
-  animation: tab-status-pulse 1.2s ease-in-out infinite;
-}
-
-/* ターン完了（未確認）＝ tmux のベル通知相当。waiting（黄）と区別するため success（緑）を使う */
-.tab.tab-attention {
-  border-left-color: var(--success);
-}
-
-.tab-badge-attention {
-  background: var(--success);
-  color: #04180a;
-  animation: tab-status-pulse 1.2s ease-in-out infinite;
-}
-
-/* ライトモードの success は暗い緑なので文字は白に戻す */
-body.light-mode .tab-badge-attention {
-  color: #fff;
+  border: 1px solid var(--text-secondary);
 }
 
 @keyframes tab-status-pulse {
@@ -350,8 +343,190 @@ body.light-mode .tab-badge-attention {
     opacity: 1;
   }
   50% {
-    opacity: 0.4;
+    opacity: 0.35;
   }
+}
+
+@keyframes tab-status-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 70%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent);
+  }
+}
+
+@keyframes tab-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==== Star / センシティブ / 小窓の印（表示専用。付け外しはホーム側） ==== */
+
+.tab-mark {
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+}
+
+.tab-mark-star {
+  color: #e3a21a;
+}
+
+.tab-mark-lock,
+.tab-mark-pip {
+  color: var(--text-secondary);
+}
+
+/* ==== グループ（枠・背景・色帯なし。区切りは余白） ==== */
+
+.tab-group {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  margin-top: 12px;
+}
+
+.tab-group:first-child {
+  margin-top: 0;
+}
+
+.tab-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tab-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.tab-group-header:hover {
+  background: var(--tab-hover-bg);
+}
+
+.tab-group-header.tab-group-drop {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.tab-group-caret {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.tab-group-caret.closed {
+  transform: rotate(-90deg);
+}
+
+.tab-group-kind {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.tab-group-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 名前を優先し、狭いときは代表ディレクトリ側から縮める */
+.tab-group-label {
+  flex: 0 0 auto;
+  max-width: 75%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* 畳んだグループに表示中のタブがある */
+.tab-group-header.has-active .tab-group-label {
+  color: var(--accent);
+}
+
+.tab-group-dir {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--tab-faint);
+}
+
+.tab-group-count {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tab-faint);
+}
+
+.tab-group-actions {
+  display: none;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.tab-group-header:hover .tab-group-actions {
+  display: inline-flex;
+}
+
+@media (hover: none) {
+  .tab-group-actions {
+    display: inline-flex;
+  }
+}
+
+.tab-group-action {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 1px 2px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.tab-group-action:hover {
+  color: var(--text-primary);
+  background: var(--tab-hover-bg);
+}
+
+.tab-group-new {
+  margin-top: 12px;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tab-group-new:hover {
+  color: var(--text-primary);
 }
 
 /* ==== 折りたたみ（Chrome のサイドタブ相当） ==== */
@@ -378,7 +553,7 @@ body.light-mode .tab-badge-attention {
 }
 
 .sidebar-toggle:hover {
-  background: var(--bg-surface);
+  background: var(--tab-hover-bg);
   color: var(--text-primary);
 }
 
@@ -393,12 +568,6 @@ body.light-mode .tab-badge-attention {
   width: 36px;
   padding: 6px 0;
   text-align: center;
-  border-left: none;
-}
-
-.session-tabs.collapsed .tab-home.active {
-  background: var(--tab-active);
-  color: var(--tab-active-text);
 }
 
 .session-tabs.collapsed .tabs-list {
@@ -408,9 +577,30 @@ body.light-mode .tab-badge-attention {
   overflow-x: hidden;
 }
 
+/* 折りたたみ表示では見出しを出さず、グループ色のドットと余白だけで区切る */
+.session-tabs.collapsed .tab-group {
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.session-tabs.collapsed .tab-group:first-child {
+  margin-top: 0;
+}
+
+.session-tabs.collapsed .tab-group-body {
+  align-items: center;
+  gap: 4px;
+}
+
+.tab-group-mini-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
 /* 折りたたみタブは頭文字アイコン。状態ドットは右上に重ねる */
 .tab-mini {
-  position: relative;
   flex-direction: row;
   align-items: center;
   justify-content: center;
@@ -418,210 +608,36 @@ body.light-mode .tab-badge-attention {
   height: 36px;
   padding: 0;
   flex-shrink: 0;
-  border-left: none;
-  border: 1px solid transparent;
-}
-
-.tab-mini.active {
-  border-color: var(--accent);
-}
-
-.tab-mini.tab-attention {
-  border-color: var(--success);
-}
-
-.tab-mini.tab-mini-waiting {
-  border-color: var(--warning, #f0ad4e);
-  animation: tab-status-pulse 1.2s ease-in-out infinite;
 }
 
 .tab-mini-avatar {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.5px;
+  color: var(--text-primary);
 }
 
 .tab-mini .tab-status {
   position: absolute;
-  top: 2px;
-  right: 2px;
-}
-
-/* ==== Star / センシティブの印（表示専用。付け外しはホーム側） ==== */
-
-.tab-mark {
-  font-size: 10px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.tab-mark-star {
-  color: #f0ad4e;
-  font-size: 11px;
-}
-
-.tab-mark-lock {
-  opacity: 0.75;
-}
-
-/* プレビューを小窓（PiP）に出しているセッション */
-.tab-mark-pip {
-  color: var(--accent-secondary);
-  font-size: 11px;
+  top: 3px;
+  right: 3px;
 }
 
 /* 折りたたみ時は状態ドット（右上）とぶつからないよう左下に寄せる。
    頭文字と重なる位置なので、下地を敷いて読めるようにする */
 .tab-mini-marks {
   position: absolute;
-  bottom: 0;
-  left: 0;
+  bottom: 1px;
+  left: 1px;
   display: flex;
   align-items: center;
   gap: 1px;
-  padding: 0 2px 1px;
-  border-radius: 4px 0 0 4px;
-  background: inherit;
+  padding: 0 1px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
 }
 
 .tab-mini-marks .tab-mark {
-  font-size: 9px;
-}
-
-.tab-mini-marks .tab-mark-star {
-  font-size: 10px;
-}
-
-/* グループの枠。左の色帯（--group-color）と薄い下地で、見出しと中のタブを 1 つの塊に見せる */
-.tab-group {
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  margin-top: 6px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--group-color, var(--border));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--group-color, transparent) 7%, transparent);
-  overflow: hidden;
-}
-
-.tab-group:first-child {
-  margin-top: 0;
-}
-
-.tab-group-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 4px 4px;
-}
-
-/* グループ見出し（既定はプロジェクトで自動、手動グループは ✎ / x を持つ） */
-.tab-group-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--group-color, var(--text-secondary));
-  cursor: pointer;
-  user-select: none;
-  flex-shrink: 0;
-}
-
-.tab-group-header:hover {
-  background: color-mix(in srgb, var(--group-color, var(--bg-surface)) 14%, transparent);
-}
-
-/* 手動グループは見出しを白抜きの文字にして自動グループと見分ける */
-.tab-group.manual .tab-group-header {
-  color: var(--text-primary);
-}
-
-.tab-group-header .tab-group-count {
-  color: var(--text-secondary);
-  font-weight: 400;
-}
-
-/* 畳んだグループに表示中のタブがある */
-.tab-group-header.has-active .tab-group-label {
-  color: var(--accent);
-}
-
-.tab-group-header.tab-group-drop {
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-.tab-group-caret {
-  width: 10px;
-  flex-shrink: 0;
-}
-
-.tab-group-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tab-group-count {
-  opacity: 0.7;
-}
-
-.tab-group-actions {
-  display: none;
-  gap: 2px;
-}
-
-.tab-group-header:hover .tab-group-actions {
-  display: inline-flex;
-}
-
-@media (hover: none) {
-  .tab-group-actions {
-    display: inline-flex;
-  }
-}
-
-.tab-group-action {
-  border: none;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  padding: 0 3px;
-  font-size: 11px;
-}
-
-.tab-group-action:hover {
-  color: var(--text-primary);
-}
-
-.tab-group-new {
-  margin-top: 6px;
-  border: 1px dashed var(--border);
-  background: none;
-  color: var(--text-secondary);
-  border-radius: 4px;
-  padding: 3px 6px;
-  font-size: 11px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.tab-group-new:hover {
-  color: var(--text-primary);
-}
-
-/* 折りたたみ表示では見出しを出さず、色帯付きの枠だけでグループを示す */
-.session-tabs.collapsed .tab-group {
-  align-items: center;
-  padding: 3px 0;
-}
-
-.session-tabs.collapsed .tab-group-body {
-  align-items: center;
-  gap: 4px;
-  padding: 0;
+  width: 9px;
+  height: 9px;
 }

@@ -10,12 +10,50 @@ import {
   flattenTabGroups,
   groupKeyOf,
   renameGroup,
+  representativeDirOf,
+  shouldShowDir,
   toggleGroupCollapsed,
   visibleTabsOf,
 } from '../client/src/utils/tabGroups.js';
 
 const s = (id, cwd, claudeSessionId) => ({ id, cwd, claudeSessionId });
 const empty = { groups: [], assign: {}, collapsed: [] };
+
+describe('shouldShowDir', () => {
+  const autoGroup = { key: 'p:gh/app', manual: false };
+  it('hides the dir when the tab belongs to the group directory (worktrees included)', () => {
+    assert.equal(shouldShowDir(s('a', '/home/u/gh/app'), autoGroup), false);
+    assert.equal(shouldShowDir(s('b', '/home/u/gh/app/.claude/worktrees/wt'), autoGroup), false);
+  });
+  it('shows the dir for a tab moved in from another directory', () => {
+    assert.equal(shouldShowDir(s('c', '/home/u/gh/other'), autoGroup), true);
+  });
+  it('always shows the dir in manual groups', () => {
+    assert.equal(shouldShowDir(s('a', '/home/u/gh/app'), { key: 'g:x', manual: true }), true);
+  });
+  it('returns false without a group', () => {
+    assert.equal(shouldShowDir(s('a', '/home/u/gh/app'), null), false);
+  });
+});
+
+describe('representativeDirOf', () => {
+  it('returns the repository root with home folded to ~', () => {
+    const group = {
+      key: 'p:gh/app',
+      manual: false,
+      sessions: [s('x', '/home/u/gh/other'), s('a', '/home/u/gh/app/.claude/worktrees/wt1')],
+    };
+    assert.equal(representativeDirOf(group), '~/gh/app');
+  });
+  it('keeps paths outside home as is', () => {
+    assert.equal(representativeDirOf({ key: 'p:srv/app', sessions: [s('a', '/srv/app/')] }), '/srv/app');
+  });
+  it('returns null for manual groups or groups without a matching cwd', () => {
+    assert.equal(representativeDirOf({ key: 'g:x', manual: true, sessions: [s('a', '/x/app')] }), null);
+    assert.equal(representativeDirOf({ key: 'p:', sessions: [s('a')] }), null);
+    assert.equal(representativeDirOf(null), null);
+  });
+});
 
 describe('autoGroupKeyOf', () => {
   it('groups worktrees with their repository', () => {
