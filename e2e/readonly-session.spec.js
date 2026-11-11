@@ -130,10 +130,10 @@ test('行をクリックすると readonly セッションが開き、会話が�
   // PiP の document は親のスクリプトから documentPictureInPicture.window で覗く
   const pipState = () =>
     page.evaluate(() => {
-      const w = window.documentPictureInPicture?.window;
+      const w = globalThis.documentPictureInPicture?.window;
       return w ? (w.document.querySelector('.drawer-markdown')?.textContent ?? '') : null;
     });
-  const hasPip = await page.evaluate(() => 'documentPictureInPicture' in window);
+  const hasPip = await page.evaluate(() => 'documentPictureInPicture' in globalThis);
   if (hasPip) {
     await page.locator('.chat-message.assistant .btn-header-action', { hasText: 'Preview' }).first().click();
     await page.locator('.drawer button', { hasText: '小窓' }).click();
@@ -154,7 +154,7 @@ test('行をクリックすると readonly セッションが開き、会話が�
   // PiP はセッションに紐づかないのでホームへ移っても残り、窓を閉じると消える
   if (hasPip) {
     await expect.poll(pipState).toContain('ヘルスチェックのエンドポイントを追加します');
-    await page.evaluate(() => window.documentPictureInPicture.window.close());
+    await page.evaluate(() => globalThis.documentPictureInPicture.window.close());
     await expect.poll(pipState).toBeNull();
   }
 });
