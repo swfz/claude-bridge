@@ -81,6 +81,41 @@ pnpm run format:check  # Prettier の整形チェック（CI でも実行）。�
 - `thread-store.js` -- スレッド CRUD
 - `slash-commands.js` -- 入力欄のスラッシュコマンド補完の候補を集める `listSlashCommands({cwd, claudeDir})`。プロセス起動はせず、スキル/コマンドのファイルを走査するだけ（`<claudeDir>/skills/*/SKILL.md`、`<claudeDir>/commands/**/*.md`、`cwd` 側の `.claude/` 配下、`plugins/installed_plugins.json` の `installPath` 配下、組み込みコマンドの静的配列）。スキルのディレクトリはシンボリックリンクが多いので `lstat` ではなく `stat` で追従する。**本体同梱スキル（`/code-review` `/simplify` `/loop` 等）は単一 ELF バイナリに埋め込まれていて走査も列挙サブコマンドも無いため、`BUNDLED_SKILLS` の静的リストで持つ既知の妥協**（本体更新で増減し得る）。description は frontmatter の `description:`（無ければ本文の最初の非空行）を 120 文字に切る。name の重複は project > user > plugin > bundled > builtin で先勝ち。走査が重いので `cwd`+`claudeDir` 単位で 30 秒キャッシュ（`clearSlashCommandsCache()` で破棄）。**`BUILTIN_COMMANDS` は「ブラウザから使える」と実測できた 4 件だけ**（`clear` / `compact` / `context` / `init`）。TUI 内にモーダルを開くもの（`/model` 等）は見えず操作もできないので出さない（詳細は「スラッシュコマンド補完」の節）
 - `rate-limits.js` -- Claude のレート制限（5h/7d ウィンドウの使用率）取得。**credentials・外部通信は使わない**。Claude Code が statusLine コマンドの stdin に渡す `rate_limits`（`used_percentage` / epoch 秒の `resets_at`）を `scripts/statusline/bridge-statusline-tee.js` がファイル（`<dataDir>/rate-limits.json`）に横流しし、`readRateLimits()` はそれを読むだけ。ローカルファイル読みなので `index.js` は 15 秒間隔でポーリングし、内容が変わったときだけ `rate_limits {usage, fetchedAt}` をブロードキャスト（`fetchedAt` は tee が書いた取得時刻で、statusline 連携が止まっていれば古いまま＝クライアント側の stale 判定に使われる）。statusline 未連携（ファイル無し）は `no-file` として一度だけ案内ログを出す
+- `open-tabs.js` -- 再起動後の復元（詳細は「再起動後の復元」の節）。`<dataDir>/open-tabs.json` の読み書き（tmp + rename）と、保存内容・生きているペインから「繋ぎ直す / 閲覧で開く / 再開待ち」を決める純粋関数 `planRestore()` / `splitPending()` / `updatePaneSnapshot()`
+
+### 再起動後の復元（open-tabs.json）
+
+ブリッジや PC/WSL を再起動したあとに「開いていたもの」を戻す仕組み。`<dataDir>/open-tabs.json` に次の 3 つを保存する（`server/open-tabs.js`）。
+
+- `tabs`: ブリッジの tmux タブと閲覧タブ。`broadcastSessionList()` のたびに `persistOpenTabs()` が書く（内容が変わったときだけ）。**ブリッジ ID も保存し、復元時は同じ ID で開き直す**（`activeSessionId` や `historyBoundary:<id>`、`threads-<id>.json` がブリッジ ID に紐づいているため）。内蔵 PTY のタブは従来どおり `sessions.json`（`pastSessions`）が扱うので対象外。claudeSessionId が未解決の tmux タブは突き合わせられないので保存しない
+- `panes`: tmux 上で動いている claude のスナップショット。**ブリッジのタブにしていないものも含む**。30 秒ごとに更新し、tmux セッション名・window 名・window 番号を持つ。**tmux セッション名は `target` から取る**（`enrichPanesWithSessionMeta()` が `sessionName` を Claude 側の名前で上書きするため）。PC の終了処理中に消えないよう、tmux が応答しない間は前回のまま保ち、見えなくなったものも 2 回続けて見えなかったときだけ消す
+- `pending`: 起動時に動いていなかったもの（再開待ち）。ファイルに残すので、ボタンを押す前にもう一度再起動しても失われない。消えるのは次の場合だけ
+  - 再開した（バナーの「まとめて tmux で再開」「再開」）か、破棄した
+  - claude が動いていると分かった（起動時の `planRestore` と、再開直前の `splitPending` で見直す）
+  - バナー以外の経路で claude を動かした（ホームの「tmux で再開」「tmux ペインに接続」「再開（内蔵）」。`dropPending()`）
+  - 閲覧タブを開いただけでは claude は動かないので、再開待ちのまま残す
+
+起動時は `restoreOpenTabs()` が **listen の前に**、生きている claude ペイン（`listClaudeTmuxPanes` + `enrichPanesWithSessionMeta`）と起動中セッション（`listRunningSessions`）を突き合わせる（途中の `session_list` でクライアントのアクティブタブがずれないように）。**突き合わせのキーは claudeSessionId だけ**で、paneId（`%N`）は tmux サーバーを立て直すと振り直されるので使わない。
+
+- ペインが生きている tmux タブは、そのペインに繋ぎ直す
+- tmux の外で動いているものは閲覧タブで開く（resume すると claude が 2 本立つため）
+- それ以外は再開待ちにする
+
+復元と一括再開は ws に `session_opened` を送らない `openTmuxTab()` / `openReadonlyTab()` を使い、アクティブタブを奪わない。履歴は、クライアントの「未取得なら JSONL から復元」の経路に任せる。
+
+一括再開（`resume_restorable_tabs {claudeSessionIds?}`）は `resumePendingTabs()` が **1 件ずつ直列で**進める。
+
+- 押す直前にも生きているものを見直し、すでに動いているものは resume しない（`splitPending`）
+- cwd は `resolveResumeCwd` を通す
+- `resumeInTmuxWindow({tmuxSession, windowName})` で、**元の tmux セッション名・window 名に作り直す**。セッションが無ければ `new-session` で作る。tmux セッション名は `/^[\w.-]{1,64}$/` だけを受け付け、合わなければ既定の選び方に戻す
+- **`-n` の window 名は tmux のフォーマットとして展開される**（tmux 3.7c で実測。`#(cmd)` はコマンド実行になる）。そのため `escapeTmuxFormat()` で `#` を `##` にしてから `escapeForShell()` を通す
+- ブリッジのタブだったものだけ、タブも同じ ID で開き直す。すでに同じ種類のタブがあれば開き直さない。1 件の失敗で残りを止めない
+- 生きているかの読み取り（`readLiveClaude()`）は 10 秒で打ち切る。tmux が固まっていると、listen 前の復元で起動が止まるため
+- 失敗はまとめて 1 回の `home_error` で知らせる
+
+`dismiss_restorable_tabs {claudeSessionIds?}` で破棄する（ID を省くと全件）。サーバーは接続時と変化時に `restorable_tabs {tabs, resuming}` を配り、ホームの `RestorableBanner.jsx` が描く（共有モードではセンシティブ指定のものを出さない）。
+
+接続時には `server_hello {bootId}` も送る。クライアントは再接続で bootId が変わっていたら `messagesBySession` を捨てる。停止中に進んだ分は、JSONL 監視（`attachExisting` は新着だけを流す）では届かないため。
 
 ### statusLine tee（レート制限表示のデータ源）
 

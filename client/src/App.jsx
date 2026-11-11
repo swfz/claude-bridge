@@ -102,6 +102,10 @@ export default function App() {
   const [homeError, setHomeError] = useState(null);
   // ホーム画面への情報（worktree が消えていたので元リポジトリで再開した、など）。エラーではない
   const [homeNotice, setHomeNotice] = useState(null);
+  // 前回 tmux で動いていたのに今は停止しているセッション（サーバーの restorable_tabs）。{tabs, resuming}
+  const [restorable, setRestorable] = useState(null);
+  // 接続先サーバーの起動 ID。再接続時に変わっていたら（＝ブリッジが再起動した）手元の会話を捨てて取り直す
+  const bootIdRef = useRef(null);
   // セッションごとの選択肢プロンプト（id -> {prompt, waitingFor}）。
   // JSONL には回答後にしか出ないので、サーバーが画面から読んだものをそのまま持つ。
   const [choicePrompts, setChoicePrompts] = useState({});
@@ -302,6 +306,20 @@ export default function App() {
 
   useEffect(() => {
     return on('home_notice', (msg) => setHomeNotice(msg.message));
+  }, [on]);
+
+  useEffect(() => {
+    return on('restorable_tabs', (msg) => setRestorable({ tabs: msg.tabs || [], resuming: Boolean(msg.resuming) }));
+  }, [on]);
+
+  // ブリッジが再起動していたら、停止中に進んだ分は JSONL 監視（新着のみ）では届かないので会話を取り直す。
+  // messagesBySession を空にすれば、アクティブタブは既存の「未取得なら JSONL から復元」の経路で読み直される
+  useEffect(() => {
+    return on('server_hello', (msg) => {
+      const prev = bootIdRef.current;
+      bootIdRef.current = msg.bootId;
+      if (prev && prev !== msg.bootId) setMessagesBySession({});
+    });
   }, [on]);
 
   // TUI に出ている選択肢プロンプト（AskUserQuestion / ツール許可 / trust 確認）。
@@ -1632,6 +1650,15 @@ export default function App() {
                   onDismissError={() => setHomeError(null)}
                   notice={homeNotice}
                   onDismissNotice={() => setHomeNotice(null)}
+                  restorable={restorable}
+                  onResumeRestorable={(ids) => {
+                    setHomeError(null);
+                    setHomeNotice(null);
+                    send({ type: 'resume_restorable_tabs', ...(ids ? { claudeSessionIds: ids } : {}) });
+                  }}
+                  onDismissRestorable={(ids) =>
+                    send({ type: 'dismiss_restorable_tabs', ...(ids ? { claudeSessionIds: ids } : {}) })
+                  }
                   onRefresh={() => {
                     setHomeError(null);
                     setHomeNotice(null);

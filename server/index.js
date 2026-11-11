@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { existsSync, lstatSync, readdirSync } from 'fs';
+import { randomUUID } from 'crypto';
 import { extname, join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { SessionManager, ReadonlySessionManager } from './session.js';
@@ -14,10 +15,25 @@ import { CLAUDE_PROJECTS_DIR, cwdToProjectDir } from './jsonl-utils.js';
 import { readSessionSummary } from './session-summary.js';
 import { readSessionTurns } from './session-turns.js';
 import { readRecentExchanges } from './session-recent.js';
-import { listClaudeTmuxPanes, resolveTmuxJsonlTarget, resumeInTmuxWindow, TmuxSessionManager } from './tmux-session.js';
+import {
+  isTmuxServerRunning,
+  listClaudeTmuxPanes,
+  resolveTmuxJsonlTarget,
+  resumeInTmuxWindow,
+  TmuxSessionManager,
+} from './tmux-session.js';
 import { listClaudeAgents } from './claude-agents.js';
 import { enrichPanesWithSessionMeta, readStatusByPid } from './claude-session-meta.js';
 import { listRunningSessions } from './running-sessions.js';
+import {
+  loadOpenTabs,
+  planRestore,
+  saveOpenTabs,
+  splitPending,
+  tabsFromSessions,
+  updatePaneSnapshot,
+  upsertPaneSnapshot,
+} from './open-tabs.js';
 import { parseChoicePrompt } from './choice-prompt.js';
 import { listSubagentTasks, readSubagentTranscript } from './subagent-tasks.js';
 import { listShellTasks, readShellTaskOutput } from './shell-tasks.js';
@@ -355,8 +371,112 @@ function allSessions() {
 }
 
 function broadcastSessionList() {
-  broadcast({ type: 'session_list', sessions: allSessions() });
+  const sessions = allSessions();
+  persistOpenTabs(sessions);
+  broadcast({ type: 'session_list', sessions });
 }
+
+// ---- 開いていたものの保存と再起動後の復元（server/open-tabs.js） ----
+
+// このプロセスの起動 ID。クライアントは再接続時に変わっていたら手元の会話を捨てて取り直す
+// （停止中に進んだ分は watcher の attachExisting では流れてこないため）
+const BOOT_ID = randomUUID();
+// 復元が終わるまでは保存しない（途中の状態で前回の内容を上書きしないため）
+let openTabsReady = false;
+let lastOpenTabsJson = null;
+// tmux 上で動いている claude のスナップショット（ブリッジのタブにしていないものも含む）
+let paneSnapshot = [];
+// 起動時に動いていなかったもの（ホームの「まとめて tmux で再開」の対象）
+let pendingTabs = [];
+let resumingPending = false;
+
+function persistOpenTabs(sessions = allSessions()) {
+  if (!openTabsReady) return;
+  const state = { tabs: tabsFromSessions(sessions), panes: paneSnapshot, pending: pendingTabs };
+  const json = JSON.stringify(state);
+  if (json === lastOpenTabsJson) return;
+  try {
+    saveOpenTabs(state);
+    lastOpenTabsJson = json;
+  } catch (e) {
+    console.error('open-tabs: save failed:', e.message);
+  }
+}
+
+function restorableTabsPayload() {
+  return {
+    type: 'restorable_tabs',
+    resuming: resumingPending,
+    tabs: pendingTabs.map((t) => ({
+      claudeSessionId: t.claudeSessionId,
+      name: t.tab?.name || t.name || null,
+      cwd: t.cwd,
+      tmuxSession: t.tmuxSession,
+      windowName: t.windowName,
+      wasTab: Boolean(t.tab),
+    })),
+  };
+}
+
+function broadcastRestorableTabs() {
+  persistOpenTabs();
+  broadcast(restorableTabsPayload());
+}
+
+// 一括再開以外の経路（ホームの「tmux で再開」「tmux ペインに接続」「再開（内蔵）」）で
+// claude を動かしたセッションを再開待ちから外す。残しておくと一括再開で同じセッションのタブが重複する。
+// 閲覧タブを開いただけでは claude は動かないので外さない（重複は resumePendingTabs の hasTab で防ぐ）
+function dropPending(claudeSessionId) {
+  if (!claudeSessionId || !pendingTabs.some((t) => t.claudeSessionId === claudeSessionId)) return;
+  pendingTabs = pendingTabs.filter((t) => t.claudeSessionId !== claudeSessionId);
+  broadcastRestorableTabs();
+}
+
+// tmux が応答しないと exec が返らず、listen 前の復元で起動が止まるので上限を設ける
+const LIVE_CLAUDE_TIMEOUT_MS = 10_000;
+
+// 生きている claude の tmux ペイン（claudeSessionId 付き）と起動中セッション
+async function readLiveClaude() {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('tmux / セッション一覧の読み取りがタイムアウトしました')),
+      LIVE_CLAUDE_TIMEOUT_MS,
+    );
+  });
+  try {
+    const [panes, running, tmuxAlive] = await Promise.race([
+      Promise.all([
+        listClaudeTmuxPanes().then(enrichPanesWithSessionMeta),
+        listRunningSessions(),
+        isTmuxServerRunning(),
+      ]),
+      timeout,
+    ]);
+    return { panes, running, tmuxAlive };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// tmux 上の claude を定期的に記録する。PC/WSL の終了処理中は tmux が応答しなくなるので
+// その間は前回の内容を保つ（updatePaneSnapshot の tmuxAlive）
+const PANE_SNAPSHOT_INTERVAL = 30_000;
+async function refreshPaneSnapshot() {
+  if (!openTabsReady) return;
+  try {
+    const [panes, tmuxAlive] = await Promise.all([
+      listClaudeTmuxPanes().then(enrichPanesWithSessionMeta),
+      isTmuxServerRunning(),
+    ]);
+    paneSnapshot = updatePaneSnapshot(paneSnapshot, panes, { tmuxAlive });
+    persistOpenTabs();
+  } catch (e) {
+    console.error('open-tabs: snapshot failed:', e.message);
+  }
+}
+const paneSnapshotInterval = setInterval(refreshPaneSnapshot, PANE_SNAPSHOT_INTERVAL);
+wss.on('close', () => clearInterval(paneSnapshotInterval));
 
 // resume 時に cwd を元リポジトリへ差し替えたことを知らせる文言（home_notice）
 function relocatedNotice({ originalCwd, cwd }) {
@@ -373,7 +493,36 @@ function sendTo(ws, payload) {
 // tmux ペインをブリッジのタブとして開く。attach_tmux_pane（既存ペインへの接続）と
 // resume_in_tmux（新しい window で resume 起動）の共通処理。
 function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, claudeSessionId, status, waitingFor }) {
+  dropPending(claudeSessionId);
+  const { session, resolved } = openTmuxTab({
+    paneId,
+    name,
+    cwd,
+    target,
+    claudePid,
+    claudeSessionId,
+    status,
+    waitingFor,
+  });
+  if (resolved) {
+    loadSessionHistory(resolved.sessionId, resolved.projectDir).then((history) => {
+      sendTo(ws, {
+        type: 'session_history',
+        bridgeSessionId: session.id,
+        messages: history,
+      });
+    });
+  }
+  sendTo(ws, { type: 'session_opened', bridgeSessionId: session.id });
+  broadcastSessionList();
+  return session;
+}
+
+// tmux タブを作って JSONL 監視を始めるところまで（ws には何も送らない）。
+// 起動時の復元と一括再開はこれだけを使う（session_opened でアクティブタブを奪わないため）
+function openTmuxTab({ id, paneId, name, cwd, target, claudePid, claudeSessionId, status, waitingFor }) {
   const session = tmuxSessionManager.attachPane({
+    id,
     paneId,
     name: name || `tmux: ${target}`,
     cwd,
@@ -387,14 +536,6 @@ function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, cla
   // cwd の最新 JSONL 推定は、複数 tmux セッション/同一 cwd で取り違えるため使わない。
   const resolved = resolveTmuxJsonlTarget({ claudeSessionId, cwd });
   if (resolved) {
-    loadSessionHistory(resolved.sessionId, resolved.projectDir).then((history) => {
-      sendTo(ws, {
-        type: 'session_history',
-        bridgeSessionId: session.id,
-        messages: history,
-      });
-    });
-
     // JSONL 監視開始（新規メッセージのみ配信）
     jsonlWatcher.startWatching({
       bridgeSessionId: session.id,
@@ -404,10 +545,193 @@ function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, cla
       onMessage: (chatMsg) => broadcast(chatMsg),
     });
   }
+  return { session, resolved };
+}
 
-  sendTo(ws, { type: 'session_opened', bridgeSessionId: session.id });
-  broadcastSessionList();
+// 閲覧タブを作って JSONL 監視を始めるところまで（open_readonly_session と復元で共用）
+function openReadonlyTab({ id, name, cwd, claudeSessionId, projectDir }) {
+  const session = readonlySessionManager.create({
+    id,
+    name: name || `閲覧: ${(claudeSessionId || '').slice(0, 8)}`,
+    cwd,
+    claudeSessionId,
+    projectDir,
+  });
+  // 既存 JSONL の新着のみ監視（attachExisting）。プロセス起動はしない
+  try {
+    jsonlWatcher.startWatching({
+      bridgeSessionId: session.id,
+      cwd,
+      resumeSessionId: claudeSessionId,
+      attachExisting: true,
+      onMessage: (chatMsg) => broadcast(chatMsg),
+    });
+  } catch (e) {
+    // 監視できない（cwd が無い等）タブを半端に残さない
+    readonlySessionManager.remove(session.id);
+    throw e;
+  }
   return session;
+}
+
+// ブリッジのタブだったもの（tab）を生きているペインに繋ぎ直す。pid・target・status はペインの値を使う
+function attachLivePane(tab, pane) {
+  return openTmuxTab({
+    id: tab.id,
+    paneId: pane.paneId,
+    name: tab.name || `tmux: ${pane.target}`,
+    cwd: pane.cwd || tab.cwd,
+    target: pane.target,
+    claudePid: pane.claudePid,
+    claudeSessionId: tab.claudeSessionId,
+    status: pane.status,
+    waitingFor: pane.waitingFor,
+  }).session;
+}
+
+// 起動時に前回のタブを開き直し、動いていないものを再開待ちにする。
+// 1 件の失敗で起動を止めないよう、タブ単位で握る
+async function restoreOpenTabs() {
+  const saved = loadOpenTabs();
+  try {
+    const { panes, running, tmuxAlive } = await readLiveClaude();
+    paneSnapshot = updatePaneSnapshot([], panes, { tmuxAlive: true });
+    if (saved.tabs.length === 0 && saved.panes.length === 0 && saved.pending.length === 0) return;
+    const plan = planRestore(saved, panes, running);
+    // 保存順（＝タブの並び）を保つため、元の tabs の順に開く
+    const attachBySid = new Map(plan.attach.map((a) => [a.tab.claudeSessionId, a]));
+    const readonlyBySid = new Map(plan.readonly.map((t) => [t.claudeSessionId, t]));
+    const ordered = [...saved.tabs, ...plan.attach.map((a) => a.tab), ...plan.readonly];
+    const opened = new Set();
+    for (const entry of ordered) {
+      const sid = entry.claudeSessionId;
+      const a = attachBySid.get(sid);
+      const ro = readonlyBySid.get(sid);
+      // 元が tmux のタブは attach か（tmux 外で動いていれば）readonly、元が閲覧なら readonly
+      const kind = entry.type === 'readonly' ? 'readonly' : a ? 'tmux' : ro ? 'readonly' : null;
+      if (!kind || opened.has(`${kind}:${sid}`)) continue;
+      try {
+        if (kind === 'tmux') attachLivePane(a.tab, a.pane);
+        else openReadonlyTab(entry.type === 'readonly' ? entry : ro);
+        opened.add(`${kind}:${sid}`);
+      } catch (e) {
+        console.error(`open-tabs: restore failed (${sid}):`, e.message);
+      }
+    }
+    pendingTabs = plan.pending;
+    console.log(
+      `open-tabs: restored ${opened.size} tab(s)` +
+        (pendingTabs.length ? `, ${pendingTabs.length} session(s) waiting to resume` : '') +
+        (tmuxAlive ? '' : ' (tmux not running)'),
+    );
+  } catch (e) {
+    // 突き合わせられなかったときは前回の内容を失わないよう、ファイルをそのまま残す
+    console.error('open-tabs: restore failed:', e.message);
+    paneSnapshot = saved.panes;
+    pendingTabs = saved.pending;
+  } finally {
+    openTabsReady = true;
+    persistOpenTabs();
+  }
+}
+
+// 再開待ちを 1 件ずつ tmux で起こす（resumeInTmuxWindow は 1 件で最大 20 秒・window 作成を伴うので直列）。
+// 元の tmux セッション名・window 名で作り直し、ブリッジのタブだったものはタブも同じ ID で開き直す
+async function resumePendingTabs(ids) {
+  if (resumingPending) return;
+  resumingPending = true;
+  broadcastRestorableTabs();
+  const errors = [];
+  const notices = [];
+  try {
+    const want = new Set(ids);
+    const targets = pendingTabs.filter((t) => want.size === 0 || want.has(t.claudeSessionId));
+    // 押すまでの間に手で resume 済みのものは起こさない（claude を 2 本立てない）
+    const { panes, running } = await readLiveClaude();
+    const split = splitPending(targets, panes, running);
+    const done = new Set(split.skip.map((p) => p.claudeSessionId));
+    // すでにブリッジのタブとして開いているもの（同じ種類）は開き直さない
+    const hasTab = (type, sid) => allSessions().some((s) => s.type === type && s.claudeSessionId === sid);
+    // 1 件の失敗で残りの再開を止めないよう、タブ単位で握る
+    const openEach = (list, type, open) => {
+      for (const item of list) {
+        const sid = (item.tab ?? item).claudeSessionId;
+        try {
+          if (!hasTab(type, sid)) open(item);
+          done.add(sid);
+        } catch (e) {
+          console.error(`resume pending: open ${type} tab failed (${sid}):`, e.message);
+          errors.push(`${(item.tab ?? item).name || sid.slice(0, 8)}: ${e.message}`);
+        }
+      }
+    };
+    openEach(split.attach, 'tmux', ({ tab, pane }) => attachLivePane(tab, pane));
+    openEach(split.readonly, 'readonly', (tab) => openReadonlyTab(tab));
+    pendingTabs = pendingTabs.filter((t) => !done.has(t.claudeSessionId));
+    broadcastSessionList();
+    broadcastRestorableTabs();
+
+    for (const entry of split.resume) {
+      let tabSession = null;
+      try {
+        let cwd = entry.cwd;
+        if (cwd) {
+          const resolvedCwd = await resolveResumeCwd({
+            cwd,
+            claudeSessionId: entry.claudeSessionId,
+            projectDir: entry.projectDir,
+          });
+          cwd = resolvedCwd.cwd;
+          if (resolvedCwd.relocated) notices.push(relocatedNotice(resolvedCwd));
+        }
+        const resumedPane = await resumeInTmuxWindow({
+          claudeSessionId: entry.claudeSessionId,
+          cwd,
+          tmuxSession: entry.tmuxSession,
+          windowName: entry.windowName,
+          onWindowCreated: (pane) => {
+            // tmux だけで開いていたものはタブにしない（window を作り直すだけ）
+            if (!entry.tab) return;
+            tabSession = openTmuxTab({
+              id: entry.tab.id,
+              paneId: pane.paneId,
+              name: entry.tab.name || pane.windowName,
+              cwd,
+              target: pane.target,
+              claudePid: null,
+              claudeSessionId: entry.claudeSessionId,
+              status: 'starting',
+            }).session;
+            broadcastSessionList();
+          },
+        });
+        pendingTabs = pendingTabs.filter((t) => t.claudeSessionId !== entry.claudeSessionId);
+        paneSnapshot = upsertPaneSnapshot(paneSnapshot, {
+          ...resumedPane,
+          claudeSessionId: entry.claudeSessionId,
+          cwd,
+        });
+        broadcastRestorableTabs();
+      } catch (e) {
+        console.error(`resume pending session failed (${entry.claudeSessionId}):`, e.message);
+        errors.push(`${entry.tab?.name || entry.windowName || entry.claudeSessionId.slice(0, 8)}: ${e.message}`);
+        if (tabSession && tabSession.claudePid == null) {
+          tabSession.status = 'failed';
+          broadcastSessionList();
+        }
+      }
+    }
+  } catch (e) {
+    console.error('resume pending sessions failed:', e.message);
+    errors.push(e.message);
+  } finally {
+    resumingPending = false;
+    broadcastRestorableTabs();
+    if (notices.length) broadcast({ type: 'home_notice', message: notices.join(' / ') });
+    if (errors.length) {
+      broadcast({ type: 'home_error', message: `tmux で再開できなかったセッションがあります: ${errors.join(' / ')}` });
+    }
+  }
 }
 
 // JSONL の読み先（<projectDir>/<claudeSessionId>）を解決する。readonly セッションは
@@ -554,12 +878,14 @@ wss.on('connection', (ws) => {
     ws.isAlive = true;
   });
 
+  sendTo(ws, { type: 'server_hello', bootId: BOOT_ID });
   ws.send(
     JSON.stringify({
       type: 'session_list',
       sessions: allSessions(),
     }),
   );
+  sendTo(ws, restorableTabsPayload());
 
   // 直近のレート制限情報があれば接続直後に送る（次のポーリングを待たせない）
   if (lastRateLimits) {
@@ -1068,6 +1394,7 @@ wss.on('connection', (ws) => {
           cwd: resumeCwd,
           args: ['--resume', msg.claudeSessionId],
         });
+        dropPending(msg.claudeSessionId);
 
         session.onOutput((data) => {
           broadcast({
@@ -1342,8 +1669,8 @@ wss.on('connection', (ws) => {
         // claude プロセスを起動せず、既存セッションの JSONL を読むだけのビュー
         // projectDir 未指定（agent 一覧由来など）なら cwd から導出する
         const roProjectDir = msg.projectDir || cwdToProjectDir(msg.cwd || '');
-        const session = readonlySessionManager.create({
-          name: msg.name || `閲覧: ${(msg.claudeSessionId || '').slice(0, 8)}`,
+        const session = openReadonlyTab({
+          name: msg.name,
           cwd: msg.cwd,
           claudeSessionId: msg.claudeSessionId,
           projectDir: roProjectDir,
@@ -1363,15 +1690,6 @@ wss.on('connection', (ws) => {
           .catch((e) => {
             console.error('readonly history load failed:', e.message);
           });
-
-        // 既存 JSONL の新着のみ監視（attachExisting）。プロセス起動はしない
-        jsonlWatcher.startWatching({
-          bridgeSessionId: session.id,
-          cwd: msg.cwd,
-          resumeSessionId: msg.claudeSessionId,
-          attachExisting: true,
-          onMessage: (chatMsg) => broadcast(chatMsg),
-        });
 
         ws.send(JSON.stringify({ type: 'session_opened', bridgeSessionId: session.id }));
         broadcastSessionList();
@@ -1536,6 +1854,20 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      case 'resume_restorable_tabs': {
+        // claudeSessionIds を省けば再開待ちの全件
+        resumePendingTabs(sanitizeSessionIds(msg.claudeSessionIds));
+        break;
+      }
+
+      case 'dismiss_restorable_tabs': {
+        // claudeSessionIds を省けば全件を破棄
+        const ids = new Set(sanitizeSessionIds(msg.claudeSessionIds));
+        pendingTabs = ids.size ? pendingTabs.filter((t) => !ids.has(t.claudeSessionId)) : [];
+        broadcastRestorableTabs();
+        break;
+      }
+
       case 'switch_session':
         break;
     }
@@ -1555,6 +1887,9 @@ function broadcast(data) {
   }
 }
 
-server.listen(PORT, () => {
-  console.log(`Claude Bridge server listening on http://localhost:${PORT}`);
+// 前回のタブを開き直してから接続を受ける（途中の session_list でクライアントのアクティブタブがずれないように）
+restoreOpenTabs().then(() => {
+  server.listen(PORT, () => {
+    console.log(`Claude Bridge server listening on http://localhost:${PORT}`);
+  });
 });

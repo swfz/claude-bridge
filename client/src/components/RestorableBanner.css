@@ -1,0 +1,95 @@
+/* 前回動いていたセッションの再開待ち。.home-notice と同じ控えめな色（エラーではない） */
+.restorable-banner {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-secondary);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-secondary) 10%, transparent);
+}
+
+.restorable-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.restorable-text {
+  flex: 1;
+  min-width: 200px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.restorable-banner button {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.4));
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.restorable-banner button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.restorable-banner button.restorable-resume {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.restorable-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.restorable-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.restorable-name {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+
+.restorable-badge {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid var(--accent-secondary);
+  color: var(--accent-secondary);
+}
+
+.restorable-meta {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.restorable-banner .restorable-item-action {
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+.restorable-hidden {
+  color: var(--text-secondary);
+}

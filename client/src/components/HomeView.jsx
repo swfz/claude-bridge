@@ -8,6 +8,7 @@ import {
 } from '../utils/runningSessions.js';
 import { isStarred, sortStarredFirst } from '../utils/starredSessions.js';
 import { isSensitive, splitSensitive } from '../utils/sensitiveSessions.js';
+import RestorableBanner from './RestorableBanner.jsx';
 import {
   COMPLETION_STATES,
   FILTERABLE_STATES,
@@ -177,6 +178,9 @@ export default function HomeView({
   onDismissError,
   notice,
   onDismissNotice,
+  restorable,
+  onResumeRestorable,
+  onDismissRestorable,
   onRefresh,
   onSelectTab,
   onAttachTmux,
@@ -379,6 +383,14 @@ export default function HomeView({
           ))}
         </div>
       )}
+
+      <RestorableBanner
+        restorable={restorable}
+        sensitive={sensitive}
+        shareMode={shareMode}
+        onResume={onResumeRestorable}
+        onDismiss={onDismissRestorable}
+      />
 
       {error && (
         <div className="home-error">

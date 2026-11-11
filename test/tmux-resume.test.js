@@ -171,6 +171,77 @@ describe('resumeInTmuxWindow', () => {
     assert.ok(!execCalls.some((c) => c.includes('new-window')));
   });
 
+  it('puts the window back into the requested tmux session with its old window name', async () => {
+    responses = {
+      'list-sessions': '1700009999\tnewer\n0\twork\n',
+      'new-window': '%7\twork:3.0\n',
+      'capture-pane': 'claude --resume def-456\n',
+      'display-message': claudeAfterEnter,
+    };
+
+    const pane = await resumeInTmuxWindow({
+      claudeSessionId: 'def-456',
+      cwd: '/tmp/work',
+      tmuxSession: 'work',
+      windowName: 'my window',
+    });
+
+    assert.equal(pane.sessionName, 'work');
+    assert.equal(pane.windowName, 'my window');
+    const created = execCalls.find((c) => c.includes('new-window'));
+    assert.ok(created.includes("-t 'work:'"));
+    assert.ok(created.includes("-n 'my window'"));
+  });
+
+  it('escapes tmux formats in the window name so #(cmd) is not run', async () => {
+    responses = {
+      'list-sessions': '1\twork\n',
+      'new-window': '%7\twork:3.0\n',
+      'capture-pane': 'claude --resume def-456\n',
+      'display-message': claudeAfterEnter,
+    };
+
+    const pane = await resumeInTmuxWindow({
+      claudeSessionId: 'def-456',
+      cwd: '/tmp',
+      tmuxSession: 'work',
+      windowName: '#(touch /tmp/x) #{pane_id}',
+    });
+
+    const created = execCalls.find((c) => c.includes('new-window'));
+    assert.ok(created.includes("-n '##(touch /tmp/x) ##{pane_id}'"));
+    // タブ名などに使う戻り値は元の字面のまま
+    assert.equal(pane.windowName, '#(touch /tmp/x) #{pane_id}');
+  });
+
+  it('creates the requested tmux session when it no longer exists', async () => {
+    responses = {
+      'list-sessions': '1\tmain\n',
+      'new-session': '%0\twork:0.0\n',
+      'capture-pane': 'claude --resume def-456\n',
+      'display-message': claudeAfterEnter,
+    };
+
+    const pane = await resumeInTmuxWindow({ claudeSessionId: 'def-456', cwd: '/tmp', tmuxSession: 'work' });
+
+    assert.equal(pane.sessionName, 'work');
+    assert.ok(execCalls.find((c) => c.includes('new-session')).includes('-d -s work'));
+    assert.ok(!execCalls.some((c) => c.includes('new-window')));
+  });
+
+  it('ignores a requested session name that is unsafe for tmux targets', async () => {
+    responses = {
+      'list-sessions': '1\tmain\n',
+      'new-window': '%4\tmain:1.0\n',
+      'capture-pane': 'claude --resume def-456\n',
+      'display-message': claudeAfterEnter,
+    };
+
+    const pane = await resumeInTmuxWindow({ claudeSessionId: 'def-456', cwd: '/tmp', tmuxSession: 'a:b;rm' });
+
+    assert.equal(pane.sessionName, 'main');
+  });
+
   it('rejects a session id that could be injected into the shell', async () => {
     await assert.rejects(
       () => resumeInTmuxWindow({ claudeSessionId: 'abc; rm -rf /', cwd: '/tmp' }),

@@ -295,8 +295,9 @@ export class ReadonlySessionManager {
     this.sessions = new Map();
   }
 
-  create({ name, cwd, claudeSessionId, projectDir }) {
-    const id = randomUUID().slice(0, 8);
+  // id は再起動後の復元（open-tabs.js）で前回のブリッジ ID を引き継ぐときだけ渡す
+  create({ id: requestedId, name, cwd, claudeSessionId, projectDir }) {
+    const id = requestedId && !this.sessions.has(requestedId) ? requestedId : randomUUID().slice(0, 8);
     const session = new ReadonlySession({
       id,
       name,
