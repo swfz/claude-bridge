@@ -17,6 +17,7 @@ import { humanSenderLabel } from '../utils/messageSender.js';
 import { pinnedUuidSet } from '../utils/pins.js';
 import {
   TbChecklist,
+  TbChevronDown,
   TbChevronRight,
   TbFile,
   TbFilePlus,
@@ -280,13 +281,20 @@ function MdCode({ className, children, node, ...props }) {
     const text = String(children).trim();
     // インラインコード内の file:// URL を FilePreview に変換
     if (isFileUrl(text)) {
-      return <FilePreview href={text} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />;
+      return (
+        <FilePreview href={text} cwd={sessionCwd} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
+      );
     }
     // ファイルパスを FilePreview に変換（絶対パス or CWD+相対パス）
     const resolved = resolveFilePath(text, sessionCwd);
     if (resolved) {
       return (
-        <FilePreview href={`file://${resolved}`} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
+        <FilePreview
+          href={`file://${resolved}`}
+          cwd={sessionCwd}
+          onOpenPreview={onOpenPreview}
+          onOpenFileReview={onOpenFileReview}
+        />
       );
     }
     return (
@@ -300,9 +308,11 @@ function MdCode({ className, children, node, ...props }) {
 
 // eslint-disable-next-line no-unused-vars
 function MdAnchor({ href, children, node, ...props }) {
-  const { onOpenPreview, onOpenFileReview } = useContext(MarkdownHandlersContext);
+  const { sessionCwd, onOpenPreview, onOpenFileReview } = useContext(MarkdownHandlersContext);
   if (isFileUrl(href)) {
-    return <FilePreview href={href} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />;
+    return (
+      <FilePreview href={href} cwd={sessionCwd} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
+    );
   }
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
@@ -715,8 +725,11 @@ export const ChatMessage = memo(function ChatMessage({
       )}
 
       {shouldCollapse && (
+        // 折りたたんだ本文の続き。本文の下に埋もれないよう、枠付きの小さなボタンで置く
         <button className="expand-bar" onClick={() => setExpanded(true)}>
-          ... 続きを表示 ({message.content.length} 文字)
+          <TbChevronDown aria-hidden="true" />
+          続きを表示
+          <span className="expand-bar-count">{message.content.length.toLocaleString()} 文字</span>
         </button>
       )}
 
