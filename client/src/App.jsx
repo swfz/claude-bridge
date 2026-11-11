@@ -23,6 +23,18 @@ import RateLimitMeter from './components/RateLimitMeter.jsx';
 import ContextMeter from './components/ContextMeter.jsx';
 import { loadStarred, saveStarred, toggleStarred } from './utils/starredSessions.js';
 import { applyTabOrder, loadTabOrder, moveTab, saveTabOrder } from './utils/tabOrder.js';
+import {
+  assignTabToGroup,
+  buildTabGroups,
+  createGroup,
+  deleteGroup,
+  flattenTabGroups,
+  loadTabGroups,
+  renameGroup,
+  saveTabGroups,
+  toggleGroupCollapsed,
+  visibleTabsOf,
+} from './utils/tabGroups.js';
 import { periodEquals } from './utils/heatmap.js';
 import {
   loadSensitive,
@@ -1198,21 +1210,50 @@ export default function App() {
   // タブの並びと絞り込みはサイドバー（SessionTabs）と同じにする（隠しているタブへ飛ばないように）
   // サイドバーのタブの並び（D&D で入れ替えたもの。localStorage だけで持つ）
   const [tabOrder, setTabOrder] = useState(loadTabOrder);
-  const orderedSessions = useMemo(() => applyTabOrder(sessions, tabOrder), [sessions, tabOrder]);
+  const flatOrderedSessions = useMemo(() => applyTabOrder(sessions, tabOrder), [sessions, tabOrder]);
+  // グループ分け（既定はプロジェクトで自動、D&D で手動の割り当てに上書き）。表示順＝グループ順に並べ直した列
+  const [tabGroupState, setTabGroupState] = useState(loadTabGroups);
+  const updateTabGroups = useCallback((fn) => {
+    setTabGroupState((prev) => {
+      const next = fn(prev);
+      if (next !== prev) saveTabGroups(next);
+      return next;
+    });
+  }, []);
+  const tabGroups = useMemo(
+    () => buildTabGroups(flatOrderedSessions, tabGroupState),
+    [flatOrderedSessions, tabGroupState],
+  );
+  const orderedSessions = useMemo(() => flattenTabGroups(tabGroups), [tabGroups]);
+  // targetGroupKey が来たら（別グループのタブ・見出しへ落とした）そのグループへ移す
   const handleReorderTab = useCallback(
-    (fromId, targetId, after) => {
-      const next = moveTab(orderedSessions, fromId, targetId, after);
-      setTabOrder(next);
-      saveTabOrder(next);
+    (fromId, targetId, after, targetGroupKey) => {
+      if (targetId) {
+        const next = moveTab(orderedSessions, fromId, targetId, after);
+        setTabOrder(next);
+        saveTabOrder(next);
+      }
+      const moved = orderedSessions.find((s) => s.id === fromId);
+      if (moved && targetGroupKey) updateTabGroups((st) => assignTabToGroup(st, moved, targetGroupKey));
     },
-    [orderedSessions],
+    [orderedSessions, updateTabGroups],
+  );
+  const tabGroupActions = useMemo(
+    () => ({
+      onCreate: (name) => updateTabGroups((st) => createGroup(st, name)),
+      onRename: (id, name) => updateTabGroups((st) => renameGroup(st, id, name)),
+      onDelete: (id) => updateTabGroups((st) => deleteGroup(st, id)),
+      onToggle: (key) => updateTabGroups((st) => toggleGroupCollapsed(st, key)),
+    }),
+    [updateTabGroups],
   );
   const keyboardTabIds = useMemo(
     () =>
-      orderedSessions
+      tabGroups
+        .flatMap((g) => visibleTabsOf(g, showHome ? null : activeSessionId))
         .filter((s) => !(shareMode && s.claudeSessionId && sensitiveIds.has(s.claudeSessionId)))
         .map((s) => s.id),
-    [orderedSessions, shareMode, sensitiveIds],
+    [tabGroups, showHome, activeSessionId, shareMode, sensitiveIds],
   );
   useGlobalKeys({
     tabs: keyboardTabIds,
@@ -1749,6 +1790,8 @@ export default function App() {
       <div className="app-body">
         <SessionTabs
           sessions={orderedSessions}
+          groups={tabGroups}
+          groupActions={tabGroupActions}
           activeSessionId={showHome ? null : activeSessionId}
           homeActive={showHome}
           attentionIds={attentionIds}

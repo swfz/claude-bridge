@@ -491,3 +491,113 @@ body.light-mode .tab-badge-attention {
 .tab-mini-marks .tab-mark-star {
   font-size: 10px;
 }
+
+/* グループ見出し（既定はプロジェクトで自動、手動グループは ✎ / x を持つ） */
+.tab-group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.tab-group-header:first-child {
+  margin-top: 0;
+}
+
+.tab-group-header:hover {
+  background: var(--bg-surface);
+}
+
+.tab-group-header.manual .tab-group-label {
+  font-weight: 600;
+}
+
+/* 畳んだグループに表示中のタブがある */
+.tab-group-header.has-active .tab-group-label {
+  color: var(--accent);
+}
+
+.tab-group-header.tab-group-drop {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.tab-group-caret {
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.tab-group-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-group-count {
+  opacity: 0.7;
+}
+
+.tab-group-actions {
+  display: none;
+  gap: 2px;
+}
+
+.tab-group-header:hover .tab-group-actions {
+  display: inline-flex;
+}
+
+@media (hover: none) {
+  .tab-group-actions {
+    display: inline-flex;
+  }
+}
+
+.tab-group-action {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 3px;
+  font-size: 11px;
+}
+
+.tab-group-action:hover {
+  color: var(--text-primary);
+}
+
+.tab-group-new {
+  margin-top: 6px;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tab-group-new:hover {
+  color: var(--text-primary);
+}
+
+/* 折りたたみ表示ではグループの切れ目を細線だけで示す */
+.tab-group-sep {
+  width: 24px;
+  height: 1px;
+  margin: 3px 0;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.tab-group-sep:first-child {
+  display: none;
+}
