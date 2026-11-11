@@ -429,7 +429,8 @@ export default function App() {
       const session = sessionsRef.current.find((s) => s.id === msg.bridgeSessionId);
       const isTmux = session?.type === 'tmux';
       // artifact（公開リンク）と webfetch（WebFetch の結果。リンク一覧のタイトル用）はセッション種別を問わず受ける
-      const isLinkRecord = msg.role === 'artifact' || msg.role === 'webfetch';
+      // toolresult（ツールの失敗・新規作成。チャットのツール行の印用）も同じく種別を問わず受ける
+      const isLinkRecord = msg.role === 'artifact' || msg.role === 'webfetch' || msg.role === 'toolresult';
       if (!(msg.role === 'assistant' || isLinkRecord || (isTmux && msg.role === 'human'))) return;
 
       const newMsg = {
@@ -447,6 +448,8 @@ export default function App() {
         path: msg.path,
         // WebFetch の HTTP ステータス（role: 'webfetch' のときだけ入る）
         code: msg.code,
+        // ツールの結果の印 [{id, error?, created?}]（role: 'toolresult' のときだけ入る）
+        results: msg.results,
         // タグ注入・isMeta の user レコード（人が打っていない）。リンク一覧の origin 判定用
         injected: msg.injected,
         // 人が打っていない human の送り手（サブエージェントの報告・タスク通知など）。チャットの見出し用
@@ -836,6 +839,8 @@ export default function App() {
         path: m.path,
         // WebFetch の HTTP ステータス（role: 'webfetch' のときだけ入る）
         code: m.code,
+        // ツールの結果の印 [{id, error?, created?}]（role: 'toolresult' のときだけ入る）
+        results: m.results,
         // タグ注入・isMeta の user レコード（人が打っていない）。リンク一覧の origin 判定用
         injected: m.injected,
         // 人が打っていない human の送り手（サブエージェントの報告・タスク通知など）。チャットの見出し用
@@ -1643,11 +1648,15 @@ export default function App() {
     const r = readonlyDelivery.running;
     readonlyNotice = (
       <>
-        <span className="input-notice-text">
-          ⚠ tmux に接続していません。送信は inbox に溜まり、Claude の次の応答が終わるまで届きません
+        <span
+          className="input-notice-text"
+          title="tmux に接続していません。送信は inbox に溜まり、Claude の次の応答が終わるまで届きません"
+        >
+          未接続
         </span>
+        <span className="input-notice-sep">·</span>
         <button
-          className="btn btn-primary"
+          className="input-notice-action"
           onClick={() =>
             handleAttachTmux({
               paneId: r.paneId,
@@ -1666,18 +1675,25 @@ export default function App() {
     );
   } else if (readonlyDelivery?.kind === 'running') {
     readonlyNotice = (
-      <span className="input-notice-text">
-        ⚠ tmux 外で起動中のため直接は送れません。送信は Claude の次の応答が終わるまで届きません
+      <span
+        className="input-notice-text"
+        title="tmux 外で起動中のため直接は送れません。送信は Claude の次の応答が終わるまで届きません"
+      >
+        tmux 外で起動中
       </span>
     );
   } else if (readonlyDelivery?.kind === 'stopped' && activeSession?.claudeSessionId) {
     readonlyNotice = (
       <>
-        <span className="input-notice-text">
-          ⚠ このセッションは起動していません。送信しても再開して応答が返るまで届きません
+        <span
+          className="input-notice-text"
+          title="このセッションは起動していません。送信しても再開して応答が返るまで届きません"
+        >
+          未接続
         </span>
+        <span className="input-notice-sep">·</span>
         <button
-          className="btn btn-primary"
+          className="input-notice-action"
           onClick={() => {
             // window を作れない失敗（tmux 未インストール等）は home_error としてホームのバナーにしか出ないのでホームへ移る。
             // window ができれば session_opened で新しい tmux タブ（起動中の表示）に切り替わる

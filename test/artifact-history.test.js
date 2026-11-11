@@ -64,7 +64,14 @@ describe('parseHistoryLines と Artifact の公開リンク', () => {
       JSON.stringify(publishRecord({ toolUseResult: { read: true, artifactRead: '<html>' } })),
     ].join('\n');
 
-    assert.deepEqual(parseHistoryLines(content), []);
+    // 失敗した publish は artifact にはならず、ツール失敗の印（toolresult）だけが残る
+    assert.deepEqual(
+      parseHistoryLines(content).filter((m) => m.role !== 'toolresult'),
+      [],
+    );
+    assert.deepEqual(parseHistoryLines(content).find((m) => m.role === 'toolresult')?.results, [
+      { id: 'toolu_2', error: true },
+    ]);
   });
 });
 

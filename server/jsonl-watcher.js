@@ -5,6 +5,7 @@ import {
   cwdToProjectDir,
   extractArtifactPublish,
   extractWebFetchResult,
+  extractToolResultFlags,
   isInjectedUserRecord,
   extractContextUsage,
   extractTextContent,
@@ -225,6 +226,19 @@ export class JsonlWatcher {
               url: artifact.url,
               title: artifact.title,
               path: artifact.path,
+              uuid: record.uuid,
+              timestamp: record.timestamp || '',
+            });
+          }
+          // ツールの失敗・新規作成。チャットのツール行に印を付けるのに使う（それ自体は描かない）
+          const toolResults = extractToolResultFlags(record);
+          if (toolResults.length > 0) {
+            state.onMessage({
+              type: 'chat_message',
+              bridgeSessionId: state.bridgeSessionId,
+              role: 'toolresult',
+              content: '',
+              results: toolResults,
               uuid: record.uuid,
               timestamp: record.timestamp || '',
             });

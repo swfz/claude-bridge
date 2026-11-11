@@ -56,6 +56,24 @@ export function extractArtifactPublish(record) {
   return { url, title, path };
 }
 
+// tool_result だけの user レコードから、チャットのツール行に要る結果だけを取り出す（失敗・新規作成）。
+// 失敗は tool_result の is_error、新規作成は Write の toolUseResult.type === 'create'。
+// どちらでもない結果は返さない（チャットに流す量を増やさないため）
+export function extractToolResultFlags(record) {
+  if (!record || record.type !== 'user') return [];
+  const content = record.message?.content;
+  if (!Array.isArray(content)) return [];
+  const result = record.toolUseResult;
+  const created = !!result && typeof result === 'object' && !Array.isArray(result) && result.type === 'create';
+  const flags = [];
+  for (const block of content) {
+    if (!block || block.type !== 'tool_result' || typeof block.tool_use_id !== 'string') continue;
+    if (block.is_error) flags.push({ id: block.tool_use_id, error: true });
+    else if (created) flags.push({ id: block.tool_use_id, created: true });
+  }
+  return flags;
+}
+
 // WebFetch の結果レコードから、読んだ URL と結果の見出し（タイトル）を取り出す。
 // 結果は tool_result だけの user レコードで、toolUseResult が {bytes, code, codeText, result, durationMs, url}。
 // result は WebFetch が返した要約テキストで、先頭行が Markdown の見出しになっていることが多い。

@@ -5,6 +5,7 @@ import {
   CLAUDE_PROJECTS_DIR,
   extractArtifactPublish,
   extractWebFetchResult,
+  extractToolResultFlags,
   isInjectedUserRecord,
   extractContextUsage,
   extractTextContent,
@@ -225,6 +226,17 @@ export function parseHistoryLines(content) {
             url: artifact.url,
             title: artifact.title,
             path: artifact.path,
+            uuid: record.uuid,
+            timestamp: record.timestamp || record.updatedAt || '',
+          });
+        }
+        // ツールの失敗・新規作成。チャットのツール行に印を付けるのに使う（それ自体は描かない）
+        const toolResults = extractToolResultFlags(record);
+        if (toolResults.length > 0) {
+          messages.push({
+            role: 'toolresult',
+            content: '',
+            results: toolResults,
             uuid: record.uuid,
             timestamp: record.timestamp || record.updatedAt || '',
           });

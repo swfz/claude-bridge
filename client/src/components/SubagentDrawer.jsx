@@ -35,7 +35,7 @@ export default function SubagentDrawer({
   const items = useMemo(
     () =>
       (messages || [])
-        .filter((m) => m.role !== 'webfetch')
+        .filter((m) => m.role !== 'webfetch' && m.role !== 'toolresult')
         .map((m, i) => ({
           ...m,
           id: `${agentId}-${i}`,
