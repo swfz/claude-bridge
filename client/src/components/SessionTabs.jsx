@@ -218,15 +218,13 @@ export default function SessionTabs({
         {collapsed ? '＋' : '＋ 新しいセッション'}
       </button>
       <div className="tabs-list">
-        {shownGroups.map((group) => {
+        {shownGroups.map((group, index) => {
           const visible = visibleTabsOf(group, activeSessionId);
           const hasActive = group.sessions.some((s) => s.id === activeSessionId);
           const dropping = dropTarget?.group === group.key;
-          const header = !groups ? null : collapsed ? (
-            <div key={`h:${group.key}`} className="tab-group-sep" title={group.label} {...groupDndPropsOf(group)} />
-          ) : (
+          // 折りたたみ表示では見出しを出さず、色帯付きの枠だけで示す（名前は枠の tooltip）
+          const header = collapsed ? null : (
             <div
-              key={`h:${group.key}`}
               className={`tab-group-header${group.manual ? ' manual' : ''}${dropping ? ' tab-group-drop' : ''}${group.collapsed && hasActive ? ' has-active' : ''}`}
               onClick={() => groupActions?.onToggle(group.key)}
               title={group.manual ? group.label : group.key.slice(2) || 'cwd 不明'}
@@ -263,7 +261,21 @@ export default function SessionTabs({
               )}
             </div>
           );
-          return [header, ...visible.map((session) => renderTab(session, group.key))];
+          if (!groups) return visible.map((session) => renderTab(session, group.key));
+          // グループごとに枠で囲み、左の色帯で見分ける（色はカレンダーのプロジェクト色と同じパレットを並び順で回す）
+          return (
+            <div
+              key={group.key}
+              className={`tab-group${group.manual ? ' manual' : ''}${group.collapsed ? ' is-collapsed' : ''}${hasActive ? ' has-active' : ''}`}
+              style={{ '--group-color': `var(--cal-${index % 8})` }}
+              title={collapsed ? group.label : undefined}
+            >
+              {header}
+              {visible.length > 0 && (
+                <div className="tab-group-body">{visible.map((session) => renderTab(session, group.key))}</div>
+              )}
+            </div>
+          );
         })}
         {groups && !collapsed && groupActions && (
           <button

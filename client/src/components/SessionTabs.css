@@ -492,31 +492,56 @@ body.light-mode .tab-badge-attention {
   font-size: 10px;
 }
 
+/* グループの枠。左の色帯（--group-color）と薄い下地で、見出しと中のタブを 1 つの塊に見せる */
+.tab-group {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--group-color, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--group-color, transparent) 7%, transparent);
+  overflow: hidden;
+}
+
+.tab-group:first-child {
+  margin-top: 0;
+}
+
+.tab-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 4px 4px;
+}
+
 /* グループ見出し（既定はプロジェクトで自動、手動グループは ✎ / x を持つ） */
 .tab-group-header {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: 6px;
-  padding: 2px 6px;
+  padding: 4px 6px;
   font-size: 11px;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--group-color, var(--text-secondary));
   cursor: pointer;
   user-select: none;
-  border-radius: 4px;
   flex-shrink: 0;
 }
 
-.tab-group-header:first-child {
-  margin-top: 0;
-}
-
 .tab-group-header:hover {
-  background: var(--bg-surface);
+  background: color-mix(in srgb, var(--group-color, var(--bg-surface)) 14%, transparent);
 }
 
-.tab-group-header.manual .tab-group-label {
-  font-weight: 600;
+/* 手動グループは見出しを白抜きの文字にして自動グループと見分ける */
+.tab-group.manual .tab-group-header {
+  color: var(--text-primary);
+}
+
+.tab-group-header .tab-group-count {
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 
 /* 畳んだグループに表示中のタブがある */
@@ -589,15 +614,14 @@ body.light-mode .tab-badge-attention {
   color: var(--text-primary);
 }
 
-/* 折りたたみ表示ではグループの切れ目を細線だけで示す */
-.tab-group-sep {
-  width: 24px;
-  height: 1px;
-  margin: 3px 0;
-  background: var(--border);
-  flex-shrink: 0;
+/* 折りたたみ表示では見出しを出さず、色帯付きの枠だけでグループを示す */
+.session-tabs.collapsed .tab-group {
+  align-items: center;
+  padding: 3px 0;
 }
 
-.tab-group-sep:first-child {
-  display: none;
+.session-tabs.collapsed .tab-group-body {
+  align-items: center;
+  gap: 4px;
+  padding: 0;
 }
