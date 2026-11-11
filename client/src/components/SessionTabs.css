@@ -11,8 +11,8 @@
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   border-bottom: none;
-  padding: 8px 6px;
-  gap: 6px;
+  padding: 6px 4px;
+  gap: 4px;
   overflow: hidden;
 }
 
@@ -37,7 +37,7 @@
   border: 0.5px solid transparent;
   color: var(--text-secondary);
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   font-size: 13px;
   text-align: left;
   white-space: nowrap;
@@ -63,7 +63,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 13px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: 8px;
   text-align: left;
   width: 100%;
@@ -98,8 +98,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 8px;
+  gap: 1px;
+  padding: 3px 8px;
   border: 0.5px solid transparent;
   border-radius: 8px;
   cursor: pointer;
@@ -134,15 +134,20 @@
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+/* 行の高さは固定値にする。line-height: normal はフォント依存で、日本語フォールバックや太さの違いで
+   高さが揺れる */
 .tab-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 18px;
 }
 
-/* AI タイトル（サマリー）をそのままタブ名にするため、長文はここで省略する */
+/* AI タイトル（サマリー）をそのままタブ名にするため、長文はここで省略する。
+   太さは選択で変えない（変えるとフォントの差し替えで高さ・幅が揺れる）。選択は背景で示す */
 .tab-name {
   font-size: 13px;
+  line-height: 18px;
   font-weight: 400;
   color: var(--text-primary);
   flex: 1;
@@ -152,11 +157,6 @@
   white-space: nowrap;
 }
 
-.tab.active .tab-name,
-.tab.tab-attention .tab-name {
-  font-weight: 500;
-}
-
 /* 2 行目のメタ情報。行頭ドットの幅だけ字下げしてタイトルと頭を揃える */
 .tab-meta {
   display: flex;
@@ -164,6 +164,7 @@
   gap: 8px;
   min-width: 0;
   padding-left: 14px;
+  height: 16px;
   font-size: 11px;
   line-height: 16px;
   color: var(--tab-faint);
@@ -236,7 +237,7 @@
 
 .tab-actions {
   position: absolute;
-  top: 4px;
+  top: 2px;
   right: 4px;
   display: none;
   align-items: center;
@@ -297,14 +298,67 @@
   background: var(--success);
 }
 
-/* 処理中 */
+/* 処理中。止まっている緑（idle）と一目で見分けられるよう、ドットから波紋を広げ続ける */
 .tab-status-busy {
-  animation: tab-status-pulse 1.2s ease-in-out infinite;
+  position: relative;
 }
 
-/* 応答完了・未確認（tmux のベル通知相当）。光の輪で処理中の点滅と見分ける */
+.tab-status-busy::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--success);
+  animation: tab-status-ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes tab-status-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  80%,
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
+/* 処理中の行はタイトルもうっすら明滅させ、ドットを見なくても動いていると分かるようにする */
+.tab:has(.tab-status-busy) .tab-name {
+  animation: tab-name-busy 2s ease-in-out infinite;
+}
+
+@keyframes tab-name-busy {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-status-busy::after,
+  .tab:has(.tab-status-busy) .tab-name {
+    animation: none;
+  }
+}
+
+/* 応答完了・未確認（tmux のベル通知相当）。ドットに光の輪を付け、行全体も薄い緑で塗って
+   「終わったので見に行く」タブを一覧の中で拾えるようにする（開けば未確認が消えて元に戻る） */
 .tab-status-attention {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 35%, transparent);
   animation: tab-status-glow 1.6s ease-in-out infinite;
+}
+
+.tab.tab-attention {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.tab.tab-attention:hover {
+  background: color-mix(in srgb, var(--success) 20%, transparent);
 }
 
 /* 権限確認など、ユーザーの操作が必要 */
@@ -350,10 +404,10 @@
 @keyframes tab-status-glow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 70%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 35%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 20%, transparent);
   }
 }
 
@@ -371,6 +425,11 @@
   height: 11px;
 }
 
+/* 1 行目の印同士・印とタイトルの間は行の gap（8px）より詰める */
+.tab-row .tab-mark {
+  margin-right: -4px;
+}
+
 .tab-mark-star {
   color: #e3a21a;
 }
@@ -386,7 +445,7 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  margin-top: 12px;
+  margin-top: 3px;
 }
 
 .tab-group:first-child {
@@ -403,7 +462,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
+  padding: 2px 8px;
   border-radius: 8px;
   font-size: 12px;
   color: var(--text-secondary);
@@ -514,12 +573,12 @@
 }
 
 .tab-group-new {
-  margin-top: 12px;
+  margin-top: 6px;
   border: 1px dashed var(--border);
   background: none;
   color: var(--text-secondary);
   border-radius: 8px;
-  padding: 3px 8px;
+  padding: 2px 8px;
   font-size: 11px;
   cursor: pointer;
   flex-shrink: 0;
