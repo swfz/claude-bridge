@@ -1682,8 +1682,8 @@ wss.on('connection', (ws) => {
         try {
           let paneId = msg.paneId;
           let claudeSessionId = msg.claudeSessionId || null;
-          // ホームからの要求はセッション ID の照合を必須にする（コマンド名だけの確認で
-          // kill してよいのは、サーバーが paneId を引くタブ経路で ID が未解決のときだけ）
+          let expectedPid = null;
+          // ホームからの要求はセッション ID の照合を必須にする
           if (!fromTab && !claudeSessionId) {
             fail('終了するセッションの ID がありません');
             break;
@@ -1694,15 +1694,27 @@ wss.on('connection', (ws) => {
               fail('終了する tmux タブが見つかりません');
               break;
             }
+            // tmux サーバーを立て直すと paneId が振り直され、古いタブが別の claude のペインを
+            // 指していることがある。ID が未解決でも claudePid で照合できるよう両方渡す
+            // （どちらも無ければ killClaudePane が拒否する）
             paneId = tab.paneId;
-            claudeSessionId = jsonlWatcher.getSessionMeta(tab.id)?.claudeSessionId || null;
+            claudeSessionId = tab.claudeSessionId || jsonlWatcher.getSessionMeta(tab.id)?.claudeSessionId || null;
+            expectedPid = tab.claudePid != null ? Number(tab.claudePid) : null;
           }
-          await killClaudePane({ paneId, claudeSessionId });
+          const killed = await killClaudePane({ paneId, claudeSessionId, expectedPid });
+          claudeSessionId = claudeSessionId || killed.sessionId || null;
 
-          // 同じペインを指すタブは全部閉じる（ホームから終了してもタブが開いていることがある）
+          // 終了した claude を指していたタブだけ閉じる（ホームから終了してもタブが開いていることがある）。
+          // paneId だけで選ぶと、振り直された同じ %N を指す無関係な古いタブまで閉じてしまう
           const closedSessionIds = tmuxSessionManager
             .activeSessions()
-            .filter((s) => s.paneId === paneId)
+            .filter(
+              (s) =>
+                s.paneId === paneId &&
+                (s.id === msg.sessionId ||
+                  s.claudePid === killed.pid ||
+                  jsonlWatcher.getSessionMeta(s.id)?.claudeSessionId === killed.sessionId),
+            )
             .map((s) => s.id);
           for (const id of closedSessionIds) {
             jsonlWatcher.stopWatching(id);

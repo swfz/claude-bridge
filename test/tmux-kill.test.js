@@ -74,15 +74,38 @@ describe('killClaudePane', () => {
     assert.equal(killCalls().length, 1);
   });
 
-  it('kills by pane command alone when claudeSessionId is unresolved', async () => {
+  it('kills by claude pid when claudeSessionId is unresolved', async () => {
     responses = { 'display-message': 'claude\n' };
-    const d = deps();
+    const d = deps({ metas: { '%3': { pid: 100, sessionId: 'abc', paneId: '%3' } } });
 
-    await killClaudePane({ paneId: '%3' }, d);
+    const killed = await killClaudePane({ paneId: '%3', expectedPid: 100 }, d);
 
     assert.deepEqual(killCalls(), ['tmux kill-pane -t %3']);
-    // セッション ID が無ければステータスファイルは見ない
-    assert.equal(d.calls.length, 0);
+    assert.equal(killed.sessionId, 'abc');
+  });
+
+  it('does not kill when the claude pid in the pane differs (paneId reassigned)', async () => {
+    responses = { 'display-message': 'claude\n' };
+    const d = deps({ metas: { '%3': { pid: 200, sessionId: 'unrelated', paneId: '%3' } } });
+
+    await assert.rejects(killClaudePane({ paneId: '%3', expectedPid: 100 }, d), /別のセッション/);
+    assert.equal(killCalls().length, 0);
+  });
+
+  it('refuses without either claudeSessionId or expectedPid', async () => {
+    responses = { 'display-message': 'claude\n' };
+
+    await assert.rejects(killClaudePane({ paneId: '%3' }, deps()), /セッション ID も pid も分からない/);
+    await assert.rejects(
+      killClaudePane({ paneId: '%3', claudeSessionId: null, expectedPid: null }, deps()),
+      /pid も分からない/,
+    );
+    assert.equal(execCalls.length, 0);
+  });
+
+  it('rejects a non-integer expectedPid without running tmux', async () => {
+    await assert.rejects(killClaudePane({ paneId: '%3', expectedPid: '100; id' }, deps()), /Invalid expectedPid/);
+    assert.equal(execCalls.length, 0);
   });
 
   it('rejects an invalid paneId without running tmux', async () => {
@@ -119,14 +142,14 @@ describe('killClaudePane', () => {
     const d = deps({ metas: { '%7': { pid: 100, sessionId: 'abc', paneId: '%7' } } });
 
     await assert.rejects(killClaudePane({ paneId: '%7', claudeSessionId: 'abc' }, d), /claude が動いていない/);
-    await assert.rejects(killClaudePane({ paneId: '%7' }, d), /claude が動いていない/);
+    await assert.rejects(killClaudePane({ paneId: '%7', expectedPid: 100 }, d), /claude が動いていない/);
     assert.equal(killCalls().length, 0);
   });
 
   it('does not kill when the pane command cannot be read', async () => {
     responses = { 'display-message': new Error("can't find pane: %7") };
 
-    await assert.rejects(killClaudePane({ paneId: '%7' }, deps()), /取得できず/);
+    await assert.rejects(killClaudePane({ paneId: '%7', expectedPid: 100 }, deps()), /取得できず/);
     assert.equal(killCalls().length, 0);
   });
 
@@ -140,7 +163,8 @@ describe('killClaudePane', () => {
 
   it('propagates a kill-pane failure', async () => {
     responses = { 'display-message': 'claude\n', 'kill-pane': new Error('pane gone') };
+    const d = deps({ metas: { '%7': { pid: 100, sessionId: 'abc', paneId: '%7' } } });
 
-    await assert.rejects(killClaudePane({ paneId: '%7' }, deps()), /pane gone/);
+    await assert.rejects(killClaudePane({ paneId: '%7', expectedPid: 100 }, d), /pane gone/);
   });
 });

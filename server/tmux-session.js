@@ -348,16 +348,25 @@ const CLAUDE_SESSION_ID_RE = /^[\w-]+$/;
 // 立て直すと振り直されるので、kill の直前にそのペインで今もその claude が動いているかを
 // 確かめ、確かめられなければ kill しない（fail-closed）。
 // - ペインのフォアグラウンドが claude であること（取れなければ拒否）
-// - claudeSessionId があれば、ステータスファイル（生存 pid）の tmux.paneId と sessionId が一致すること
-//   （ps が使えず生存判定できない環境では拒否する）
-// findSessions / livePids はテストから差し替えられるようにしている。
+// - ステータスファイル（生存 pid）でそのペインを指すセッションが、
+//   claudeSessionId があれば sessionId で、無ければ expectedPid（タブの claudePid）で一致すること。
+//   どちらも無ければ照合できないので拒否する（前景コマンドだけでは別の claude を殺し得る）
+// - ps が使えず生存判定できない環境では拒否する
+// 戻り値は照合に通ったセッションメタ（{pid, sessionId, ...}）。呼び出し側が閉じるタブの特定に使う。
+// findSessions / readPids はテストから差し替えられるようにしている。
 export async function killClaudePane(
-  { paneId, claudeSessionId } = {},
+  { paneId, claudeSessionId, expectedPid } = {},
   { findSessions = findLiveSessionsByPaneIds, readPids = readLivePids } = {},
 ) {
   validatePaneId(paneId);
   if (claudeSessionId != null && (typeof claudeSessionId !== 'string' || !CLAUDE_SESSION_ID_RE.test(claudeSessionId))) {
     throw new Error(`Invalid claudeSessionId: ${claudeSessionId}`);
+  }
+  if (expectedPid != null && !Number.isInteger(expectedPid)) {
+    throw new Error(`Invalid expectedPid: ${expectedPid}`);
+  }
+  if (!claudeSessionId && expectedPid == null) {
+    throw new Error('セッション ID も pid も分からないため、別の claude を終了しないよう中止しました');
   }
 
   const command = await paneCurrentCommand(paneId);
@@ -365,18 +374,18 @@ export async function killClaudePane(
     throw new Error(`ペイン ${paneId} で claude が動いていないため終了しませんでした（${command || '取得できず'}）`);
   }
 
-  if (claudeSessionId) {
-    const livePids = await readPids();
-    if (livePids === null) {
-      throw new Error('プロセスの生存確認ができないため終了しませんでした');
-    }
-    const meta = (await findSessions([paneId], { livePids })).get(paneId);
-    if (!meta || meta.sessionId !== claudeSessionId) {
-      throw new Error(`ペイン ${paneId} で動いているのは別のセッションのため終了しませんでした`);
-    }
+  const livePids = await readPids();
+  if (livePids === null) {
+    throw new Error('プロセスの生存確認ができないため終了しませんでした');
+  }
+  const meta = (await findSessions([paneId], { livePids })).get(paneId);
+  const matched = meta && (claudeSessionId ? meta.sessionId === claudeSessionId : meta.pid === expectedPid);
+  if (!matched) {
+    throw new Error(`ペイン ${paneId} で動いているのは別のセッションのため終了しませんでした`);
   }
 
   await execAsync(`tmux kill-pane -t ${paneId}`);
+  return meta;
 }
 
 export function resolveTmuxJsonlTarget({ claudeSessionId, cwd }) {
