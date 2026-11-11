@@ -71,7 +71,7 @@ export default function FilePreview({ href, cwd, onOpenPreview, onOpenFileReview
       </button>
       {canPreview && onOpenFileReview && (
         <button className="file-btn-review" onClick={() => onOpenFileReview(localPath)}>
-          レビュー
+          <span className="file-btn-review-label">レビュー</span>
         </button>
       )}
     </span>

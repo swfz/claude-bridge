@@ -4,6 +4,7 @@
    リンク色（--accent-secondary）の薄い下地のピルで囲み、アイコンもリンク色にする。
    名前は下地に沈まないよう本文色の太字にする */
 .file-preview-inline {
+  position: relative;
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
@@ -59,14 +60,20 @@
   text-decoration: none;
 }
 
-/* レビューはホバー時だけ（枠付きの小さなボタン）。出し入れで行が揺れないよう幅は確保しない */
+/* レビューはホバー時だけ（枠付きの小さなボタン）。文の流れに入れると出し入れのたびに後ろの文字が
+   押し出されて行がずれるので、ピルの右隣に絶対配置で重ねる（幅を取らない）。
+   左の透明な border はピルとの隙間を埋める当たり判定（ここを通ってもホバーが切れない） */
 .file-btn-review {
   display: none;
-  align-self: center;
-  padding: 0 8px;
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  z-index: 2;
+  transform: translateY(-50%);
+  padding: 0;
   background: none;
-  border: 0.5px solid var(--border);
-  border-radius: 6px;
+  border: none;
+  border-left: 4px solid transparent;
   color: var(--text-primary);
   font-size: 11px;
   line-height: 18px;
@@ -74,17 +81,31 @@
   cursor: pointer;
 }
 
-.file-preview-inline:hover .file-btn-review,
-.file-preview-inline:focus-within .file-btn-review {
-  display: inline-block;
+.file-btn-review-label {
+  display: block;
+  padding: 0 8px;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
-.file-btn-review:hover {
+.file-preview-inline:hover .file-btn-review,
+.file-preview-inline:focus-within .file-btn-review {
+  display: block;
+}
+
+.file-btn-review:hover .file-btn-review-label {
   background: var(--bg-surface);
 }
 
+/* ホバーの無い端末では常時出すので、重ねずに文の流れに置く（出し入れが無いのでずれない） */
 @media (hover: none) {
   .file-btn-review {
     display: inline-block;
+    position: static;
+    transform: none;
+    border-left-width: 0;
+    align-self: center;
   }
 }
