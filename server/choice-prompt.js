@@ -27,6 +27,13 @@ const TIP_RE = /^Tip: /;
 const FOOTER_RE = /(Enter to (select|confirm|submit)|Esc to (cancel|reject)|Tab to amend)/;
 const TAB_RE = /[☐☒]/;
 const FREE_TEXT_RE = /^Type something/i;
+// AskUserQuestion の選択肢に preview（ASCII 図等）が付くと、選択肢リストの右に枠付きの
+// プレビューが並ぶ左右分割のレイアウトになる（v2.1.322 で実測）。このレイアウトでは
+// 数字キーはカーソルを動かすだけで確定せず、Enter で確定する。フッターに
+// "n to add notes" が出るので、それか「選択肢行の右に枠線」で見分ける。
+const PREVIEW_FOOTER_RE = /n to add notes/;
+// 選択肢行の右側に描かれたプレビュー枠（2 文字以上の空白のあとに枠線の文字）
+const PREVIEW_BOX_RE = /\s{2,}[┌│└├╭╰].*$/;
 // permission プロンプトの問いかけ（"Do you want to create foo.txt?" 等）
 const PERMISSION_QUESTION_RE = /^(Do you want to|Do you want|Allow )/i;
 
@@ -182,6 +189,7 @@ function splitPermissionQuestion(lines, { text, bottomLine }) {
  *   detail: string,
  *   options: Array<{index:number,label:string,description:string,checked:boolean|null,cursor:boolean,freeText:boolean}>,
  *   multiSelect: boolean,
+ *   preview: boolean,
  *   tabs: null | {items:Array<{label:string,checked:boolean}>,hasSubmit:boolean,canPrev:boolean,canNext:boolean},
  *   footer: string,
  *   canCancel: boolean,
@@ -212,14 +220,17 @@ export function parseChoicePrompt(screen) {
   const hasCursor = block.some((o) => o.cursor);
   if (!footerLine && !hasCursor && !tabs) return null;
 
+  const preview = (footerLine && PREVIEW_FOOTER_RE.test(footerLine)) || block.some((o) => PREVIEW_BOX_RE.test(o.text));
   const options = block.map((opt, i) => {
     const nextLine = i + 1 < block.length ? block[i + 1].line : blockEnd + 1;
-    const cb = CHECKBOX_RE.exec(opt.text);
-    const label = (cb ? cb[2] : opt.text).replace(/\.$/, '').trim();
+    const text = opt.text.replace(PREVIEW_BOX_RE, '');
+    const cb = CHECKBOX_RE.exec(text);
+    const label = (cb ? cb[2] : text).replace(/\.$/, '').trim();
     return {
       index: opt.index,
       label,
-      description: collectDescription(lines, opt.line + 1, nextLine),
+      // preview レイアウトでは選択肢の間の行はプレビュー枠の続きなので説明として拾わない
+      description: preview ? '' : collectDescription(lines, opt.line + 1, nextLine),
       checked: cb ? cb[1] !== ' ' : null,
       cursor: opt.cursor,
       freeText: FREE_TEXT_RE.test(label),
@@ -237,6 +248,7 @@ export function parseChoicePrompt(screen) {
     detail,
     options,
     multiSelect: options.some((o) => o.checked !== null),
+    preview,
     tabs,
     footer,
     canCancel: /Esc to cancel/i.test(footer),
