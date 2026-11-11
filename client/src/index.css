@@ -30,6 +30,7 @@ body,
   --input-bg: #16213e;
   --success: #4caf50;
   --warning: #ff9800;
+  --danger: #e5534b;
   /* レート制限バーの空き部分。--border だとヘッダー背景と同化して見えない */
   --meter-track: #454b78;
   /* 活動ヒートマップ（草）の 5 段階。GitHub dark と同系の緑で、
@@ -69,6 +70,7 @@ body.light-mode {
   --input-bg: #ffffff;
   --success: #1a7f37;
   --warning: #9a6700;
+  --danger: #cf222e;
   --meter-track: #d1d9e0;
   --heat-0: #ebedf0;
   --heat-1: #9be9a8;

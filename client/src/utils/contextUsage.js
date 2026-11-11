@@ -36,3 +36,14 @@ export function contextColorFor(pct) {
   if (pct >= 50) return 'var(--warning)';
   return 'var(--success)';
 }
+
+// サイドバーの使用率バーのしきい値。ヘッダーのメーター（contextColorFor）より早めに色を変え、
+// 「普段と違う」セッションだけが目に入るようにする
+export const SIDEBAR_USAGE_WARN = 40;
+export const SIDEBAR_USAGE_DANGER = 60;
+
+export function sidebarUsageColor(pct) {
+  if (pct >= SIDEBAR_USAGE_DANGER) return 'var(--danger)';
+  if (pct >= SIDEBAR_USAGE_WARN) return 'var(--warning)';
+  return 'var(--success)';
+}

@@ -1,6 +1,23 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { latestContextUsage, contextPercent, formatTokens, contextColorFor } from '../client/src/utils/contextUsage.js';
+import {
+  latestContextUsage,
+  contextPercent,
+  formatTokens,
+  contextColorFor,
+  sidebarUsageColor,
+} from '../client/src/utils/contextUsage.js';
+
+describe('sidebarUsageColor', () => {
+  it('changes color at 40% and 60%', () => {
+    assert.equal(sidebarUsageColor(0), 'var(--success)');
+    assert.equal(sidebarUsageColor(39), 'var(--success)');
+    assert.equal(sidebarUsageColor(40), 'var(--warning)');
+    assert.equal(sidebarUsageColor(59), 'var(--warning)');
+    assert.equal(sidebarUsageColor(60), 'var(--danger)');
+    assert.equal(sidebarUsageColor(100), 'var(--danger)');
+  });
+});
 
 const usage = (contextTokens, contextWindow = 200_000) => ({ contextTokens, contextWindow });
 

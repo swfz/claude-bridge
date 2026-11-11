@@ -1,7 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  TbChevronDown,
+  TbEye,
+  TbFolder,
+  TbGitBranch,
+  TbLock,
+  TbPencil,
+  TbPictureInPicture,
+  TbPower,
+  TbRefresh,
+  TbStarFilled,
+  TbTag,
+  TbTerminal2,
+  TbTrash,
+  TbX,
+} from 'react-icons/tb';
 import { parseCwd } from '../utils/cwdLabel.js';
-import { contextColorFor, contextPercent, formatTokens } from '../utils/contextUsage.js';
-import { visibleTabsOf } from '../utils/tabGroups.js';
+import { contextPercent, formatTokens, sidebarUsageColor } from '../utils/contextUsage.js';
+import { autoGroupKeyOf, representativeDirOf, shouldShowDir, visibleTabsOf } from '../utils/tabGroups.js';
 import ShortcutHints from './ShortcutHints.jsx';
 import './SessionTabs.css';
 
@@ -31,10 +47,6 @@ function miniLabel(project) {
   }
   return String(project).slice(0, 2).toUpperCase();
 }
-
-// tmux で再開した直後は claude の起動を確かめるまで 'starting'（回転表示）、失敗なら 'failed'
-const STATUS_TITLES = { starting: '起動中…', failed: '起動に失敗しました' };
-const statusTitle = (status) => STATUS_TITLES[status] || status;
 
 export default function SessionTabs({
   sessions,
@@ -188,6 +200,9 @@ export default function SessionTabs({
     // 自動グループは中身が無ければ出さない。手動グループは空でも落とし先として出す
     .filter((group) => group.manual || group.sessions.length > 0);
 
+  // グループ色はドット（見出しとディレクトリ前）にだけ使う。並び順でパレットを回す
+  const colorByKey = new Map(shownGroups.map((group, index) => [group.key, `var(--cal-${index % 8})`]));
+
   const shownWidth = collapsed ? COLLAPSED_WIDTH : width;
 
   return (
@@ -218,20 +233,39 @@ export default function SessionTabs({
         {collapsed ? '＋' : '＋ 新しいセッション'}
       </button>
       <div className="tabs-list">
-        {shownGroups.map((group, index) => {
+        {shownGroups.map((group) => {
           const visible = visibleTabsOf(group, activeSessionId);
           const hasActive = group.sessions.some((s) => s.id === activeSessionId);
           const dropping = dropTarget?.group === group.key;
-          // 折りたたみ表示では見出しを出さず、色帯付きの枠だけで示す（名前は枠の tooltip）
-          const header = collapsed ? null : (
+          const groupColor = colorByKey.get(group.key);
+          if (!groups) return visible.map((session) => renderTab(session, group));
+          // 見出しにはグループ名（＝リポジトリ名）を優先し、代表ディレクトリは置き場所（親パス）だけ出す。
+          // フルパスは tooltip
+          const repDir = representativeDirOf(group);
+          const repParent = repDir ? repDir.slice(0, repDir.lastIndexOf('/')) || '/' : null;
+          // 折りたたみ表示では見出しを出さず、色ドットだけで区切る（名前は tooltip）
+          const header = collapsed ? (
+            <span className="tab-group-mini-dot" style={{ background: groupColor }} />
+          ) : (
             <div
               className={`tab-group-header${group.manual ? ' manual' : ''}${dropping ? ' tab-group-drop' : ''}${group.collapsed && hasActive ? ' has-active' : ''}`}
               onClick={() => groupActions?.onToggle(group.key)}
-              title={group.manual ? group.label : group.key.slice(2) || 'cwd 不明'}
+              title={group.manual ? group.label : repDir || group.key.slice(2) || 'cwd 不明'}
               {...groupDndPropsOf(group)}
             >
-              <span className="tab-group-caret">{group.collapsed ? '▸' : '▾'}</span>
+              <TbChevronDown className={`tab-group-caret${group.collapsed ? ' closed' : ''}`} aria-hidden="true" />
+              {group.manual ? (
+                <TbTag className="tab-group-kind" aria-label="自作グループ" />
+              ) : (
+                <TbFolder className="tab-group-kind" aria-label="ディレクトリグループ" />
+              )}
+              <span className="tab-group-dot" style={{ background: groupColor }} />
               <span className="tab-group-label">{group.label}</span>
+              {repDir && (
+                <span className="tab-group-dir" title={repDir}>
+                  {repParent}
+                </span>
+              )}
               <span className="tab-group-count">{group.sessions.length}</span>
               {group.manual && (
                 <span className="tab-group-actions">
@@ -244,7 +278,7 @@ export default function SessionTabs({
                     title="名前を変える"
                     aria-label="グループ名を変える"
                   >
-                    ✎
+                    <TbPencil />
                   </button>
                   <button
                     className="tab-group-action"
@@ -255,24 +289,21 @@ export default function SessionTabs({
                     title="グループを削除"
                     aria-label="グループを削除"
                   >
-                    x
+                    <TbTrash />
                   </button>
                 </span>
               )}
             </div>
           );
-          if (!groups) return visible.map((session) => renderTab(session, group.key));
-          // グループごとに枠で囲み、左の色帯で見分ける（色はカレンダーのプロジェクト色と同じパレットを並び順で回す）
           return (
             <div
               key={group.key}
               className={`tab-group${group.manual ? ' manual' : ''}${group.collapsed ? ' is-collapsed' : ''}${hasActive ? ' has-active' : ''}`}
-              style={{ '--group-color': `var(--cal-${index % 8})` }}
               title={collapsed ? group.label : undefined}
             >
               {header}
               {visible.length > 0 && (
-                <div className="tab-group-body">{visible.map((session) => renderTab(session, group.key))}</div>
+                <div className="tab-group-body">{visible.map((session) => renderTab(session, group))}</div>
               )}
             </div>
           );
@@ -292,8 +323,9 @@ export default function SessionTabs({
     </div>
   );
 
-  function renderTab(session, groupKey) {
-    const { parent, project, worktree } = parseCwd(session.cwd);
+  function renderTab(session, group) {
+    const groupKey = group?.key;
+    const { project, worktree } = parseCwd(session.cwd);
     const hasAttention = session.alive && attentionIds?.has(session.id);
     const isWaiting = Boolean(session.waitingFor) && session.alive;
     // Star / センシティブはホームと同じ claudeSessionId 単位。ここは表示専用（付け外しはホーム）
@@ -302,43 +334,43 @@ export default function SessionTabs({
     // プレビューを小窓（PiP）に出しているセッション。小窓は他のタブへ移っても残るので、どこから開いたかを示す
     const isPipTab = Boolean(pipSessionId) && session.id === pipSessionId;
     const className = `tab ${session.id === activeSessionId ? 'active' : ''} ${!session.alive ? 'dead' : ''} ${hasAttention ? 'tab-attention' : ''}${dndClassOf(session)}`;
-    // コンテキスト使用率は展開表示のみ（折りたたみ時は幅が足りない）
-    const contextUsage = contextBySession?.get(session.id) || null;
-    const contextPct = contextUsage ? contextPercent(contextUsage) : 0;
+    const dot = statusDotOf(session, { isWaiting, hasAttention });
 
     if (collapsed) {
       // 折りたたみ時はアイコン相当（頭文字＋状態）だけ。詳細は tooltip に逃がす
-      const typeLabel = session.type === 'tmux' ? ' [tmux]' : session.type === 'readonly' ? ' [閲覧]' : '';
-      const stateLabel = isWaiting
-        ? session.waitingFor === 'permission prompt'
-          ? ' / 許可待ち'
-          : ' / 回答待ち'
-        : hasAttention
-          ? ' / 完了（未確認）'
-          : '';
+      const typeLabel = TYPE_LABELS[session.type || 'pty'] ? ` [${TYPE_LABELS[session.type || 'pty']}]` : '';
       const markLabel = `${isStarredTab ? ' / ★ Star' : ''}${isSensitiveTab ? ' / 🔒 共有時は非表示' : ''}${isPipTab ? ' / ⧉ 小窓でプレビュー中' : ''}`;
       return (
         <div
           key={session.id}
           {...dndPropsOf(session, groupKey)}
-          className={`${className} tab-mini ${isWaiting ? 'tab-mini-waiting' : ''}`}
+          className={`${className} tab-mini`}
           onClick={() => session.alive && onSelect(session.id)}
-          title={`${session.name}${typeLabel}${stateLabel}${markLabel}\n${session.cwd || ''}`}
+          title={`${session.name}${typeLabel} / ${dot.title}${markLabel}\n${session.cwd || ''}`}
         >
           <span className="tab-mini-avatar">{miniLabel(project)}</span>
-          {session.status && (
-            <span className={`tab-status tab-status-${session.status}`} title={statusTitle(session.status)} />
-          )}
+          <span className={`tab-status ${dot.className}`} />
           {(isStarredTab || isSensitiveTab || isPipTab) && (
             <span className="tab-mini-marks">
-              {isStarredTab && <span className="tab-mark tab-mark-star">★</span>}
-              {isSensitiveTab && <span className="tab-mark tab-mark-lock">🔒</span>}
-              {isPipTab && <span className="tab-mark tab-mark-pip">⧉</span>}
+              {isStarredTab && <TbStarFilled className="tab-mark tab-mark-star" />}
+              {isSensitiveTab && <TbLock className="tab-mark tab-mark-lock" />}
+              {isPipTab && <TbPictureInPicture className="tab-mark tab-mark-pip" />}
             </span>
           )}
         </div>
       );
     }
+
+    // コンテキスト使用率は展開表示のみ（折りたたみ時は幅が足りない）
+    const contextUsage = contextBySession?.get(session.id) || null;
+    const contextPct = contextUsage ? contextPercent(contextUsage) : 0;
+    const showDir = shouldShowDir(session, group) && Boolean(project);
+    // 対応するディレクトリグループが表示されていれば、その色のドットで出どころを紐づける
+    const dirColor = showDir ? colorByKey.get(autoGroupKeyOf(session)) : null;
+    const typeLabel = TYPE_LABELS[session.type || 'pty'];
+    const TypeIcon = TYPE_ICONS[session.type || 'pty'];
+    const hasMeta =
+      isStarredTab || showDir || worktree || typeLabel || isSensitiveTab || isPipTab || Boolean(contextUsage);
 
     return (
       <div
@@ -348,47 +380,58 @@ export default function SessionTabs({
         onClick={() => session.alive && onSelect(session.id)}
       >
         <div className="tab-row">
-          {session.status && (
-            <span className={`tab-status tab-status-${session.status}`} title={statusTitle(session.status)} />
-          )}
-          {isStarredTab && (
-            <span className="tab-mark tab-mark-star" title="Star 付き（未解決／続きをやる）">
-              ★
-            </span>
-          )}
-          {isSensitiveTab && (
-            <span className="tab-mark tab-mark-lock" title="共有モード中は隠すセッション">
-              🔒
-            </span>
-          )}
-          {isPipTab && (
-            <span
-              className="tab-mark tab-mark-pip"
-              title="このセッションのプレビューを小窓に出しています（レビューはこのセッションへ送られます）"
-            >
-              ⧉
-            </span>
-          )}
-          {session.type === 'tmux' && <span className="tab-badge">tmux</span>}
-          {session.type === 'readonly' && <span className="tab-badge">閲覧</span>}
-          {session.status === 'starting' && <span className="tab-badge tab-badge-starting">起動中…</span>}
-          {session.status === 'failed' && <span className="tab-badge tab-badge-failed">起動失敗</span>}
-          {hasAttention && (
-            <span className="tab-badge tab-badge-attention" title="応答が完了しました（未確認）">
-              完了
-            </span>
-          )}
-          {isWaiting && (
-            <span className="tab-badge tab-badge-waiting" title={session.waitingFor}>
-              {session.waitingFor === 'permission prompt' ? '許可待ち' : '回答待ち'}
-            </span>
-          )}
+          <span className={`tab-status ${dot.className}`} title={dot.title} />
           <span className="tab-name" title={session.name}>
             {session.name}
           </span>
+        </div>
+        {hasMeta && (
+          <div className="tab-meta">
+            {isStarredTab && (
+              <TbStarFilled className="tab-mark tab-mark-star" title="Star 付き（未解決／続きをやる）" />
+            )}
+            {showDir && (
+              <span className="tab-meta-item tab-dir" title={session.cwd}>
+                {dirColor && <span className="tab-dir-dot" style={{ background: dirColor }} />}
+                <TbFolder className="tab-meta-icon" aria-hidden="true" />
+                <span className="tab-meta-text mono">{project}</span>
+              </span>
+            )}
+            {worktree && (
+              <span className="tab-meta-item tab-branch" title={`worktree: ${worktree}`}>
+                <TbGitBranch className="tab-meta-icon" aria-hidden="true" />
+                <span className="tab-meta-text">{worktree}</span>
+              </span>
+            )}
+            {/* tmux は既定なので出さない。それ以外の実行形態だけ薄いアイコンで例外として示す */}
+            {typeLabel && TypeIcon && <TypeIcon className="tab-meta-icon tab-type" title={typeLabel} />}
+            {isSensitiveTab && <TbLock className="tab-mark tab-mark-lock" title="共有モード中は隠すセッション" />}
+            {isPipTab && (
+              <TbPictureInPicture
+                className="tab-mark tab-mark-pip"
+                title="このセッションのプレビューを小窓に出しています（レビューはこのセッションへ送られます）"
+              />
+            )}
+            {contextUsage && (
+              <span
+                className="tab-context"
+                title={`コンテキスト ${formatTokens(contextUsage.contextTokens)} / ${formatTokens(contextUsage.contextWindow)}`}
+              >
+                <span className="tab-context-bar">
+                  <span
+                    className="tab-context-fill"
+                    style={{ width: `${contextPct}%`, background: sidebarUsageColor(contextPct) }}
+                  />
+                </span>
+                <span className="tab-context-num">{contextPct}%</span>
+              </span>
+            )}
+          </div>
+        )}
+        <span className="tab-actions">
           {session.alive && session.type === 'tmux' && onTerminateTmux && (
             <button
-              className="tab-terminate"
+              className="tab-action tab-terminate"
               onClick={(e) => {
                 e.stopPropagation();
                 onTerminateTmux(session);
@@ -396,69 +439,66 @@ export default function SessionTabs({
               title="claude を終了してペインを閉じる"
               aria-label="claude を終了してペインを閉じる"
             >
-              ⏻
+              <TbPower />
             </button>
           )}
-          {session.alive ? (
+          {!session.alive && (
             <button
-              className="tab-close"
+              className="tab-action tab-restart"
               onClick={(e) => {
                 e.stopPropagation();
-                if (session.type === 'tmux') {
-                  onDetachTmux(session.id);
-                } else if (session.type === 'readonly') {
-                  onCloseReadonly(session.id);
-                } else {
-                  onKill(session.id);
-                }
+                onRestart(session.id);
               }}
-              title={session.type === 'tmux' || session.type === 'readonly' ? '閉じる' : 'セッションを終了'}
+              title="同じ設定で再起動"
+              aria-label="同じ設定で再起動"
             >
-              x
+              <TbRefresh />
             </button>
-          ) : (
-            <span className="tab-dead-actions">
-              <button
-                className="tab-restart"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRestart(session.id);
-                }}
-                title="同じ設定で再起動"
-              >
-                ↻
-              </button>
-              <button
-                className="tab-close"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemovePast(session.id);
-                }}
-                title="履歴から削除"
-              >
-                x
-              </button>
-            </span>
           )}
-        </div>
-        <span className={`tab-cwd ${session.type === 'tmux' ? 'tab-cwd-strong' : ''}`} title={session.cwd}>
-          <span className="tab-cwd-project">
-            {parent && <span className="tab-cwd-parent">{parent}/</span>}
-            {project}
-          </span>
-          {worktree && <span className="tab-cwd-worktree">⎇ {worktree}</span>}
-          {/* コンテキスト使用率。狭いので % だけ出し、内訳は tooltip に逃がす */}
-          {contextUsage && (
-            <span
-              className="tab-context"
-              style={{ color: contextColorFor(contextPct) }}
-              title={`コンテキスト ${formatTokens(contextUsage.contextTokens)} / ${formatTokens(contextUsage.contextWindow)}`}
-            >
-              {contextPct}%
-            </span>
-          )}
+          <button
+            className="tab-action tab-close"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!session.alive) onRemovePast(session.id);
+              else if (session.type === 'tmux') onDetachTmux(session.id);
+              else if (session.type === 'readonly') onCloseReadonly(session.id);
+              else onKill(session.id);
+            }}
+            title={closeTitleOf(session)}
+            aria-label={closeTitleOf(session)}
+          >
+            <TbX />
+          </button>
         </span>
       </div>
     );
   }
+}
+
+// 実行形態のうち例外として示すもの（tmux は既定なので載せない。内蔵 PTY は type を持たない）
+const TYPE_LABELS = { readonly: '閲覧', pty: '内蔵' };
+const TYPE_ICONS = { readonly: TbEye, pty: TbTerminal2 };
+
+function closeTitleOf(session) {
+  if (!session.alive) return '履歴から削除';
+  if (session.type === 'tmux' || session.type === 'readonly') return '閉じる';
+  return 'セッションを終了';
+}
+
+// 行頭ドット 1 か所で状態を表す（文字ラベルは使わない）。
+// 色は意味を固定する: 緑＝動いている（処理中は点滅・応答完了で未確認は光る）、黄＝操作が必要、赤＝エラー
+function statusDotOf(session, { isWaiting, hasAttention }) {
+  if (!session.alive) return { className: 'tab-status-dead', title: '停止' };
+  if (session.status === 'failed') return { className: 'tab-status-failed', title: '起動に失敗しました' };
+  if (session.status === 'starting') return { className: 'tab-status-starting', title: '起動中…' };
+  if (isWaiting) {
+    return {
+      className: 'tab-status-waiting',
+      title: session.waitingFor === 'permission prompt' ? '許可待ち' : '回答待ち',
+    };
+  }
+  if (session.status === 'busy') return { className: 'tab-status-busy', title: '処理中' };
+  if (hasAttention) return { className: 'tab-status-attention', title: '応答が完了しました（未確認）' };
+  if (session.status === 'idle') return { className: 'tab-status-idle', title: '入力待ち' };
+  return { className: 'tab-status-none', title: session.status || '状態不明' };
 }
