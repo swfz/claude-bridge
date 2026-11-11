@@ -28,6 +28,9 @@ function textEntryOf(e) {
  *   true を返したら preventDefault して終了する。矢印の左右や文字キーなど呼び出し側固有のキー用
  * - `extraDocs`: iframe の contentDocument など、親 document にキーが届かない領域。
  *   iframe は読み込みで差し替わるので、毎レンダー貼り直して常に最新を見る
+ * - `doc`: keydown / focusin を張る document（既定はメインの document）。プレビューを小窓
+ *   （Document Picture-in-Picture）に出したときは PiP 窓の document を渡す。PiP にフォーカスが
+ *   あるときだけ効くので、メイン画面で打つキーを横取りしない
  *
  * Escape はピック中だけ握りつぶす（stopPropagation はしないので、呼び出し側は返り値の
  * `active` を見て「ピック中はドロワーを閉じない」等の判断ができる）。
@@ -44,7 +47,9 @@ export function useNumberPick({
   allowSub = false,
   subMax,
   extraDocs,
+  doc,
 } = {}) {
+  const hostDoc = doc || document;
   const [state, dispatch] = useReducer(pickReducer, INITIAL_PICK_STATE);
 
   // ハンドラを安定させたいので、変わり得る値は毎レンダー ref に写す
@@ -212,9 +217,9 @@ export function useNumberPick({
   );
 
   useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+    hostDoc.addEventListener('keydown', handleKeyDown);
+    return () => hostDoc.removeEventListener('keydown', handleKeyDown);
+  }, [hostDoc, handleKeyDown]);
 
   // 入力欄にフォーカスが入ったらピックは終わり（HUD を残さない）。keydown 側の判定と対になる
   useEffect(() => {
@@ -223,9 +228,9 @@ export function useNumberPick({
       dispatch({ type: 'clear' });
       optsRef.current.onCancel?.();
     };
-    document.addEventListener('focusin', onFocusIn);
-    return () => document.removeEventListener('focusin', onFocusIn);
-  }, []);
+    hostDoc.addEventListener('focusin', onFocusIn);
+    return () => hostDoc.removeEventListener('focusin', onFocusIn);
+  }, [hostDoc]);
 
   // iframe の contentDocument は差し替わるので、毎レンダー貼り直す（リスナは 1 つずつなので軽い）
   useEffect(() => {

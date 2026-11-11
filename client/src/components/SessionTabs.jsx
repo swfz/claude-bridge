@@ -45,6 +45,7 @@ export default function SessionTabs({
   attentionIds,
   sensitiveIds,
   starredIds,
+  pipSessionId,
   contextBySession,
   shareMode,
   onHome,
@@ -286,6 +287,8 @@ export default function SessionTabs({
     // Star / センシティブはホームと同じ claudeSessionId 単位。ここは表示専用（付け外しはホーム）
     const isStarredTab = Boolean(session.claudeSessionId && starredIds?.has(session.claudeSessionId));
     const isSensitiveTab = Boolean(session.claudeSessionId && sensitiveIds?.has(session.claudeSessionId));
+    // プレビューを小窓（PiP）に出しているセッション。小窓は他のタブへ移っても残るので、どこから開いたかを示す
+    const isPipTab = Boolean(pipSessionId) && session.id === pipSessionId;
     const className = `tab ${session.id === activeSessionId ? 'active' : ''} ${!session.alive ? 'dead' : ''} ${hasAttention ? 'tab-attention' : ''}${dndClassOf(session)}`;
     // コンテキスト使用率は展開表示のみ（折りたたみ時は幅が足りない）
     const contextUsage = contextBySession?.get(session.id) || null;
@@ -301,7 +304,7 @@ export default function SessionTabs({
         : hasAttention
           ? ' / 完了（未確認）'
           : '';
-      const markLabel = `${isStarredTab ? ' / ★ Star' : ''}${isSensitiveTab ? ' / 🔒 共有時は非表示' : ''}`;
+      const markLabel = `${isStarredTab ? ' / ★ Star' : ''}${isSensitiveTab ? ' / 🔒 共有時は非表示' : ''}${isPipTab ? ' / ⧉ 小窓でプレビュー中' : ''}`;
       return (
         <div
           key={session.id}
@@ -314,10 +317,11 @@ export default function SessionTabs({
           {session.status && (
             <span className={`tab-status tab-status-${session.status}`} title={statusTitle(session.status)} />
           )}
-          {(isStarredTab || isSensitiveTab) && (
+          {(isStarredTab || isSensitiveTab || isPipTab) && (
             <span className="tab-mini-marks">
               {isStarredTab && <span className="tab-mark tab-mark-star">★</span>}
               {isSensitiveTab && <span className="tab-mark tab-mark-lock">🔒</span>}
+              {isPipTab && <span className="tab-mark tab-mark-pip">⧉</span>}
             </span>
           )}
         </div>
@@ -343,6 +347,14 @@ export default function SessionTabs({
           {isSensitiveTab && (
             <span className="tab-mark tab-mark-lock" title="共有モード中は隠すセッション">
               🔒
+            </span>
+          )}
+          {isPipTab && (
+            <span
+              className="tab-mark tab-mark-pip"
+              title="このセッションのプレビューを小窓に出しています（レビューはこのセッションへ送られます）"
+            >
+              ⧉
             </span>
           )}
           {session.type === 'tmux' && <span className="tab-badge">tmux</span>}
