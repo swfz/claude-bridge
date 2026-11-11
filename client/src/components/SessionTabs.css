@@ -194,6 +194,28 @@
   color: var(--accent);
 }
 
+/* tmux 上の claude を終了してペインを閉じる。× の左に寄せる（× の margin-left: auto を引き継ぐ） */
+.tab-terminate {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+.tab-terminate:hover {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.tab-terminate + .tab-close {
+  margin-left: 0;
+}
+
 .tab-dead-actions {
   display: flex;
   gap: 2px;

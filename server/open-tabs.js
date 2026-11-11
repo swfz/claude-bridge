@@ -158,6 +158,13 @@ export function upsertPaneSnapshot(prev, pane) {
   return [snap, ...prev.filter((p) => p.claudeSessionId !== snap.claudeSessionId)].slice(0, MAX_ENTRIES);
 }
 
+// ブラウザから終了した claude をスナップショットから外す。残すと、次の定期更新より前に
+// 再起動したとき「動いていなかったもの」として再開待ちに入ってしまう
+export function removePaneSnapshot(prev, claudeSessionId) {
+  if (!claudeSessionId) return prev;
+  return prev.filter((p) => p.claudeSessionId !== claudeSessionId);
+}
+
 // tmux 上の claude のスナップショットを更新する。
 // - livePanes: enrichPanesWithSessionMeta() 済みの claude ペイン
 // - tmuxAlive: tmux サーバーが応答したか。応答しない（終了処理中・未起動）ときは前回の内容を保つ

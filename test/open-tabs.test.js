@@ -13,6 +13,7 @@ const {
   sanitizeOpenTabs,
   tabsFromSessions,
   updatePaneSnapshot,
+  removePaneSnapshot,
   upsertPaneSnapshot,
   planRestore,
   splitPending,
@@ -315,5 +316,23 @@ describe('open-tabs: splitPending', () => {
     assert.equal(out.readonly[0].type, 'readonly');
     assert.equal(out.readonly[0].id, 'tab-a');
     assert.deepEqual(out.skip, [noTab]);
+  });
+});
+
+describe('removePaneSnapshot', () => {
+  const snap = [
+    { claudeSessionId: 'a', cwd: '/x', tmuxSession: 's', windowIndex: 1, windowName: 'w', missing: 0 },
+    { claudeSessionId: 'b', cwd: '/y', tmuxSession: 's', windowIndex: 2, windowName: 'w', missing: 0 },
+  ];
+
+  it('drops the terminated session', () => {
+    assert.deepEqual(
+      removePaneSnapshot(snap, 'a').map((p) => p.claudeSessionId),
+      ['b'],
+    );
+  });
+
+  it('keeps the list as-is without a claudeSessionId', () => {
+    assert.equal(removePaneSnapshot(snap, null), snap);
   });
 });

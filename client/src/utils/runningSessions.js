@@ -57,6 +57,17 @@ export function statusClass(status) {
   return status === 'busy' || status === 'working' ? 'busy' : 'idle';
 }
 
+// tmux 上の claude を終了してペインを閉じる前の確認文言（window.confirm 用）。
+// 作業中なら途中で止まることをはっきり書く
+export function terminateConfirmMessage({ name, status, target } = {}) {
+  const label = name || 'このセッション';
+  const where = target ? `（tmux ${target}）` : '';
+  const lines = [`「${label}」${where}の claude を終了し、tmux ペインを閉じます。`];
+  if (statusClass(status) === 'busy') lines.push('作業中です。途中の処理は中断されます。');
+  lines.push('よろしいですか？');
+  return lines.join('\n');
+}
+
 // 経過時間の短い日本語表記（ホームのカードに出す最終更新）。
 // 数値（epoch ms）と ISO 文字列のどちらも受ける。
 export function formatElapsed(timestamp, now = Date.now()) {

@@ -17,6 +17,7 @@ import { readSessionTurns } from './session-turns.js';
 import { readRecentExchanges } from './session-recent.js';
 import {
   isTmuxServerRunning,
+  killClaudePane,
   listClaudeTmuxPanes,
   resolveTmuxJsonlTarget,
   resumeInTmuxWindow,
@@ -28,6 +29,7 @@ import { listRunningSessions } from './running-sessions.js';
 import {
   loadOpenTabs,
   planRestore,
+  removePaneSnapshot,
   saveOpenTabs,
   splitPending,
   tabsFromSessions,
@@ -1662,6 +1664,49 @@ wss.on('connection', (ws) => {
         tmuxSessionManager.detachSession(msg.sessionId);
         lastChoicePrompts.delete(msg.sessionId);
         broadcastSessionList();
+        break;
+      }
+
+      case 'terminate_tmux_session': {
+        // tmux 上の claude を終了してペインごと閉じる（detach_tmux_pane は切り離すだけ）。
+        // タブから来たら paneId / claudeSessionId はクライアントの値ではなくサーバー側から引く。
+        // ホームの起動中カード（タブ未オープン）からは paneId + claudeSessionId を受ける。
+        // 実際に kill するかは killClaudePane() が直前の照合で決める
+        const fromTab = Boolean(msg.sessionId);
+        const fail = (message) => sendTo(ws, { type: fromTab ? 'error' : 'home_error', message });
+        try {
+          let paneId = msg.paneId;
+          let claudeSessionId = msg.claudeSessionId || null;
+          if (fromTab) {
+            const tab = tmuxSessionManager.getSession(msg.sessionId);
+            if (!tab) {
+              fail('終了する tmux タブが見つかりません');
+              break;
+            }
+            paneId = tab.paneId;
+            claudeSessionId = jsonlWatcher.getSessionMeta(tab.id)?.claudeSessionId || null;
+          }
+          await killClaudePane({ paneId, claudeSessionId });
+
+          // 同じペインを指すタブは全部閉じる（ホームから終了してもタブが開いていることがある）
+          const closedSessionIds = tmuxSessionManager
+            .activeSessions()
+            .filter((s) => s.paneId === paneId)
+            .map((s) => s.id);
+          for (const id of closedSessionIds) {
+            jsonlWatcher.stopWatching(id);
+            tmuxSessionManager.detachSession(id);
+            lastChoicePrompts.delete(id);
+          }
+          paneSnapshot = removePaneSnapshot(paneSnapshot, claudeSessionId);
+          dropPending(claudeSessionId);
+          persistOpenTabs();
+          broadcastSessionList();
+          broadcast({ type: 'tmux_session_terminated', paneId, claudeSessionId, closedSessionIds });
+        } catch (e) {
+          console.error('terminate_tmux_session failed:', e.message);
+          fail(`claude を終了できませんでした: ${e.message}`);
+        }
         break;
       }
 

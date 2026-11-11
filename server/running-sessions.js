@@ -55,23 +55,15 @@ export async function readLivePids() {
   }
 }
 
-// tmux paneId -> claude pid の逆引き。tmux で開いたが claudePid がまだ分からない
-// セッション（resume_in_tmux 直後など）を、ステータスファイルの tmux フィールドの
-// paneId 突合でバックフィルするために使う。
-// tmux の paneId はサーバー再起動で再利用されるため、同じ paneId を持つ古い
-// ステータスファイルが複数残っていることがある。生存 pid に絞ったうえで、
-// 候補が複数あれば updatedAt が最新のものを採用する。
-export async function mapPaneIdsToPids(paneIds, { dir = SESSIONS_DIR, livePids } = {}) {
-  const targets = new Set(paneIds);
-  if (targets.size === 0) return new Map();
-
+// ~/.claude/sessions/*.json を読み、normalizeRunningSession() 済みのメタを返す。
+// 壊れた/書き込み途中のファイルは無視する。ディレクトリが無ければ []
+async function readSessionMetas(dir) {
   let files;
   try {
     files = await readdir(dir);
   } catch {
-    return new Map();
+    return [];
   }
-
   const metas = await Promise.all(
     files
       .filter((f) => f.endsWith('.json'))
@@ -79,24 +71,40 @@ export async function mapPaneIdsToPids(paneIds, { dir = SESSIONS_DIR, livePids }
         try {
           return normalizeRunningSession(JSON.parse(await readFile(join(dir, f), 'utf8')));
         } catch {
-          // 壊れた/書き込み途中のファイルは無視
           return null;
         }
       }),
   );
+  return metas.filter(Boolean);
+}
 
+// paneId ごとに「生存 pid のうち updatedAt が最新」のセッションメタを返す。
+// tmux の paneId はサーバー再起動で再利用されるため、同じ paneId を持つ古い
+// ステータスファイルが複数残っていることがある。生存 pid に絞ったうえで最新を採る。
+export async function findLiveSessionsByPaneIds(paneIds, { dir = SESSIONS_DIR, livePids } = {}) {
+  const targets = new Set(paneIds);
+  if (targets.size === 0) return new Map();
+
+  const metas = await readSessionMetas(dir);
   const alive = livePids !== undefined ? livePids : await readLivePids();
 
   const byPane = new Map();
   for (const m of metas) {
-    if (!m || !m.paneId || !targets.has(m.paneId)) continue;
+    if (!m.paneId || !targets.has(m.paneId)) continue;
     if (alive !== null && !alive.has(m.pid)) continue;
     const existing = byPane.get(m.paneId);
     if (!existing || (m.updatedAt ?? 0) > (existing.updatedAt ?? 0)) {
       byPane.set(m.paneId, m);
     }
   }
+  return byPane;
+}
 
+// tmux paneId -> claude pid の逆引き。tmux で開いたが claudePid がまだ分からない
+// セッション（resume_in_tmux 直後など）を、ステータスファイルの tmux フィールドの
+// paneId 突合でバックフィルするために使う。
+export async function mapPaneIdsToPids(paneIds, options = {}) {
+  const byPane = await findLiveSessionsByPaneIds(paneIds, options);
   return new Map(Array.from(byPane, ([paneId, m]) => [paneId, m.pid]));
 }
 
@@ -104,29 +112,11 @@ export async function mapPaneIdsToPids(paneIds, { dir = SESSIONS_DIR, livePids }
 // プロセスが生きているものだけを最終更新の新しい順で返す。
 // dir / livePids はテストから差し替えられるようにしている。
 export async function listRunningSessions({ dir = SESSIONS_DIR, livePids, projectsDir = CLAUDE_PROJECTS_DIR } = {}) {
-  let files;
-  try {
-    files = await readdir(dir);
-  } catch {
-    return [];
-  }
-
-  const metas = await Promise.all(
-    files
-      .filter((f) => f.endsWith('.json'))
-      .map(async (f) => {
-        try {
-          return normalizeRunningSession(JSON.parse(await readFile(join(dir, f), 'utf8')));
-        } catch {
-          // 壊れた/書き込み途中のファイルは無視
-          return null;
-        }
-      }),
-  );
+  const metas = await readSessionMetas(dir);
 
   const alive = livePids !== undefined ? livePids : await readLivePids();
   const running = metas
-    .filter((m) => m && (alive === null || alive.has(m.pid)))
+    .filter((m) => alive === null || alive.has(m.pid))
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
   // カードで中身が分かるよう JSONL からタイトル・直近のやりとりを添える

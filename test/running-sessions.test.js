@@ -8,6 +8,7 @@ import {
   normalizeRunningSession,
   listRunningSessions,
   mapPaneIdsToPids,
+  findLiveSessionsByPaneIds,
 } from '../server/running-sessions.js';
 
 describe('parsePaneId', () => {
@@ -227,5 +228,34 @@ describe('mapPaneIdsToPids', () => {
     });
     const result = await mapPaneIdsToPids(['%5'], { dir, livePids: new Set([2]) });
     assert.equal(result.get('%5'), 2);
+  });
+});
+
+describe('findLiveSessionsByPaneIds', () => {
+  it('returns the newest live session meta (with sessionId) per paneId', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'cb-sessions-'));
+    await writeFile(
+      join(dir, '1.json'),
+      JSON.stringify({ pid: 1, sessionId: 'dead', tmux: '0:@1.%5', updatedAt: 300 }),
+    );
+    await writeFile(
+      join(dir, '2.json'),
+      JSON.stringify({ pid: 2, sessionId: 'live', tmux: '0:@1.%5', updatedAt: 100 }),
+    );
+    await writeFile(join(dir, '3.json'), JSON.stringify({ pid: 3, sessionId: 'other', tmux: '0:@1.%6' }));
+
+    const result = await findLiveSessionsByPaneIds(['%5'], { dir, livePids: new Set([2, 3]) });
+
+    assert.deepEqual(Array.from(result.keys()), ['%5']);
+    assert.equal(result.get('%5').sessionId, 'live');
+    assert.equal(result.get('%5').pid, 2);
+  });
+
+  it('returns an empty map when the directory is missing', async () => {
+    const result = await findLiveSessionsByPaneIds(['%5'], {
+      dir: join(tmpdir(), 'cb-sessions-does-not-exist'),
+      livePids: new Set([1]),
+    });
+    assert.equal(result.size, 0);
   });
 });

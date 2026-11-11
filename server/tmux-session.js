@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import { readStatusByPid } from './claude-session-meta.js';
-import { mapPaneIdsToPids } from './running-sessions.js';
+import { findLiveSessionsByPaneIds, mapPaneIdsToPids, readLivePids } from './running-sessions.js';
 import { cwdToProjectDir } from './jsonl-utils.js';
 import { assertValidChoiceKeys, sanitizeChoiceText, CHOICE_KEY_DELAY_MS } from './choice-keys.js';
 
@@ -342,6 +342,43 @@ export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated
   return pane;
 }
 
+const CLAUDE_SESSION_ID_RE = /^[\w-]+$/;
+
+// ブラウザから「claude を終了してペインを閉じる」。paneId（%N）は tmux サーバーを
+// 立て直すと振り直されるので、kill の直前にそのペインで今もその claude が動いているかを
+// 確かめ、確かめられなければ kill しない（fail-closed）。
+// - ペインのフォアグラウンドが claude であること（取れなければ拒否）
+// - claudeSessionId があれば、ステータスファイル（生存 pid）の tmux.paneId と sessionId が一致すること
+//   （ps が使えず生存判定できない環境では拒否する）
+// findSessions / livePids はテストから差し替えられるようにしている。
+export async function killClaudePane(
+  { paneId, claudeSessionId } = {},
+  { findSessions = findLiveSessionsByPaneIds, readPids = readLivePids } = {},
+) {
+  validatePaneId(paneId);
+  if (claudeSessionId != null && (typeof claudeSessionId !== 'string' || !CLAUDE_SESSION_ID_RE.test(claudeSessionId))) {
+    throw new Error(`Invalid claudeSessionId: ${claudeSessionId}`);
+  }
+
+  const command = await paneCurrentCommand(paneId);
+  if (!isClaudeCommand(command)) {
+    throw new Error(`ペイン ${paneId} で claude が動いていないため終了しませんでした（${command || '取得できず'}）`);
+  }
+
+  if (claudeSessionId) {
+    const livePids = await readPids();
+    if (livePids === null) {
+      throw new Error('プロセスの生存確認ができないため終了しませんでした');
+    }
+    const meta = (await findSessions([paneId], { livePids })).get(paneId);
+    if (!meta || meta.sessionId !== claudeSessionId) {
+      throw new Error(`ペイン ${paneId} で動いているのは別のセッションのため終了しませんでした`);
+    }
+  }
+
+  await execAsync(`tmux kill-pane -t ${paneId}`);
+}
+
 export function resolveTmuxJsonlTarget({ claudeSessionId, cwd }) {
   if (!claudeSessionId) return null;
   return {
@@ -388,7 +425,8 @@ export class TmuxSession {
   }
 
   kill() {
-    // tmux ペインは kill しない（ユーザーのセッション）
+    // tmux ペインは kill しない（ユーザーのセッション）。
+    // 明示的に終了するときは killClaudePane()（terminate_tmux_session）を使う
   }
 
   async getOutputBuffer() {

@@ -50,6 +50,7 @@ export default function SessionTabs({
   onRestart,
   onRemovePast,
   onDetachTmux,
+  onTerminateTmux,
   onCloseReadonly,
   onNew,
   onReorder,
@@ -253,6 +254,19 @@ export default function SessionTabs({
                   <span className="tab-name" title={session.name}>
                     {session.name}
                   </span>
+                  {session.alive && session.type === 'tmux' && onTerminateTmux && (
+                    <button
+                      className="tab-terminate"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTerminateTmux(session);
+                      }}
+                      title="claude を終了してペインを閉じる"
+                      aria-label="claude を終了してペインを閉じる"
+                    >
+                      ⏻
+                    </button>
+                  )}
                   {session.alive ? (
                     <button
                       className="tab-close"
