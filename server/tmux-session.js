@@ -36,6 +36,17 @@ export async function listClaudeTmuxPanes() {
   }
 }
 
+// tmux サーバーが応答するか。listClaudeTmuxPanes() は失敗を [] に潰すので、
+// 「ペインが無い」と「tmux ごと居ない（終了処理中・未起動）」を区別したいときに使う
+export async function isTmuxServerRunning() {
+  try {
+    await execAsync('tmux list-sessions -F "#{session_name}"');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // tmux ペインにテキストを送信
 function validatePaneId(paneId) {
   // tmux pane ID は %<数字> の形式
@@ -248,26 +259,51 @@ export function buildResumeWindowName(claudeSessionId) {
     .slice(0, 8)}`;
 }
 
+// 復元時に指定された window 名。制御文字を落として長さを抑える（シェルへは escapeForShell を通す）
+function sanitizeWindowName(name) {
+  if (typeof name !== 'string') return null;
+  // eslint-disable-next-line no-control-regex
+  const cleaned = name.replace(/[\x00-\x1f\x7f]/g, '').slice(0, 64);
+  return cleaned.trim() ? cleaned : null;
+}
+
+// new-window / new-session の -n はフォーマットとして展開される（tmux 3.7c で実測）。
+// `#(cmd)` がコマンド実行になり、`#{...}` も化けるので、`#` を `##` にして字面どおりに付ける
+export function escapeTmuxFormat(text) {
+  return String(text).replace(/#/g, '##');
+}
+
 // tmux に新しい window を作り、そこで `claude --resume <id>` を起動する。
 // PTY 直起動（resume_session）と違い、claude は tmux 側のプロセスになるので
 // ブリッジを落としても生き続け、ターミナルからも操作できる。
 // シェルの準備待ち＋起動確認に数秒かかるので、window ができた時点で onWindowCreated を呼ぶ
 // （呼び出し側はそこでタブを開いて「起動中」を見せられる）。
-export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated }) {
+// tmuxSession / windowName は再起動後の一括再開（open-tabs.js）で「元の tmux セッションの元の window 名」で
+// 作り直すときだけ渡す。tmuxSession が無ければ作り、tmux サーバーごと無ければそれで立ち上げる。
+export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated, tmuxSession, windowName: wanted }) {
   if (!/^[\w-]+$/.test(claudeSessionId || '')) {
     throw new Error(`Invalid claudeSessionId: ${claudeSessionId}`);
   }
 
-  const windowName = buildResumeWindowName(claudeSessionId);
+  const windowName = sanitizeWindowName(wanted) || buildResumeWindowName(claudeSessionId);
+  const nameArg = escapeForShell(escapeTmuxFormat(windowName));
   const cwdArg = cwd ? ` -c ${escapeForShell(cwd)}` : '';
   const format = "-P -F '#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}'";
+  // `:` は target 記法と衝突するので、指定セッション名は英数・`.`・`-`・`_` だけ受け付ける
+  const preferred = typeof tmuxSession === 'string' && /^[\w.-]{1,64}$/.test(tmuxSession) ? tmuxSession : null;
 
   // 直近使ったセッションに window を足す。tmux サーバー自体が無ければ受け皿を作る
   // （new-session の初期 window をそのまま使うので空 window は残らない）。
   let sessionName;
+  let createName = preferred || FALLBACK_TMUX_SESSION;
   try {
     const { stdout } = await execAsync('tmux list-sessions -F "#{session_last_attached}\t#{session_name}"');
-    sessionName = pickTargetSession(stdout);
+    if (preferred) {
+      const exists = stdout.split('\n').some((line) => line.split('\t')[1] === preferred);
+      sessionName = exists ? preferred : null;
+    } else {
+      sessionName = pickTargetSession(stdout);
+    }
   } catch {
     sessionName = null;
   }
@@ -275,8 +311,8 @@ export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated
   // 末尾の `:` でセッション指定に固定する。素の `-t 0` のような数字だけの
   // セッション名は window index と解釈され「index 0 in use」で失敗する
   const command = sessionName
-    ? `tmux new-window -t ${escapeForShell(`${sessionName}:`)} -n ${escapeForShell(windowName)}${cwdArg} ${format}`
-    : `tmux new-session -d -s ${FALLBACK_TMUX_SESSION} -n ${escapeForShell(windowName)}${cwdArg} ${format}`;
+    ? `tmux new-window -t ${escapeForShell(`${sessionName}:`)} -n ${nameArg}${cwdArg} ${format}`
+    : `tmux new-session -d -s ${createName} -n ${nameArg}${cwdArg} ${format}`;
 
   let stdout;
   try {
@@ -295,7 +331,7 @@ export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated
   const pane = {
     paneId,
     target: target || paneId,
-    sessionName: sessionName || FALLBACK_TMUX_SESSION,
+    sessionName: sessionName || createName,
     windowName,
   };
   onWindowCreated?.(pane);
@@ -395,8 +431,9 @@ export class TmuxSessionManager {
     this.sessions = new Map();
   }
 
-  attachPane({ paneId, name, cwd, target, claudePid, status, waitingFor }) {
-    const id = randomUUID().slice(0, 8);
+  // id は再起動後の復元（open-tabs.js）で前回のブリッジ ID を引き継ぐときだけ渡す
+  attachPane({ id: requestedId, paneId, name, cwd, target, claudePid, status, waitingFor }) {
+    const id = requestedId && !this.sessions.has(requestedId) ? requestedId : randomUUID().slice(0, 8);
     const session = new TmuxSession({
       id,
       name,
