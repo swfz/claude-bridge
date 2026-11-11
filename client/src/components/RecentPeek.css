@@ -1,0 +1,143 @@
+/* ホームの行リストの「直近のやりとり」アイコンとポップオーバー */
+.recent-peek-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.45;
+}
+
+.home-row:hover .recent-peek-button,
+.recent-peek-button:focus-visible,
+.recent-peek-button.open {
+  opacity: 1;
+}
+
+.recent-peek-button.pinned {
+  background: var(--bg-surface);
+  outline: 1px solid var(--accent-secondary);
+}
+
+/* body 直下に portal で出す。位置は JS（peekPosition）が決める */
+.recent-peek {
+  position: fixed;
+  z-index: 1000;
+  width: min(520px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  cursor: auto;
+  /* 行の上で開くが、中身は選択してコピーできるようにする */
+  user-select: text;
+}
+
+.recent-peek.pinned {
+  border-color: var(--accent-secondary);
+}
+
+.recent-peek-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.recent-peek-close {
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.recent-peek-close:hover {
+  color: var(--text-primary);
+}
+
+.recent-peek-status {
+  margin: 0;
+  padding: 12px 10px;
+  color: var(--text-secondary);
+}
+
+.recent-peek-status.error {
+  color: var(--accent);
+}
+
+.recent-peek-exchange {
+  padding: 8px 10px;
+}
+
+.recent-peek-exchange + .recent-peek-exchange {
+  border-top: 1px solid var(--border);
+}
+
+.recent-peek-turn + .recent-peek-turn {
+  margin-top: 8px;
+}
+
+.recent-peek-meta {
+  margin-bottom: 2px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.recent-peek-who {
+  font-weight: 600;
+}
+
+.recent-peek-turn.user .recent-peek-who {
+  color: var(--accent-secondary);
+}
+
+.recent-peek-tools {
+  margin-left: 8px;
+  opacity: 0.75;
+}
+
+.recent-peek-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+/* 応答は指示より一段落とす（行リストの応答列と同じ扱い） */
+.recent-peek-turn.claude .recent-peek-text {
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.recent-peek-text.empty {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.recent-peek-more {
+  margin-left: 4px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}

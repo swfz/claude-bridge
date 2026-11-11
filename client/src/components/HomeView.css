@@ -637,8 +637,8 @@
 .home-rows-header,
 .home-row {
   grid-template-columns:
-    18px 18px minmax(0, 172px) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 160px) 62px
-    44px 62px;
+    18px 18px minmax(0, 172px) minmax(0, 0.8fr) 22px minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 160px)
+    62px 44px 62px;
 }
 
 .home-row {
@@ -700,6 +700,15 @@
   padding-left: 10px;
   border-left: 1px solid var(--border);
   opacity: 0.7;
+}
+
+/* 直近のやりとり（RecentPeek）のアイコン列 */
+.home-row-peek {
+  display: flex;
+  justify-content: center;
+  /* 行ホバーで重なる .home-row-actions（absolute）より前面に出して、常に押せるようにする */
+  position: relative;
+  z-index: 2;
 }
 
 /* Artifact 列。チップは固定幅の列に収め、溢れた分は「+N」で畳む（行の高さは変えない） */

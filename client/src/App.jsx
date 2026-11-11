@@ -89,6 +89,12 @@ export default function App() {
   const [calendar, setCalendar] = useState(null);
   // ホームの「セッション詳細」に出すターン詳細（開いている 1 件分だけ持つ）
   const [sessionTurns, setSessionTurns] = useState(null);
+  // ホームの行の「直近のやりとり」。{[sessionId]: {exchanges, error, updatedAt}}。エントリが無い＝読み込み中
+  const [recentExchanges, setRecentExchanges] = useState({});
+  const recentExchangesRef = useRef(recentExchanges);
+  recentExchangesRef.current = recentExchanges;
+  // 取得中のリクエスト。sessionId -> 要求したときの updatedAt（応答には載らないのでここで覚える）
+  const recentPendingRef = useRef(new Map());
   const [calendarLoading, setCalendarLoading] = useState(false);
   // 最後に要求した週。週送りを連打したとき、古い週の応答で上書きしないために使う
   const calendarRequestRef = useRef(null);
@@ -508,6 +514,19 @@ export default function App() {
   }, [on]);
 
   useEffect(() => {
+    return on('session_recent', (msg) => {
+      if (!msg.sessionId) return;
+      const pending = recentPendingRef.current;
+      const updatedAt = pending.get(msg.sessionId);
+      pending.delete(msg.sessionId);
+      setRecentExchanges((prev) => ({
+        ...prev,
+        [msg.sessionId]: { exchanges: msg.exchanges || [], error: msg.error, updatedAt },
+      }));
+    });
+  }, [on]);
+
+  useEffect(() => {
     return on('activity_calendar', (msg) => {
       if (msg.fromMs !== calendarRequestRef.current) return;
       setCalendar({ fromMs: msg.fromMs, toMs: msg.toMs, slotMs: msg.slotMs, sessions: msg.sessions || [] });
@@ -654,6 +673,33 @@ export default function App() {
     },
     [send],
   );
+
+  // ホームの行の「直近のやりとり」。ホバーで開いたときだけ取る。同じ updatedAt で取得済み・取得中なら
+  // 送らない（JSONL が更新されていなければ中身は変わらない）。取り直すときはエントリを消して読み込み中にする
+  const requestRecentExchanges = useCallback(
+    ({ sessionId, projectDir, updatedAt }) => {
+      if (!sessionId || !projectDir) return;
+      const cached = recentExchangesRef.current[sessionId];
+      if (cached && !cached.error && cached.updatedAt === updatedAt) return;
+      const pending = recentPendingRef.current;
+      if (pending.has(sessionId) && pending.get(sessionId) === updatedAt) return;
+      pending.set(sessionId, updatedAt);
+      if (cached) {
+        setRecentExchanges((prev) => {
+          const next = { ...prev };
+          delete next[sessionId];
+          return next;
+        });
+      }
+      send({ type: 'get_session_recent', sessionId, projectDir });
+    },
+    [send],
+  );
+
+  // 切断中に送った要求は応答が返らないので、取得中の印を残さない（再接続後にまた取れるように）
+  useEffect(() => {
+    if (!connected) recentPendingRef.current.clear();
+  }, [connected]);
 
   // 週間カレンダーは活動パネルが「表示中の週」を持ち、週が変わるたびに呼ぶ
   const requestCalendar = useCallback(
@@ -1580,6 +1626,8 @@ export default function App() {
                   onRequestCalendar={requestCalendar}
                   sessionTurns={sessionTurns}
                   onRequestSessionTurns={requestSessionTurns}
+                  recentExchanges={recentExchanges}
+                  onRequestRecentExchanges={requestRecentExchanges}
                   error={homeError}
                   onDismissError={() => setHomeError(null)}
                   notice={homeNotice}

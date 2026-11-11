@@ -21,6 +21,7 @@ import { filterBySearch, collectProjects, filterByProject } from '../utils/sessi
 import ActivityPanel from './ActivityPanel.jsx';
 import SessionDetailDrawer from './SessionDetailDrawer.jsx';
 import HomeArtifactChips from './HomeArtifactChips.jsx';
+import RecentPeek from './RecentPeek.jsx';
 import { contextColorFor, contextPercent, formatTokens } from '../utils/contextUsage.js';
 import './HomeView.css';
 
@@ -170,6 +171,8 @@ export default function HomeView({
   onRequestCalendar,
   sessionTurns,
   onRequestSessionTurns,
+  recentExchanges,
+  onRequestRecentExchanges,
   error,
   onDismissError,
   notice,
@@ -574,6 +577,7 @@ export default function HomeView({
               <span />
               <span>プロジェクト</span>
               <span>タイトル</span>
+              <span />
               <span>直近の指示</span>
               <span>応答</span>
               <span>Artifact</span>
@@ -602,6 +606,22 @@ export default function HomeView({
                   <PathLine cwd={s.cwd} branch={s.gitBranch} />
                   <span className="home-row-name" title={label}>
                     {label}
+                  </span>
+                  {/* 直近のやりとりのポップオーバー。タイトルの右隣に置く。行ホバーで重なる
+                      .home-row-actions（left: 65px から）より前面に出す（z-index は CSS 側） */}
+                  <span className="home-row-peek">
+                    {s.projectDir && (
+                      <RecentPeek
+                        data={recentExchanges?.[s.sessionId]}
+                        onRequest={() =>
+                          onRequestRecentExchanges?.({
+                            sessionId: s.sessionId,
+                            projectDir: s.projectDir,
+                            updatedAt: s.updatedAt,
+                          })
+                        }
+                      />
+                    )}
                   </span>
                   <span className="home-row-snippet" title={snippet}>
                     {snippet}

@@ -161,6 +161,33 @@ test.describe('ホーム画面', () => {
     await expect(detail).toHaveCount(0);
   });
 
+  test('直近一覧の行の 💬 にホバーすると直近のやりとりがポップオーバーで出る', async ({ page }) => {
+    await page.goto('/');
+
+    const row = page.locator('.home-row', { hasText: FIXTURE_SECOND_TITLE });
+    const peekButton = row.getByRole('button', { name: '直近のやりとり' });
+    await peekButton.hover();
+
+    // ポップオーバーは body 直下に portal で出る
+    const peek = page.locator('.recent-peek');
+    await expect(peek).toBeVisible();
+    await expect(peek.locator('.recent-peek-turn.user .recent-peek-text')).toHaveText(FIXTURE_SECOND_TITLE);
+    await expect(peek.locator('.recent-peek-turn.claude .recent-peek-text')).toHaveText(
+      '表示崩れの原因を確認し、CSS を修正しました。',
+    );
+
+    // クリックで固定表示。行の onClick には伝播しない（セッションは開かない）
+    await peekButton.click();
+    await expect(peek).toHaveClass(/pinned/);
+    await page.mouse.move(5, 5);
+    await expect(peek).toBeVisible();
+    await expect(page.locator('.home-view')).toBeVisible();
+
+    // Esc で閉じる
+    await page.keyboard.press('Escape');
+    await expect(peek).toHaveCount(0);
+  });
+
   // 帯のクリックは readonly セッションを開く（サーバーにセッションが残る）ので、このファイルの最後に置く
   test('カレンダービューで fixture の活動が帯として出て、クリックで詳細から閲覧が開く', async ({ page }) => {
     // fixture は 2026-08-10 の活動。どの TZ でもその週が「今週」になる時刻に固定する
