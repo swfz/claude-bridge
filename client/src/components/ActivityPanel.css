@@ -1,4 +1,5 @@
-/* ホーム画面の活動パネル。草 / 日別・週別・月別の棒 / 曜日別の 5 ビューが同じ枠を共有する。 */
+/* ホーム画面の活動パネル。草 / 棒（日別・週別・月別）/ 曜日別 / カレンダーが同じ枠を共有する。
+   色は濃淡（量）と、今週が突出したときの警告色だけに使う（選択中のトグルは中立色の背景）。 */
 .activity {
   --cell: 11px;
   --cell-gap: 3px;
@@ -10,6 +11,10 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-secondary);
+}
+
+.activity.collapsed {
+  padding: 8px 14px;
 }
 
 .activity-header {
@@ -49,35 +54,19 @@
   margin-left: auto;
 }
 
-/* ビュー切替とメトリック切替は同じ見た目のトグル群 */
+/* ビュー・粒度・指標の切替。トップバーの Raw / Chat と同じく、選択中は中立色の背景で示す */
 .activity-segmented {
   display: flex;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
 }
 
 .activity-segment {
-  background: var(--bg-primary);
+  background: none;
   border: none;
-  padding: 3px 10px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.activity-segment + .activity-segment {
-  border-left: 1px solid var(--border);
-}
-
-.activity-segment.active {
-  background: var(--accent);
-  color: #fff;
-}
-
-.activity-refresh {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 3px 10px;
   font-size: 11px;
@@ -85,9 +74,115 @@
   cursor: pointer;
 }
 
+.activity-segment:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+.activity-segment.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* 粒度・指標は値の切替なので一段小さく。選択中の背景がパネル地に溶けないよう、トラックの地色は残す */
+.activity-segmented.small {
+  padding: 1px;
+  gap: 1px;
+  border-radius: 7px;
+}
+
+.activity-segmented.small .activity-segment {
+  padding: 2px 7px;
+  font-size: 10px;
+}
+
+/* 更新はアイコンだけ。最終取得時刻は title に出す */
+.activity-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.activity-refresh:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
 .activity-refresh:disabled {
-  opacity: 0.6;
   cursor: default;
+}
+
+.activity-refresh.busy svg {
+  animation: activity-spin 1s linear infinite;
+}
+
+@keyframes activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 凡例・最大値はこのアイコンの title に逃がす（常時は出さない） */
+.activity-info {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  cursor: help;
+}
+
+.activity-info:hover {
+  opacity: 1;
+}
+
+/* 畳んだときの直近 30 日の推移。色は中立 */
+.activity-spark-wrap {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.activity-sparkline {
+  display: block;
+  overflow: visible;
+}
+
+/* 今週の突出（直前の週の平均の 2 倍超）。警告色はこの例外にだけ使う */
+.activity-outlier {
+  font-size: 11px;
+  color: var(--warning);
+  cursor: help;
+}
+
+/* 絞り込み中は合計の代わりに出す。× で解除 */
+.activity-filtering {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-primary);
+}
+
+.activity-period-clear {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.activity-period-clear:hover {
+  color: var(--text-primary);
 }
 
 .activity-body {
@@ -192,7 +287,7 @@ button.activity-cell {
 
 /* 選択中の升目は塗りを変えると濃淡が読めなくなるので、枠で示す */
 .activity-cell.selected {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--text-primary);
   outline-offset: 1px;
 }
 
@@ -279,7 +374,12 @@ button.activity-cell {
 }
 
 .activity-bar-slot.selected .activity-bar {
-  background: var(--accent);
+  background: var(--text-primary);
+}
+
+/* 週別で今週が突出しているときだけ、その棒を警告色にする */
+.activity-bar-slot.outlier .activity-bar {
+  background: var(--warning);
 }
 
 /* 活動のない日も「その日があった」ことは見せる（軸上の点） */
@@ -348,53 +448,4 @@ button.activity-cell {
 .activity-weekday-days {
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-/* --- 凡例 --- */
-
-.activity-legend {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-top: 8px;
-}
-
-.activity-legend-label {
-  font-size: 10px;
-  color: var(--text-secondary);
-  margin: 0 3px;
-}
-
-.activity-legend-note {
-  margin-left: 10px;
-  font-size: 10px;
-  color: var(--text-secondary);
-}
-
-/* 選択中の期間。凡例の右に出して「今どこで絞っているか」を示す */
-.activity-period-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 10px;
-  padding: 1px 4px 1px 8px;
-  border-radius: 10px;
-  background: var(--accent-secondary);
-  color: #fff;
-  font-size: 10px;
-}
-
-.activity-period-clear {
-  border: none;
-  background: none;
-  padding: 0 2px;
-  color: #fff;
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-/* 凡例が草の升目だけのときは左余白を作らない */
-.activity-legend > .activity-legend-note:first-child {
-  margin-left: 0;
 }

@@ -37,31 +37,34 @@
   color: var(--text-secondary);
 }
 
-/* 色分けの切り替え。活動パネルのビュー切替と同じトーン */
+/* 色分けの切り替え。活動パネルのビュー切替（トップバーの Raw / Chat）と同じトーン */
 .cal-color-modes {
   display: flex;
   margin-left: auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
 }
 
 .cal-color-mode {
-  background: var(--bg-primary);
+  background: none;
   border: none;
+  border-radius: 6px;
   padding: 2px 8px;
   font-size: 11px;
   color: var(--text-secondary);
   cursor: pointer;
 }
 
-.cal-color-mode + .cal-color-mode {
-  border-left: 1px solid var(--border);
+.cal-color-mode:hover:not(.active) {
+  color: var(--text-primary);
 }
 
 .cal-color-mode.active {
-  background: var(--accent-secondary);
-  color: #fff;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .cal-legend {
@@ -83,6 +86,18 @@
   width: 9px;
   height: 9px;
   border-radius: 2px;
+}
+
+/* プロジェクト色はサイドバー・ホームのカードと同じ丸い点。グループが無ければ枠だけ */
+.cal-swatch.dir {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.cal-swatch.dir.none {
+  border: 1px solid var(--text-secondary);
+  opacity: 0.6;
 }
 
 /* 曜日の見出しと本体は同じ列テンプレートで揃える */
@@ -145,6 +160,8 @@
 }
 
 .cal-seg {
+  /* 既定はサイドバーにグループの無いプロジェクトの中立色。グループがあれば inline で上書きする */
+  --seg-color: var(--text-secondary);
   position: absolute;
   min-height: 3px;
   padding: 0;

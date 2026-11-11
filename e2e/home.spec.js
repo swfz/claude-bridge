@@ -39,7 +39,7 @@ test.describe('ホーム画面', () => {
     await expect(chips.first()).toHaveAttribute('title', /E2E ヘルスチェックレポート/);
   });
 
-  test('活動パネルが草・日別・週別・月別・曜日の 5 ビューを切り替えられる', async ({ page }) => {
+  test('活動パネルが草・棒（日別・週別・月別）・曜日を切り替えられる', async ({ page }) => {
     await page.goto('/');
 
     const activity = page.locator('.activity');
@@ -49,6 +49,10 @@ test.describe('ホーム画面', () => {
     await expect(activity.locator('.activity-week')).toHaveCount(53, { timeout: 30_000 });
     // 1 年分の升目（先頭の週は曜日合わせで欠ける日がある）
     expect(await activity.locator('.activity-week .activity-cell').count()).toBeGreaterThanOrEqual(365);
+
+    // 粒度の切り替えは「棒」を選んでいる間だけ出る
+    await expect(activity.getByRole('button', { name: '日別' })).toHaveCount(0);
+    await activity.getByRole('button', { name: '棒', exact: true }).click();
 
     // 日別: 1 日 1 本の棒
     await activity.getByRole('button', { name: '日別' }).click();
@@ -73,7 +77,7 @@ test.describe('ホーム画面', () => {
 
     // メトリック切替はビューをまたいで効く（fixture の活動量には依存しない）
     await activity.getByRole('button', { name: 'トークン' }).click();
-    await expect(activity.locator('.activity-segment.active')).toHaveText(['曜日', 'トークン']);
+    await expect(activity.locator('.activity-segment.active')).toHaveText(['トークン', '曜日']);
 
     await activity.getByRole('button', { name: '草' }).click();
     await expect(activity.locator('.activity-week')).toHaveCount(53);
@@ -84,6 +88,7 @@ test.describe('ホーム画面', () => {
 
     const activity = page.locator('.activity');
     await expect(activity.locator('.activity-week')).toHaveCount(53, { timeout: 30_000 });
+    await activity.getByRole('button', { name: '棒', exact: true }).click();
     await activity.getByRole('button', { name: '日別' }).click();
 
     // fixture の活動は 2 日ぶん。どのローカル TZ でも 2 日に分かれる（25 時間差）ので、
@@ -95,6 +100,8 @@ test.describe('ホーム画面', () => {
 
     // その日に活動したセッションだけが一覧に残る
     await expect(page.locator('.home-period-chip')).toBeVisible();
+    // 活動パネルの見出しは合計の代わりに絞り込み中の期間を出す
+    await expect(activity.locator('.activity-filtering')).toContainText('で絞り込み中');
     await expect(page.locator('.home-row', { hasText: FIXTURE_TITLE })).toBeVisible();
     await expect(page.locator('.home-row', { hasText: FIXTURE_SECOND_TITLE })).toHaveCount(0);
 

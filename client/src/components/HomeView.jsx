@@ -373,6 +373,7 @@ export default function HomeView({
         calendarLoading={calendarLoading}
         onRequestCalendar={onRequestCalendar}
         onOpenSession={openDetail}
+        dirColorOf={dirColorOf}
       />
 
       <div className="home-header">

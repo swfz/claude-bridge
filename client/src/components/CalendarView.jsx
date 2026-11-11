@@ -35,8 +35,17 @@ const pct = (ms) => `${(ms / DAY_MS) * 100}%`;
 // 週間カレンダー。縦軸が時刻、横軸が曜日で、セッションの活動区間を帯で並べる。
 // 帯は 20 分以上の空きで切れるので、止まっていた区間は空白として見える。
 // 帯の左端は 10 分枠ごとの発言量の濃淡。重なったセッションは横に並べる（並行作業）。
-// 色はプロジェクトごとか、10 分枠ごとの「調査 / 実装 / 対話」かを切り替えられる。
-export default function CalendarView({ data, loading, weekStartMs, onChangeWeek, onOpenSession, now = Date.now() }) {
+// 色はプロジェクトごと（サイドバーのディレクトリ色 = dirColorOf と同じ。グループが無ければ中立色）か、
+// 10 分枠ごとの「調査 / 実装 / 対話」かを切り替えられる。
+export default function CalendarView({
+  data,
+  loading,
+  weekStartMs,
+  onChangeWeek,
+  onOpenSession,
+  dirColorOf,
+  now = Date.now(),
+}) {
   const scrollRef = useRef(null);
   const scrolledWeekRef = useRef(null);
   const [colorMode, setColorMode] = useState(loadColorMode);
@@ -54,8 +63,11 @@ export default function CalendarView({ data, loading, weekStartMs, onChangeWeek,
   const current = data && data.fromMs === weekStartMs ? data : null;
   const slotMs = current?.slotMs || 600000;
   const sessions = useMemo(() => current?.sessions || [], [current]);
-  const days = useMemo(() => buildCalendarDays(sessions, { weekStartMs, slotMs }), [sessions, weekStartMs, slotMs]);
-  const legend = useMemo(() => buildLegend(sessions), [sessions]);
+  const days = useMemo(
+    () => buildCalendarDays(sessions, { weekStartMs, slotMs, colorOf: dirColorOf }),
+    [sessions, weekStartMs, slotMs, dirColorOf],
+  );
+  const legend = useMemo(() => buildLegend(sessions, dirColorOf), [sessions, dirColorOf]);
   const totals = useMemo(() => phaseTotals(days, slotMs), [days, slotMs]);
 
   // 週を開いたら一番早い活動の少し上までスクロールする（更新では動かさない）
@@ -117,7 +129,10 @@ export default function CalendarView({ data, loading, weekStartMs, onChangeWeek,
           <div className="cal-legend">
             {legend.map((item) => (
               <span key={item.project} className="cal-legend-item">
-                <span className="cal-swatch" style={{ background: `var(--cal-${item.color})` }} />
+                <span
+                  className={`cal-swatch dir${item.color ? '' : ' none'}`}
+                  style={item.color ? { background: item.color } : undefined}
+                />
                 {item.project} {item.count}
               </span>
             ))}
@@ -160,8 +175,9 @@ export default function CalendarView({ data, loading, weekStartMs, onChangeWeek,
                       tabIndex={-1}
                       className={`cal-seg ${isPhase ? 'phase' : ''}`}
                       style={{
-                        // 調査 / 実装の色分けではプロジェクト色を使わない（CSS 側の中立色にする）
-                        ...(isPhase ? {} : { '--seg-color': `var(--cal-${seg.color})` }),
+                        // 調査 / 実装の色分けと、サイドバーにグループの無いプロジェクトは
+                        // プロジェクト色を使わない（CSS 側の中立色にする）
+                        ...(isPhase || !seg.color ? {} : { '--seg-color': seg.color }),
                         top: pct(seg.startMs - day.dayStartMs),
                         height: pct(duration),
                         // 隣の帯と接しないよう左右 1px ずつ縮める
