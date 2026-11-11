@@ -9,8 +9,6 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 // 帯の中で許す「活動の無い枠」の数。10 分枠で 1 つ（=10 分）までは同じ帯、
 // 20 分以上空いたら切る（止まっていた区間を空白として見せるため）
 export const MAX_GAP_SLOTS = 1;
-// プロジェクトの色の数（CSS の --cal-0〜--cal-7 と対応）。9 個目以降は色が一巡する
-export const PALETTE_SIZE = 8;
 
 // その日を含む週の月曜 0:00（ローカル）。棒の週別と同じ月曜始まり
 export function startOfWeek(ms) {
@@ -104,14 +102,15 @@ export function projectOf(session) {
 }
 
 // 帯を日ごとに切ってレーンを割り当てる。戻り値は日ごとの配列（週の 7 日分）。
-export function buildCalendarDays(sessions, { weekStartMs, slotMs, maxGapSlots = MAX_GAP_SLOTS } = {}) {
+// colorOf(cwd) はサイドバーのディレクトリグループの色（CSS の色文字列）か null。
+// null の帯は CSS 側の中立色で描く
+export function buildCalendarDays(sessions, { weekStartMs, slotMs, maxGapSlots = MAX_GAP_SLOTS, colorOf } = {}) {
   const starts = weekDayStarts(weekStartMs);
   const perDay = starts.slice(0, -1).map(() => []);
-  const colors = new Map(buildLegend(sessions).map((item) => [item.project, item.color]));
 
   for (const session of sessions || []) {
     const project = projectOf(session);
-    const color = colors.get(project);
+    const color = colorOfSession(session, colorOf);
     for (const run of buildRuns(session.slots, slotMs, maxGapSlots)) {
       for (let d = 0; d < perDay.length; d++) {
         const dayStart = starts[d];
@@ -147,19 +146,24 @@ export function buildCalendarDays(sessions, { weekStartMs, slotMs, maxGapSlots =
   }));
 }
 
+function colorOfSession(session, colorOf) {
+  return (colorOf && session.cwd && colorOf(session.cwd)) || null;
+}
+
 // 凡例。プロジェクトごとのセッション数（多い順）。
-// 色はこの順に割り当てる。名前のハッシュで決めると数プロジェクトでも衝突しやすく、
-// 週の中で見分けられることの方が「週をまたいで同じ色」より大事なため
-export function buildLegend(sessions) {
-  const counts = new Map();
+// 色はサイドバーのディレクトリ色（dirColorOf）と揃える。週ごとに順位で配り直すと、
+// 同じリポジトリがサイドバー・ホームのカードとカレンダーで別の色になるため。
+// サイドバーにグループが無いプロジェクトは null（中立色・枠だけの点）
+export function buildLegend(sessions, colorOf) {
+  const items = new Map();
   for (const session of sessions || []) {
     const project = projectOf(session);
-    counts.set(project, (counts.get(project) || 0) + 1);
+    const item = items.get(project) || { project, count: 0, color: null };
+    item.count += 1;
+    item.color = item.color || colorOfSession(session, colorOf);
+    items.set(project, item);
   }
-  return [...counts.entries()]
-    .map(([project, count]) => ({ project, count }))
-    .sort((a, b) => b.count - a.count || a.project.localeCompare(b.project))
-    .map((item, i) => ({ ...item, color: i % PALETTE_SIZE }));
+  return [...items.values()].sort((a, b) => b.count - a.count || a.project.localeCompare(b.project));
 }
 
 // 帯の色の付け方。プロジェクトごと（既定）か、10 分枠ごとの「調査 / 実装 / 対話」か

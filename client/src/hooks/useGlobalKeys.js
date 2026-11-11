@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { halfPageScrollKey, tabNavKey, isFocusInputShortcut } from '../utils/keys.js';
+import { halfPageScrollKey, tabNavKey, isFocusInputShortcut, isShareModeShortcut } from '../utils/keys.js';
 
 // テキスト入力中か（Ctrl+D/U はエディタ操作と衝突するので入力中は触らない）
 function isTextEntry(el) {
@@ -24,16 +24,25 @@ function scrollContainer() {
  * - Alt+Shift+J / K: 次・前のタブ（ホームを 0 番目として巡回）
  * - Alt+1〜9: n 番目のタブへ、Alt+0: ホームへ。入力欄にフォーカスがあっても効く
  * - Alt+I: 送信欄（`.input-textarea`）へフォーカス。ドロワー表示中は何もしない
+ * - Alt+Shift+S: 共有モードの切り替え。入力欄にフォーカスがあっても効く
  *
  * `tabs` はサイドバーと同じ並び・同じ絞り込み（共有モードで隠しているものを含めない）で渡す。
  */
-export function useGlobalKeys({ tabs, activeId, onSelectTab, onHome }) {
+export function useGlobalKeys({ tabs, activeId, onSelectTab, onHome, onToggleShareMode }) {
   const ref = useRef(null);
-  ref.current = { tabs, activeId, onSelectTab, onHome };
+  ref.current = { tabs, activeId, onSelectTab, onHome, onToggleShareMode };
 
   useEffect(() => {
     const handler = (e) => {
       if (e.defaultPrevented) return;
+
+      if (isShareModeShortcut(e)) {
+        e.preventDefault();
+        // 押し続けたときのキーリピートで切り替えを繰り返さない（オフで止まり得る）
+        if (e.repeat || !ref.current.onToggleShareMode) return;
+        ref.current.onToggleShareMode();
+        return;
+      }
 
       if (isFocusInputShortcut(e)) {
         // ドロワー表示中は後ろに隠れている送信欄へ飛ばさない

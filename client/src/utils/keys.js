@@ -35,6 +35,13 @@ export function isFocusInputShortcut(e) {
   return e.code === 'KeyI' || (e.key || '').toLowerCase() === 'i';
 }
 
+// Alt+Shift+S: 共有モードの切り替え（画面共有の直前にすぐオンにできるように）。
+// Alt+I と同じく、レイアウトで e.key が別文字になっても e.code で拾う
+export function isShareModeShortcut(e) {
+  if (!e || !e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey) return false;
+  return e.code === 'KeyS' || (e.key || '').toLowerCase() === 's';
+}
+
 // Ctrl/Cmd+Shift+Backspace（Delete）: 今書いている指摘の欄そのものを消す。
 // Ctrl+Backspace 単体は textarea の「単語削除」なので、Shift 併用を必須にして踏み分ける。
 export function isDeleteItemShortcut(e) {

@@ -53,3 +53,16 @@ export function loadShareMode() {
 export function saveShareMode(on) {
   localStorage.setItem(SHARE_MODE_KEY, on ? '1' : '0');
 }
+
+// 共有モードで隠しているセッションの件数（帯に出す用）。ブリッジのタブ（claudeSessionId）・
+// 起動中・直近（sessionId）に出てくるセンシティブ指定を、重複なしで数える。中身は返さない
+export function countHiddenSensitive(sensitive, { tabs, running, recent } = {}) {
+  const ids = new Set();
+  const add = (id) => {
+    if (isSensitive(sensitive, id)) ids.add(id);
+  };
+  for (const tab of tabs || []) add(tab?.claudeSessionId);
+  for (const s of running || []) add(s?.sessionId);
+  for (const s of recent || []) add(s?.sessionId);
+  return ids.size;
+}

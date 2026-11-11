@@ -2,7 +2,6 @@ import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRe
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
-import { EXT_TO_LANG, highlightLines } from '../highlight.js';
 import { PREVIEWABLE_EXTS, getExt } from '../utils/previewExts.js';
 import { useStickToBottom } from '../hooks/useStickToBottom.js';
 import { useNumberPick } from '../hooks/useNumberPick.js';
@@ -16,95 +15,190 @@ import CodeBlock from './CodeBlock.jsx';
 import ArtifactStrip from './ArtifactStrip.jsx';
 import { humanSenderLabel } from '../utils/messageSender.js';
 import { pinnedUuidSet } from '../utils/pins.js';
+import {
+  TbChecklist,
+  TbChevronRight,
+  TbFile,
+  TbFilePlus,
+  TbLink,
+  TbMessage,
+  TbPencil,
+  TbPin,
+  TbPinFilled,
+  TbRobot,
+  TbSearch,
+  TbSparkles,
+  TbTerminal2,
+  TbTool,
+  TbUser,
+  TbWorld,
+} from 'react-icons/tb';
+import {
+  buildToolResultIndex,
+  groupChatItems,
+  isToolOnlyMessage,
+  parseToolFlagsKey,
+  splitFilePath,
+  summarizeToolRun,
+  toolDescription,
+  toolDiffStats,
+  toolFilePath,
+  toolFlagsKey,
+} from '../utils/toolLines.js';
 import './ChatView.css';
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
 
+// ツールの種類はアイコンの形で表す（文字バッジは使わない）。名前は title で出す
 const TOOL_ICONS = {
-  Bash: '$',
-  Read: 'R',
-  Edit: 'E',
-  Write: 'W',
-  Grep: 'G',
-  Glob: 'G',
-  Agent: 'A',
+  Bash: TbTerminal2,
+  Read: TbFile,
+  Write: TbFilePlus,
+  Edit: TbPencil,
+  MultiEdit: TbPencil,
+  NotebookEdit: TbPencil,
+  Grep: TbSearch,
+  Glob: TbSearch,
+  Agent: TbRobot,
+  Task: TbRobot,
+  WebFetch: TbWorld,
+  WebSearch: TbWorld,
+  Artifact: TbLink,
+  TodoWrite: TbChecklist,
 };
 
-const FILE_TOOLS = new Set(['Read', 'Edit', 'Write']);
+// 差分行数（+12 −3）。新規ファイルは「新規」ラベル＋追加行数
+function DiffStats({ stats }) {
+  if (!stats) return null;
+  return (
+    <span className="tool-line-stats">
+      {stats.created && <span className="tool-line-new">新規</span>}
+      {stats.added > 0 && <span className="tool-line-add">+{stats.added}</span>}
+      {stats.removed > 0 && <span className="tool-line-del">−{stats.removed}</span>}
+    </span>
+  );
+}
 
-function ToolUseItem({ tool, onOpenPreview, onOpenFileReview }) {
+// ツール呼び出し 1 回 = 1 行。ファイルを扱うものは行のクリックでプレビュー、それ以外は中身の開閉。
+// 失敗は赤、ファイル編集は差分行数で目立たせ、それ以外は薄い 1 行に留める
+function ToolLine({ tool, flags, sessionCwd, onOpenPreview, onOpenFileReview }) {
   const [expanded, setExpanded] = useState(false);
-  const icon = TOOL_ICONS[tool.name] || 'T';
-  const filePath = FILE_TOOLS.has(tool.name) ? tool.input?.file_path : null;
+  const Icon = TOOL_ICONS[tool.name] || TbTool;
+  const filePath = toolFilePath(tool);
+  const failed = !!flags?.error;
+  const stats = toolDiffStats(tool, flags);
+  const { dir, name } = splitFilePath(filePath, sessionCwd);
+  const canPreview = !!filePath && !!onOpenPreview;
+
+  const handleRowClick = () => {
+    if (canPreview) onOpenPreview(filePath);
+    else setExpanded((v) => !v);
+  };
 
   return (
-    <div className="tool-use-item">
-      <div className="tool-use-summary" onClick={() => setExpanded(!expanded)}>
-        <span className="tool-icon">{icon}</span>
-        <span className="tool-name">{tool.name}</span>
+    <div
+      className={`tool-line${filePath ? ' file' : ''}${tool.name === 'Read' ? ' read' : ''}${failed ? ' failed' : ''}`}
+    >
+      <div
+        className="tool-line-row"
+        role="button"
+        tabIndex={0}
+        onClick={handleRowClick}
+        onKeyDown={(e) => {
+          // 中のボタン（差分・レビュー）で押したキーまで行の操作にしない
+          if (e.target !== e.currentTarget) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleRowClick();
+          }
+        }}
+        title={filePath || tool.summary || tool.name}
+      >
+        <Icon className="tool-line-icon" aria-label={tool.name} />
         {filePath ? (
-          <span className="tool-file-preview" onClick={(e) => e.stopPropagation()}>
-            <FilePreview
-              href={`file://${filePath}`}
-              onOpenPreview={onOpenPreview}
-              onOpenFileReview={onOpenFileReview}
-            />
+          <span className="tool-line-path">
+            {dir && <span className="tool-line-dir">{dir}</span>}
+            {/* .file-link は p キー（ピック中のファイルを開く）の目印 */}
+            <span
+              className="file-link tool-line-name"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (canPreview) onOpenPreview(filePath);
+              }}
+            >
+              {name}
+            </span>
           </span>
         ) : (
-          <span className="tool-desc">{tool.summary}</span>
+          <span className="tool-line-desc">
+            {TOOL_ICONS[tool.name] ? '' : <span className="tool-line-tool">{tool.name}</span>}
+            {toolDescription(tool)}
+          </span>
         )}
-        <span className="tool-expand">{expanded ? '−' : '+'}</span>
+        {/* 差分の行数（新規ラベル＋追加行数）はファイル名のすぐ後ろ。ホバー中は右端の操作と入れ替える */}
+        <DiffStats stats={stats} />
+        {failed && <span className="tool-line-failed">失敗</span>}
+        <span className="tool-line-hover" onClick={(e) => e.stopPropagation()}>
+          {filePath && onOpenFileReview && (
+            <button className="tool-line-action" onClick={() => onOpenFileReview(filePath)}>
+              レビュー
+            </button>
+          )}
+          {(canPreview || !filePath) && (
+            <TbChevronRight className={`tool-line-caret${!filePath && expanded ? ' open' : ''}`} aria-hidden="true" />
+          )}
+        </span>
       </div>
       {expanded && (
         <div className="tool-use-detail">
-          {tool.name === 'Edit' ? (
-            <EditDiff input={tool.input} />
-          ) : (
-            <pre className="tool-detail-pre">{formatToolInput(tool.name, tool.input)}</pre>
-          )}
+          <pre className="tool-detail-pre">{formatToolInput(tool.name, tool.input)}</pre>
         </div>
       )}
     </div>
   );
 }
 
-function DiffLine({ sign, className, html, text }) {
+// 連続するツール呼び出しの束。畳んだ見出しにも件数・失敗件数・差分の合計を出し、
+// 目立たせるべきもの（失敗・編集）が畳んだ中に隠れないようにする。
+// data-tool-uuids は Refs の「会話へ」などで、束の中のメッセージへ飛ぶときの目印
+function ToolGroup({ messages, resultIndex, sessionCwd, onOpenPreview, onOpenFileReview }) {
+  const [open, setOpen] = useState(false);
+  const tools = messages.flatMap((m) => m.toolUses);
+  const summary = summarizeToolRun(tools, resultIndex);
+  const history = messages.every((m) => m.isHistory);
   return (
-    <div className={`diff-line ${className}`}>
-      <span className="diff-sign">{sign}</span>
-      {html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : <span>{text}</span>}
+    <div
+      className={`tool-group${open ? ' open' : ''}${summary.failed ? ' has-failed' : ''}${history ? ' history' : ''}`}
+      data-tool-uuids={messages
+        .map((m) => m.uuid)
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <button className="tool-group-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <TbChevronRight className={`tool-line-caret${open ? ' open' : ''}`} aria-hidden="true" />
+        <span>ツール {summary.count}件</span>
+        {summary.failed > 0 && <span className="tool-line-failed">{summary.failed}件失敗</span>}
+        {(summary.added > 0 || summary.removed > 0) && (
+          <DiffStats stats={{ added: summary.added, removed: summary.removed, created: false }} />
+        )}
+      </button>
+      {open && (
+        <div className="tool-uses">
+          {messages.flatMap((m) =>
+            m.toolUses.map((tool) => (
+              <ToolLine
+                key={tool.id}
+                tool={tool}
+                flags={resultIndex.get(tool.id)}
+                sessionCwd={sessionCwd}
+                onOpenPreview={onOpenPreview}
+                onOpenFileReview={onOpenFileReview}
+              />
+            )),
+          )}
+        </div>
+      )}
     </div>
-  );
-}
-
-function EditDiff({ input }) {
-  const filePath = input?.file_path || '';
-  const oldStr = input?.old_string || '';
-  const newStr = input?.new_string || '';
-
-  const ext = filePath.split('.').pop()?.toLowerCase();
-  const lang = EXT_TO_LANG[ext];
-
-  const oldHighlighted = useMemo(() => highlightLines(oldStr, lang), [oldStr, lang]);
-  const newHighlighted = useMemo(() => highlightLines(newStr, lang), [newStr, lang]);
-
-  if (!input) return null;
-
-  const oldLines = oldStr.split('\n');
-  const newLines = newStr.split('\n');
-
-  return (
-    <>
-      <div className="diff-file-path">{filePath}</div>
-      <pre className="diff-block">
-        {oldLines.map((line, i) => (
-          <DiffLine key={`old-${i}`} sign="-" className="diff-removed" html={oldHighlighted?.[i]} text={line} />
-        ))}
-        {newLines.map((line, i) => (
-          <DiffLine key={`new-${i}`} sign="+" className="diff-added" html={newHighlighted?.[i]} text={line} />
-        ))}
-      </pre>
-    </>
   );
 }
 
@@ -263,6 +357,7 @@ export const ChatMessage = memo(function ChatMessage({
   expandCmd,
   pinned,
   onTogglePin,
+  toolFlags,
 }) {
   const [expanded, setExpanded] = useState(false);
   // 範囲選択時に出すアクションメニュー（レビューに追加 / コメントに残す / スレッド）
@@ -350,8 +445,8 @@ export const ChatMessage = memo(function ChatMessage({
   }
 
   // WebFetch の結果はリンク一覧（LinkList）のタイトル用。チャットには WebFetch の tool_use が
-  // すでに出ているので二重に描かない
-  if (message.role === 'webfetch') return null;
+  // すでに出ているので二重に描かない。toolresult（ツールの失敗・新規作成の印）もツール行に反映するだけ
+  if (message.role === 'webfetch' || message.role === 'toolresult') return null;
 
   // Artifact の publish（claude.ai の共有ページ）。本文は無いのでリンクだけ出す
   if (message.role === 'artifact') {
@@ -360,7 +455,7 @@ export const ChatMessage = memo(function ChatMessage({
         className={`chat-message artifact ${isHistory ? 'history' : ''}`}
         data-message-uuid={message.uuid || undefined}
       >
-        <span className="artifact-message-icon">🔗</span>
+        <TbLink className="artifact-message-icon" aria-hidden="true" />
         <span className="artifact-message-label">Artifact を公開</span>
         <a
           className="artifact-message-link"
@@ -382,6 +477,8 @@ export const ChatMessage = memo(function ChatMessage({
   );
 
   const isLong = (message.content || '').length > COLLAPSE_THRESHOLD;
+  // ツールの失敗・新規作成の印（memo を崩さないよう文字列で受け取って、ここで引ける形に戻す）
+  const toolFlagMap = parseToolFlagsKey(toolFlags);
   // 行を指しているあいだは折りたたまない（隠れた行のバッジを打っても見えないため）
   const shouldCollapse = isLong && !expanded && !lineMode;
 
@@ -444,56 +541,63 @@ export const ChatMessage = memo(function ChatMessage({
             {pickNumber}
           </span>
         )}
-        <span className="chat-role" title={message.sender?.name || undefined}>
-          {isHuman ? senderLabel : 'Claude'}
-        </span>
-        <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
-        {onTogglePin && message.uuid && (
-          <button
-            className={`pin-toggle ${pinned ? 'active' : ''}`}
-            onClick={() => onTogglePin(message, !pinned)}
-            title={pinned ? 'ピンを外す' : 'ピン留め（Refs の「ピン」から見返せる）'}
-            aria-pressed={!!pinned}
-          >
-            📌
-          </button>
+        {/* 見出しは小さなアイコン＋時刻。人以外が入れたメッセージ（サブエージェントの報告など）だけ送り手を文字で出す */}
+        {isHuman ? (
+          message.sender ? (
+            <span className="chat-role" title={message.sender?.name || undefined}>
+              {senderLabel}
+            </span>
+          ) : (
+            <TbUser className="chat-role-icon" aria-label="You" />
+          )
+        ) : (
+          <TbSparkles className="chat-role-icon" aria-label="Claude" />
         )}
+        <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
+        {/* そのメッセージ固有の状態（ピン留め済み・コメント）だけ常に出す */}
+        {pinned && <TbPinFilled className="chat-pinned-mark" aria-label="ピン留め済み" />}
         {messageComments.length > 0 && (
           <button
             className="comment-marker"
             onClick={() => setShowInlineComments((v) => !v)}
             title="このメッセージへのコメント"
           >
-            💬 {messageComments.length}
+            <TbMessage aria-hidden="true" /> {messageComments.length}
           </button>
         )}
-        {isLong && (
-          <button className="expand-toggle" onClick={() => setExpanded(!expanded)}>
-            {expanded ? '折りたたむ' : '全文表示'}
-          </button>
-        )}
-        {!isHuman && (
-          <div className="header-actions">
-            {onPreviewMarkdown && (
-              <button
-                className="btn-header-action"
-                onClick={() => onPreviewMarkdown(message.content, `Claude #${message.id}`)}
-                title="サイドパネルでプレビュー"
-              >
-                Preview
-              </button>
-            )}
-            {!readonly && (
-              <button
-                className="btn-header-action"
-                onClick={() => onStartThread(message.id, '')}
-                title="スレッドを開始"
-              >
-                Thread
-              </button>
-            )}
-          </div>
-        )}
+        {/* 操作はホバー時だけ右上に出す */}
+        <div className="header-actions">
+          {isLong && (
+            <button className="btn-header-action expand-toggle" onClick={() => setExpanded(!expanded)}>
+              {expanded ? '折りたたむ' : '全文表示'}
+            </button>
+          )}
+          {!isHuman && onPreviewMarkdown && (
+            <button
+              className="btn-header-action"
+              onClick={() => onPreviewMarkdown(message.content, `Claude #${message.id}`)}
+              title="サイドパネルでプレビュー"
+            >
+              Preview
+            </button>
+          )}
+          {!isHuman && !readonly && onStartThread && (
+            <button className="btn-header-action" onClick={() => onStartThread(message.id, '')} title="スレッドを開始">
+              Thread
+            </button>
+          )}
+          {onTogglePin && message.uuid && (
+            <button
+              className={`btn-header-action pin-toggle ${pinned ? 'active' : ''}`}
+              onClick={() => onTogglePin(message, !pinned)}
+              title={pinned ? 'ピンを外す' : 'ピン留め（Refs の「ピン」から見返せる）'}
+              aria-label={pinned ? 'ピンを外す' : 'ピン留め'}
+              aria-pressed={!!pinned}
+            >
+              {pinned ? <TbPinFilled /> : <TbPin />}
+            </button>
+          )}
+        </div>
       </div>
 
       {showInlineComments && messageComments.length > 0 && (
@@ -522,7 +626,14 @@ export const ChatMessage = memo(function ChatMessage({
       {message.toolUses && message.toolUses.length > 0 && (
         <div className="tool-uses">
           {message.toolUses.map((tool) => (
-            <ToolUseItem key={tool.id} tool={tool} onOpenPreview={onOpenPreview} onOpenFileReview={onOpenFileReview} />
+            <ToolLine
+              key={tool.id}
+              tool={tool}
+              flags={toolFlagMap.get(tool.id)}
+              sessionCwd={sessionCwd}
+              onOpenPreview={onOpenPreview}
+              onOpenFileReview={onOpenFileReview}
+            />
           ))}
         </div>
       )}
@@ -645,7 +756,11 @@ export default function ChatView({
 }) {
   // 描画するメッセージ。WebFetch の結果（role: 'webfetch'）はリンク一覧のタイトル用で画面には出さないので、
   // ここで除いておく（messages のまま渡すと、見えないものが届いたときにも「↓ 新しいメッセージ」が出る）
-  const shown = useMemo(() => messages.filter((m) => m.role !== 'webfetch'), [messages]);
+  const shown = useMemo(() => messages.filter((m) => m.role !== 'webfetch' && m.role !== 'toolresult'), [messages]);
+  // ツールの失敗・新規作成の印（tool_use の id → {error?, created?}）
+  const toolResultIndex = useMemo(() => buildToolResultIndex(messages), [messages]);
+  // 描画単位。ツールだけのメッセージが続いたら 1 つの束にまとめる
+  const chatItems = useMemo(() => groupChatItems(shown), [shown]);
 
   // 最下部にいる間だけ新着に追従する（上を読んでいる最中に引き戻さない）
   const { scrollRef, onScroll, hasNew, scrollToBottom } = useStickToBottom(shown, sessionId);
@@ -659,7 +774,8 @@ export default function ChatView({
   // ── メッセージピック（Alt+R → 数字 → Enter でレビュー対象にする）─────────────
   // 番号は「新しいものが 1」。目に入るのは最新側なので、そこから数えられる方が探しやすい。
   const pickable = useMemo(
-    () => messages.filter((m) => m.uuid && (m.role === 'human' || m.role === 'assistant')),
+    // 本文の無いツールだけのメッセージは束に畳まれることがあり、引用する本文も無いので番号を振らない
+    () => messages.filter((m) => m.uuid && (m.role === 'human' || m.role === 'assistant') && !isToolOnlyMessage(m)),
     [messages],
   );
   const pickNumbers = useMemo(() => {
@@ -840,7 +956,10 @@ export default function ChatView({
   // コメント一覧から指定の messageUuid へスクロール（ベストエフォート）
   useEffect(() => {
     if (!jumpToUuid || !scrollRef.current) return;
-    const el = scrollRef.current.querySelector(`[data-message-uuid="${jumpToUuid}"]`);
+    // 束に畳まれたツール呼び出しは個別の要素が無いので、束の見出しへ飛ぶ
+    const el =
+      scrollRef.current.querySelector(`[data-message-uuid="${jumpToUuid}"]`) ||
+      scrollRef.current.querySelector(`[data-tool-uuids~="${jumpToUuid}"]`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.classList.add('comment-jump-highlight');
@@ -855,8 +974,26 @@ export default function ChatView({
       {shown.length === 0 ? (
         <div className="chat-empty">Chat モード — Claude の出力がここに表示されます</div>
       ) : (
-        shown.map((msg, i) => {
-          const showDivider = msg.isHistory && i < shown.length - 1 && !shown[i + 1].isHistory;
+        chatItems.map((item, i) => {
+          const last = item.kind === 'tools' ? item.messages[item.messages.length - 1] : item.message;
+          const next = chatItems[i + 1];
+          const nextFirst = next && (next.kind === 'tools' ? next.messages[0] : next.message);
+          const showDivider = last.isHistory && nextFirst && !nextFirst.isHistory;
+          if (item.kind === 'tools') {
+            return (
+              <div key={item.key}>
+                <ToolGroup
+                  messages={item.messages}
+                  resultIndex={toolResultIndex}
+                  sessionCwd={sessionCwd}
+                  onOpenPreview={onOpenPreview}
+                  onOpenFileReview={onOpenFileReview}
+                />
+                {showDivider && <div className="history-divider">--- 過去の会話 / ここから新規 ---</div>}
+              </div>
+            );
+          }
+          const msg = item.message;
           return (
             <div key={msg.id}>
               <ChatMessage
@@ -883,6 +1020,7 @@ export default function ChatView({
                 expandCmd={expandCmd?.uuid === msg.uuid ? expandCmd : undefined}
                 pinned={!!msg.uuid && pinnedUuids.has(msg.uuid)}
                 onTogglePin={onTogglePin}
+                toolFlags={toolFlagsKey(msg.toolUses, toolResultIndex)}
               />
               {showDivider && <div className="history-divider">--- 過去の会話 / ここから新規 ---</div>}
             </div>

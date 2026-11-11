@@ -1,4 +1,18 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import {
+  TbGitBranch,
+  TbLink,
+  TbListDetails,
+  TbLock,
+  TbLockOpen,
+  TbPlugConnected,
+  TbPlugConnectedX,
+  TbPower,
+  TbSparkles,
+  TbStar,
+  TbStarFilled,
+  TbUser,
+} from 'react-icons/tb';
 import {
   annotateRunningSessions,
   annotateRecentSessions,
@@ -18,12 +32,13 @@ import {
   filterByCompletion,
 } from '../utils/completionState.js';
 import { parseCwd } from '../utils/cwdLabel.js';
-import { filterBySearch, collectProjects, filterByProject } from '../utils/sessionSearch.js';
+import { filterBySearch, collectProjects, filterByProject, rankProjects } from '../utils/sessionSearch.js';
 import ActivityPanel from './ActivityPanel.jsx';
 import SessionDetailDrawer from './SessionDetailDrawer.jsx';
 import HomeArtifactChips from './HomeArtifactChips.jsx';
 import RecentPeek from './RecentPeek.jsx';
-import { contextColorFor, contextPercent, formatTokens } from '../utils/contextUsage.js';
+import { contextPercent, formatTokens, isUsageNotable, usageColor } from '../utils/contextUsage.js';
+import { groupArtifactPublishes } from '../utils/artifacts.js';
 import './HomeView.css';
 
 // 「その他の開いているタブ」は name/cwd しか持たないので検索対象をこの2つに絞る
@@ -38,18 +53,23 @@ const DEFAULT_BRANCHES = new Set(['main', 'master', 'HEAD']);
 // 応答列の代わりに離席要約（現状と次の一手）を出す状態＝手を付け直す必要があるもの
 const AWAY_STATES = new Set(['unfinished', 'interrupted', 'unpushed', 'merging']);
 
-// カード上段のパス行。フルパスは共通プレフィックスばかりで情報量が無いので
-// parseCwd で「親/プロジェクト（+ worktree）」まで削り、全体は title に逃がす。
-function PathLine({ cwd, branch }) {
-  const { parent, project, worktree } = parseCwd(cwd);
+// ディレクトリの表記。サイドバー・トップバーと揃えて「ディレクトリ色のドット＋リポジトリ名（ホスト部分は省く）」に
+// し、ブランチ（既定ブランチ以外。無ければ worktree 名）を添える。フルパスは title に逃がす。
+// color はサイドバーのグループ色で、対応するグループが無ければ輪郭だけのドットにする
+function PathLine({ cwd, branch, color }) {
+  const { project, worktree } = parseCwd(cwd);
   if (!project) return null;
-  const shownBranch = branch && !DEFAULT_BRANCHES.has(branch) ? branch : null;
+  const shownBranch = branch && !DEFAULT_BRANCHES.has(branch) ? branch : worktree;
   return (
     <div className="home-card-path" title={[cwd, branch].filter(Boolean).join(' · ')}>
-      {parent && <span className="home-path-parent">{parent}/</span>}
+      <span className={`home-dir-dot${color ? '' : ' none'}`} style={color ? { background: color } : undefined} />
       <span className="home-path-project">{project}</span>
-      {worktree && <span className="home-path-worktree">⎇ {worktree}</span>}
-      {shownBranch && <span className="home-path-branch">{shownBranch}</span>}
+      {shownBranch && (
+        <span className="home-path-branch">
+          <TbGitBranch aria-hidden="true" />
+          {shownBranch}
+        </span>
+      )}
     </div>
   );
 }
@@ -60,12 +80,13 @@ function StarButton({ on, onToggle }) {
     <button
       className={`home-star ${on ? 'on' : ''}`}
       title={on ? 'Star を外す' : '未解決（続きをやる）として Star を付ける'}
+      aria-label={on ? 'Star を外す' : 'Star を付ける'}
       onClick={(e) => {
         e.stopPropagation();
         onToggle();
       }}
     >
-      {on ? '★' : '☆'}
+      {on ? <TbStarFilled /> : <TbStar />}
     </button>
   );
 }
@@ -76,12 +97,13 @@ function SensitiveButton({ on, onToggle }) {
     <button
       className={`home-sensitive ${on ? 'on' : ''}`}
       title={on ? 'センシティブ指定を外す' : 'センシティブ指定（共有モードで隠す）'}
+      aria-label={on ? 'センシティブ指定を外す' : 'センシティブ指定にする'}
       onClick={(e) => {
         e.stopPropagation();
         onToggle();
       }}
     >
-      {on ? '🔒' : '🔓'}
+      {on ? <TbLock /> : <TbLockOpen />}
     </button>
   );
 }
@@ -92,29 +114,50 @@ function HiddenNote({ count }) {
   return <div className="home-hidden-note">🔒 {count} 件を非表示中（共有モード）</div>;
 }
 
-// カード内の会話抜粋（直近のやりとり）。1 行に clamp して全カードの高さを揃える。
-function Snippet({ label, text, role }) {
+// カード内の会話抜粋（直近の指示・応答）。ラベルの代わりに人／AI のアイコンで区別し、1 行に clamp する。
+function Snippet({ icon: Icon, label, text, role }) {
   if (!text) return null;
   return (
     <div className={`home-snippet ${role || ''}`} title={text}>
-      <span className="home-snippet-label">{label}</span>
+      <Icon className="home-snippet-icon" aria-label={label} />
       <span className="home-snippet-text">{text}</span>
     </div>
   );
 }
 
-// メタ行の区切り（"·"）。空の項目は落として区切りが余らないようにする。
-function Meta({ items, title }) {
-  const parts = items.filter(Boolean);
-  if (parts.length === 0) return null;
+// カードのフッターの使用率。サイドバーと同じ細いバー＋数値（しきい値で色が変わる）
+function UsageBar({ usage }) {
+  if (!usage) return null;
+  const pct = contextPercent(usage);
   return (
-    <div className="home-card-meta" title={title}>
-      {parts.map((part, i) => (
-        <span key={i} className="home-meta-item">
-          {part}
-        </span>
-      ))}
-    </div>
+    <span className="home-usage" title={contextTitle(usage)}>
+      <span className="home-usage-bar">
+        <span className="home-usage-fill" style={{ width: `${pct}%`, background: usageColor(pct) }} />
+      </span>
+      <span className="home-usage-value" style={isUsageNotable(pct) ? { color: usageColor(pct) } : undefined}>
+        {pct}%
+      </span>
+    </span>
+  );
+}
+
+// カードの Artifact は件数付きの小さなアイコン 1 つにまとめる。クリックで最後に公開したものを開き、
+// 一覧は tooltip に出す
+function ArtifactCount({ artifacts }) {
+  const grouped = useMemo(() => groupArtifactPublishes(artifacts), [artifacts]);
+  if (grouped.length === 0) return null;
+  return (
+    <a
+      className="home-artifact-count"
+      href={grouped[0].url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title={`公開した Artifact（クリックで最新を開く）\n${grouped.map((a) => a.title).join('\n')}`}
+    >
+      <TbLink aria-hidden="true" />
+      {grouped.length}
+    </a>
   );
 }
 
@@ -128,7 +171,11 @@ function ContextCell({ usage }) {
   if (!usage) return <span className="home-row-ctx" />;
   const pct = contextPercent(usage);
   return (
-    <span className="home-row-ctx" style={{ color: contextColorFor(pct) }} title={contextTitle(usage)}>
+    <span
+      className="home-row-ctx"
+      style={isUsageNotable(pct) ? { color: usageColor(pct) } : undefined}
+      title={contextTitle(usage)}
+    >
       {pct}%
     </span>
   );
@@ -189,6 +236,7 @@ export default function HomeView({
   onResume,
   onResumeInTmux,
   onNew,
+  dirColorOf = () => null,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
@@ -212,8 +260,11 @@ export default function HomeView({
 
   const starredCount = [...annotated, ...recent].filter((s) => isStarred(starred, s.sessionId)).length;
 
-  // プロジェクトチップの選択肢（起動中・直近の両方から集める）
-  const projects = collectProjects(annotated, recent);
+  // プロジェクトのチップは起動中のセッションがあるものだけを件数順に 1 行で出し、
+  // 起動中の無いプロジェクト（直近だけにあるもの）は「他のディレクトリ」のプルダウンから選ぶ
+  const runningProjects = rankProjects(annotated);
+  const runningProjectNames = new Set(runningProjects.map((p) => p.project));
+  const otherProjects = collectProjects(recent).filter((p) => !runningProjectNames.has(p));
 
   // プロジェクト絞り込み → テキスト検索の順で AND 適用
   const filteredAnnotated = filterBySearch(filterByProject(annotated, selectedProject), searchQuery);
@@ -302,14 +353,7 @@ export default function HomeView({
   const calendarData =
     shareMode && calendar ? { ...calendar, sessions: splitSensitive(calendar.sessions, sensitive).visible } : calendar;
 
-  // 左の縦帯（レール）は「ブリッジとの関係」だけを表す。
-  // プロセスの状態（busy / idle）はタイトル左のドットが持つので、色を二重に使わない。
-  const railClass = (r) => {
-    if (!r.openTab) return '';
-    return r.openTab.id === activeSessionId ? 'rail-active' : 'rail-open';
-  };
-
-  // 「タブで表示中」は帯の色で分かるが、色だけだと凡例が要るのでメタ行に短く添える。
+  // 直近の行の「タブで開いている」印（更新時刻の代わりに出す）
   const openLabel = (openTab) => {
     if (!openTab) return null;
     const suffix = openTab.type === 'readonly' ? '・閲覧' : openTab.type === 'tmux' ? '・tmux' : '';
@@ -329,6 +373,7 @@ export default function HomeView({
         calendarLoading={calendarLoading}
         onRequestCalendar={onRequestCalendar}
         onOpenSession={openDetail}
+        dirColorOf={dirColorOf}
       />
 
       <div className="home-header">
@@ -365,7 +410,7 @@ export default function HomeView({
         </div>
       </div>
 
-      {projects.length > 1 && (
+      {(runningProjects.length > 1 || otherProjects.length > 0) && (
         <div className="home-projects">
           <button
             className={`home-project-chip ${selectedProject ? '' : 'active'}`}
@@ -373,15 +418,38 @@ export default function HomeView({
           >
             すべて
           </button>
-          {projects.map((project) => (
-            <button
-              key={project}
-              className={`home-project-chip ${selectedProject === project ? 'active' : ''}`}
-              onClick={() => setSelectedProject((prev) => (prev === project ? '' : project))}
+          {runningProjects.map(({ project, count, cwd }) => {
+            const color = dirColorOf(cwd);
+            return (
+              <button
+                key={project}
+                className={`home-project-chip ${selectedProject === project ? 'active' : ''}`}
+                onClick={() => setSelectedProject((prev) => (prev === project ? '' : project))}
+              >
+                <span
+                  className={`home-dir-dot${color ? '' : ' none'}`}
+                  style={color ? { background: color } : undefined}
+                />
+                {project}
+                <span className="home-project-count">{count}</span>
+              </button>
+            );
+          })}
+          {otherProjects.length > 0 && (
+            <select
+              className={`home-project-other${otherProjects.includes(selectedProject) ? ' active' : ''}`}
+              value={otherProjects.includes(selectedProject) ? selectedProject : ''}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              aria-label="起動中のセッションが無いディレクトリで絞り込む"
             >
-              {project}
-            </button>
-          ))}
+              <option value="">他のディレクトリ…</option>
+              {otherProjects.map((project) => (
+                <option key={project} value={project}>
+                  {project}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 
@@ -425,78 +493,85 @@ export default function HomeView({
             // タブとして開いていればその表示名をそのまま使い、カードとタブの見出しを一致させる
             const label = r.openTab?.name || tabName(r);
             const starredNow = isStarred(starred, r.sessionId);
-            // 見出しに使わなかった側の名前（スラッグ）はメタ行に落として 1 行分を節約する
-            const sub = [r.title, r.name].find((t) => t && t !== label);
+            const sensitiveNow = isSensitive(sensitive, r.sessionId);
+            // Bridge 未接続（タブとして開いていない）は大半が接続済みなので、未接続の側だけ見た目を変える
+            const linked = !!r.openTab;
+            const waiting = !!r.waitingFor;
+            const dotClass = waiting ? 'waiting' : statusClass(r.status);
+            const dotTitle = waiting ? (r.waitingFor === 'permission prompt' ? '許可待ち' : '回答待ち') : r.status;
             return (
               <div
                 key={r.sessionId}
-                className={`home-card ${railClass(r)} ${starredNow ? 'starred' : ''}`}
+                className={`home-card${linked ? '' : ' unlinked'}${r.openTab?.id === activeSessionId ? ' current' : ''}`}
                 onClick={() => handleCardClick(r)}
+                title={[
+                  r.sessionId,
+                  `pid ${r.pid}`,
+                  r.tmuxTarget && `tmux ${r.tmuxTarget}`,
+                  r.kind !== 'interactive' && r.kind,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               >
                 <div className="home-card-top">
-                  <PathLine cwd={r.cwd} branch={r.gitBranch} />
-                  <StarButton on={starredNow} onToggle={() => onToggleStar(r.sessionId)} />
-                  <SensitiveButton
-                    on={isSensitive(sensitive, r.sessionId)}
-                    onToggle={() => onToggleSensitive(r.sessionId)}
-                  />
+                  <PathLine cwd={r.cwd} branch={r.gitBranch} color={dirColorOf(r.cwd)} />
+                  {/* 例外の印だけを右端に置く（ホバー中はアクションのアイコンが上に重なる） */}
+                  <span className="home-card-marks">
+                    {starredNow && <TbStarFilled className="home-mark-star" aria-label="Star" />}
+                    {sensitiveNow && <TbLock className="home-mark-lock" aria-label="センシティブ指定" />}
+                    {!linked && (
+                      <span className="home-unlinked-mark">
+                        <TbPlugConnectedX aria-hidden="true" />
+                        未接続
+                      </span>
+                    )}
+                  </span>
                 </div>
 
                 <div className="home-card-name" title={label}>
-                  <span className={`home-status home-status-${statusClass(r.status)}`} title={r.status || 'unknown'} />
-                  {label}
+                  <span className={`home-status home-status-${dotClass}`} title={dotTitle || 'unknown'} />
+                  <span className="home-card-name-text">{label}</span>
                 </div>
 
                 <div className="home-card-snippets">
-                  <Snippet label="直近" text={r.lastUserMessage || r.firstUserMessage} />
-                  <Snippet label="応答" text={r.lastAssistantMessage} role="assistant" />
+                  <Snippet icon={TbUser} label="直近の指示" text={r.lastUserMessage || r.firstUserMessage} />
+                  <Snippet icon={TbSparkles} label="応答" text={r.lastAssistantMessage} role="assistant" />
                 </div>
 
-                <div className="home-card-artifacts">
-                  <HomeArtifactChips artifacts={r.artifacts} />
+                <div className="home-card-meta">
+                  <UsageBar usage={r.contextUsage} />
+                  <CompletionBadge session={r} running />
+                  <ArtifactCount artifacts={r.artifacts} />
+                  <span className="home-card-time">{formatElapsed(r.updatedAt)}</span>
                 </div>
 
-                <Meta
-                  items={[
-                    <CompletionBadge key="completion" session={r} running />,
-                    openLabel(r.openTab),
-                    r.kind !== 'interactive' && r.kind,
-                    r.contextUsage && `ctx ${contextPercent(r.contextUsage)}%`,
-                    formatElapsed(r.updatedAt),
-                    sub,
-                  ]}
-                  title={[`pid ${r.pid}`, r.tmuxTarget && `tmux ${r.tmuxTarget}`, r.status].filter(Boolean).join(' · ')}
-                />
-
+                {/* 操作は右上のアイコンとしてホバー時だけ出す（重ねるだけなのでカードの高さは変わらない） */}
                 <div className="home-card-actions" onClick={(e) => e.stopPropagation()}>
-                  {r.openTab ? (
-                    <button className="home-action primary" onClick={() => onSelectTab(r.openTab.id)}>
-                      タブへ移動
+                  {!linked && (
+                    <button
+                      className="home-action primary"
+                      onClick={() => (r.paneId ? openTmux(r) : openReadonly(r))}
+                      title={r.paneId ? 'tmux ペインに接続してタブで開く' : '閲覧タブで開く（tmux 外で起動中）'}
+                    >
+                      <TbPlugConnected aria-hidden="true" />
+                      Bridge に接続
                     </button>
-                  ) : (
-                    <>
-                      {r.paneId && (
-                        <button className="home-action primary" onClick={() => openTmux(r)}>
-                          tmux で開く
-                        </button>
-                      )}
-                      <button className="home-action" onClick={() => openReadonly(r)}>
-                        閲覧で開く
-                      </button>
-                    </>
                   )}
+                  <StarButton on={starredNow} onToggle={() => onToggleStar(r.sessionId)} />
+                  <SensitiveButton on={sensitiveNow} onToggle={() => onToggleSensitive(r.sessionId)} />
                   {r.projectDir && (
                     <button
-                      className="home-action"
+                      className="home-icon-action"
                       onClick={() => openDetail(r)}
-                      title="指示ごとのトークン・コミット・PR"
+                      title="詳細（指示ごとのトークン・コミット・PR）"
+                      aria-label="詳細"
                     >
-                      詳細
+                      <TbListDetails />
                     </button>
                   )}
                   {r.paneId && onTerminateTmux && (
                     <button
-                      className="home-action danger"
+                      className="home-icon-action home-action danger"
                       onClick={(e) => {
                         e.stopPropagation();
                         onTerminateTmux({
@@ -508,8 +583,9 @@ export default function HomeView({
                         });
                       }}
                       title="claude を終了してペインを閉じる"
+                      aria-label="終了"
                     >
-                      終了
+                      <TbPower />
                     </button>
                   )}
                 </div>
@@ -569,18 +645,21 @@ export default function HomeView({
             >
               claude -p
             </button>
-            <div className="home-completion-filter">
+            {/* 状態ごとの件数はプルダウン 1 つに畳む（件数はプロジェクト・検索で絞った後の母数） */}
+            <select
+              className={`home-completion-filter${completionFilter ? ' active' : ''}`}
+              value={completionFilter}
+              onChange={(e) => setCompletionFilter(e.target.value)}
+              aria-label="状態で絞り込む"
+              title={completionFilter ? COMPLETION_STATES[completionFilter].title : '状態で絞り込む'}
+            >
+              <option value="">状態: すべて</option>
               {FILTERABLE_STATES.map((state) => (
-                <button
-                  key={state}
-                  className={`home-completion-chip ${state} ${completionFilter === state ? 'active' : ''}`}
-                  onClick={() => setCompletionFilter((prev) => (prev === state ? '' : state))}
-                  title={COMPLETION_STATES[state].title}
-                >
+                <option key={state} value={state}>
                   {COMPLETION_STATES[state].label} {completionCounts[state] || 0}
-                </button>
+                </option>
               ))}
-            </div>
+            </select>
             <span className="home-count">
               {isFilteringRecent ? `${filteredRecent.length} / ${recent.length} 件` : `${recent.length} 件`}
             </span>
@@ -626,7 +705,7 @@ export default function HomeView({
               return (
                 <div
                   key={s.sessionId}
-                  className={`home-row ${railClass(s)}`}
+                  className={`home-row${s.openTab?.id === activeSessionId ? ' current' : ''}`}
                   onClick={() => (s.openTab ? onSelectTab(s.openTab.id) : openReadonly(s))}
                 >
                   <StarButton on={starredNow} onToggle={() => onToggleStar(s.sessionId)} />
@@ -634,7 +713,7 @@ export default function HomeView({
                     on={isSensitive(sensitive, s.sessionId)}
                     onToggle={() => onToggleSensitive(s.sessionId)}
                   />
-                  <PathLine cwd={s.cwd} branch={s.gitBranch} />
+                  <PathLine cwd={s.cwd} branch={s.gitBranch} color={dirColorOf(s.cwd)} />
                   <span className="home-row-name" title={label}>
                     {label}
                   </span>

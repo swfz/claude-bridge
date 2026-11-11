@@ -20,10 +20,11 @@ test('行をクリックすると readonly セッションが開き、会話が�
     'ヘルスチェックのエンドポイントを追加します',
   );
 
-  // 閲覧タブは tmux に繋がっていないので、送信欄の直上に「届かない」注意と再開ボタンが出る
-  // （fixture のセッションは起動していない＝stopped）
+  // 閲覧タブは tmux に繋がっていないので、送信ボタンの横に「未接続 · tmux で再開」が出る
+  // （fixture のセッションは起動していない＝stopped。詳しい説明は title）
   const notice = page.locator('.input-notice');
-  await expect(notice).toContainText('このセッションは起動していません');
+  await expect(notice).toContainText('未接続');
+  await expect(notice.locator('.input-notice-text')).toHaveAttribute('title', /このセッションは起動していません/);
   await expect(notice.locator('button', { hasText: 'tmux で再開' })).toBeVisible();
 
   // サブエージェントの完了報告は「You」ではなく送り手つきの見出しで、枠と注意書きを外した本文を出す
@@ -39,8 +40,10 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await expect(artifactCard).toHaveCount(1);
   await expect(artifactCard.locator('a')).toHaveAttribute('href', artifactUrl);
   await expect(artifactCard).toContainText('E2E ヘルスチェックレポート');
+  // 一覧はチャット右上の件数アイコンを押すと開く
   const strip = page.locator('.artifact-strip');
-  await expect(strip).toBeVisible();
+  await expect(strip.locator('.artifact-strip-toggle')).toHaveText('1');
+  await strip.locator('.artifact-strip-toggle').click();
   await expect(strip.locator('a')).toHaveCount(1);
   await expect(strip.locator('a')).toHaveAttribute('href', artifactUrl);
   await expect(strip.locator('a')).toHaveAttribute('target', '_blank');
@@ -59,7 +62,7 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await expect(shellDrawer).toHaveCount(0);
 
   // ヘッダの Refs で、会話に出てきたリンクとファイルのドロワーが開く（既定はリンクタブ）
-  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  await page.locator('.panel-tab', { hasText: 'Refs' }).click();
   const linkDrawer = page.locator('.ref-drawer');
   await expect(linkDrawer).toBeVisible();
   await expect(linkDrawer.locator('.ref-drawer-tab.active')).toContainText('リンク');
@@ -94,7 +97,7 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await expect(page.locator('[data-message-uuid="e2e-uuid-links"]')).toBeInViewport();
 
   // 再度 Refs を開いてファイルタブに切り替えると、Claude が触ったファイルの一覧が出る
-  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  await page.locator('.panel-tab', { hasText: 'Refs' }).click();
   const fileDrawer = page.locator('.ref-drawer');
   await expect(fileDrawer).toBeVisible();
   await fileDrawer.locator('.ref-drawer-tab', { hasText: 'ファイル' }).click();
@@ -109,9 +112,11 @@ test('行をクリックすると readonly セッションが開き、会話が�
 
   // 📌 で返答をピン留めすると枠が付き、Refs の「ピン」タブから見返せる（「外す」で元に戻る）
   const pinTarget = page.locator('.chat-message.assistant').first();
+  // ピン留めはホバーで出る操作
+  await pinTarget.hover();
   await pinTarget.locator('.pin-toggle').click();
   await expect(pinTarget).toHaveClass(/pinned/);
-  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  await page.locator('.panel-tab', { hasText: 'Refs' }).click();
   const pinDrawer = page.locator('.ref-drawer');
   await pinDrawer.locator('.ref-drawer-tab', { hasText: 'ピン' }).click();
   const pinRows = pinDrawer.locator('.pin-row');
@@ -120,7 +125,7 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await pinRows.first().getByRole('button', { name: '会話へ' }).click();
   await expect(pinDrawer).toHaveCount(0);
   await expect(pinTarget).toBeInViewport();
-  await page.locator('.thread-toggle', { hasText: 'Refs' }).click();
+  await page.locator('.panel-tab', { hasText: 'Refs' }).click();
   await pinDrawer.locator('.pin-row').first().getByRole('button', { name: '外す' }).click();
   await expect(pinDrawer.locator('.pin-row')).toHaveCount(0);
   await page.keyboard.press('Escape');
@@ -135,7 +140,10 @@ test('行をクリックすると readonly セッションが開き、会話が�
     });
   const hasPip = await page.evaluate(() => 'documentPictureInPicture' in globalThis);
   if (hasPip) {
-    await page.locator('.chat-message.assistant .btn-header-action', { hasText: 'Preview' }).first().click();
+    // Preview はホバーで出るメッセージの操作
+    const previewTarget = page.locator('.chat-message.assistant', { has: page.locator('.btn-header-action') }).first();
+    await previewTarget.hover();
+    await previewTarget.locator('.btn-header-action', { hasText: 'Preview' }).click();
     await page.locator('.drawer button', { hasText: '小窓' }).click();
     await expect(page.locator('.drawer-overlay')).toHaveCount(0);
     await expect.poll(pipState).toContain('ヘルスチェックのエンドポイントを追加します');

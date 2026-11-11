@@ -37,13 +37,23 @@ export function contextColorFor(pct) {
   return 'var(--success)';
 }
 
-// サイドバーの使用率バーのしきい値。ヘッダーのメーター（contextColorFor）より早めに色を変え、
-// 「普段と違う」セッションだけが目に入るようにする
-export const SIDEBAR_USAGE_WARN = 40;
-export const SIDEBAR_USAGE_DANGER = 60;
+// 使用率（コンテキスト・レート制限）のしきい値。サイドバー・ホーム・トップバーで共通にし、
+// 「普段と違う」ものだけが目に入るよう早めに色を変える
+export const USAGE_WARN = 40;
+export const USAGE_DANGER = 60;
+// 旧名（サイドバーで使い始めた名前）。中身は共通のしきい値
+export const SIDEBAR_USAGE_WARN = USAGE_WARN;
+export const SIDEBAR_USAGE_DANGER = USAGE_DANGER;
 
-export function sidebarUsageColor(pct) {
-  if (pct >= SIDEBAR_USAGE_DANGER) return 'var(--danger)';
-  if (pct >= SIDEBAR_USAGE_WARN) return 'var(--warning)';
+export function usageColor(pct) {
+  if (pct >= USAGE_DANGER) return 'var(--danger)';
+  if (pct >= USAGE_WARN) return 'var(--warning)';
   return 'var(--success)';
+}
+
+export const sidebarUsageColor = usageColor;
+
+// 数値や注意色を出すか（しきい値未満はバーだけで足りる）
+export function isUsageNotable(pct) {
+  return Number.isFinite(pct) && pct >= USAGE_WARN;
 }

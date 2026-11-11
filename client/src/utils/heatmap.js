@@ -7,15 +7,34 @@ export const HEAT_METRICS = [
 
 export const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
-// 同じデータを別の切り口で見るためのビュー
+// 同じデータを別の切り口で見るためのビュー。棒の粒度（日 / 週 / 月）は「棒」の下位トグル
 export const ACTIVITY_VIEWS = [
   { key: 'heatmap', label: '草', title: '1 列 = 1 週。日ごとの濃淡で 1 年を俯瞰する' },
-  { key: 'daily', label: '日別', title: '1 本 = 1 日。量の差を高さで正確に読む' },
-  { key: 'weekly', label: '週別', title: '1 本 = 1 週（月曜始まり）。週単位の量を読む' },
-  { key: 'monthly', label: '月別', title: '1 本 = 1 月。月単位の量を読む' },
+  { key: 'bars', label: '棒', title: '1 本 = 1 日 / 1 週 / 1 月。量の差を高さで正確に読む' },
   { key: 'weekday', label: '曜日', title: '曜日ごとの合計。週の中でどこに偏っているか' },
   { key: 'calendar', label: 'カレンダー', title: '1 週間の時刻 × 曜日に、セッションの活動区間を帯で並べる' },
 ];
+
+export const BAR_GRANULARITIES = [
+  { key: 'day', label: '日別', title: '1 本 = 1 日' },
+  { key: 'week', label: '週別', title: '1 本 = 1 週（月曜始まり）' },
+  { key: 'month', label: '月別', title: '1 本 = 1 月' },
+];
+
+// 以前は日別・週別・月別がそれぞれ独立したビューだった。保存済みの値はここで読み替える
+const LEGACY_BAR_VIEWS = { daily: 'day', weekly: 'week', monthly: 'month' };
+
+// localStorage のビュー（旧値を含む）を { view, granularity } に直す。
+// granularity は旧値から読み替えたときだけ入る（それ以外は null＝保存済みの粒度を使う）
+export function normalizeActivityView(stored) {
+  if (LEGACY_BAR_VIEWS[stored]) return { view: 'bars', granularity: LEGACY_BAR_VIEWS[stored] };
+  if (ACTIVITY_VIEWS.some((v) => v.key === stored)) return { view: stored, granularity: null };
+  return { view: 'heatmap', granularity: null };
+}
+
+export function normalizeGranularity(stored) {
+  return BAR_GRANULARITIES.some((g) => g.key === stored) ? stored : 'day';
+}
 
 // 曜日別の集計は「週の並び」で読みたいので月曜始まりにする
 // （草は GitHub と同じ日曜始まりなので、そこだけ並びが違う）
@@ -276,4 +295,111 @@ export function monthLabels(weeks) {
     labels.push(isNewMonth && index > 0 ? `${month}月` : null);
   });
   return labels;
+}
+
+// --- ヘッダーの要約・ツールチップ ---
+
+// 見出しの数字。何の合計かが読めるよう期間を先頭に付ける
+export function summaryText(total, dayCount) {
+  if (!total) return '';
+  return [
+    `直近 ${dayCount} 日`,
+    `${formatCount(total.messages)} メッセージ`,
+    `${formatTokens(total.tokens)} トークン`,
+    `稼働 ${total.activeDays} 日`,
+  ].join(' · ');
+}
+
+const UNIT_LABEL = { day: '日', week: '週', month: '月' };
+
+// 常時は出さない凡例（濃淡の意味・最大値）。情報アイコンのツールチップに回す
+export function legendTooltip({ view, metric, granularity = 'day', days }) {
+  const metricLabel = HEAT_METRICS.find((m) => m.key === metric)?.label || metric;
+  const lines = [];
+  if (view === 'heatmap') {
+    lines.push(`濃淡: 少 ░▒▓█ 多（${metricLabel}。活動があった日の 25/50/75% 点で 4 段階）`);
+    const max = Math.max(0, ...days.map((d) => d[metric] || 0));
+    lines.push(`最大 ${formatMetric(metric, max)} / 日`);
+  } else if (view === 'bars') {
+    const buckets = granularity === 'day' ? days : bucketDays(days, granularity);
+    const max = Math.max(0, ...buckets.map((b) => b[metric] || 0));
+    lines.push(`高さ: ${metricLabel}（最大値に対する線形）`);
+    lines.push(`最大 ${formatMetric(metric, max)} / ${UNIT_LABEL[granularity]}`);
+  } else if (view === 'weekday') {
+    lines.push(`直近 ${days.length} 日の${metricLabel}を曜日ごとに合計`);
+  }
+  lines.push('棒・升目のクリックでその期間に一覧を絞り込む');
+  return lines.join('\n');
+}
+
+// 取得時刻（ISO 文字列か ms）を「最終取得 11/12 14:05」に
+export function fetchedAtLabel(at) {
+  const d = at ? new Date(at) : null;
+  if (!d || Number.isNaN(d.getTime())) return '集計し直す';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `集計し直す（最終取得 ${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}）`;
+}
+
+// --- 外れ値（今週の突出）---
+
+// 今週の値が「直前の週の平均」の何倍を超えたら警告色で知らせるか
+export const OUTLIER_MULTIPLIER = 2;
+// 比べる直前の週の数。古い休眠期間まで平均に入れると警告が出すぎるので直近に限る
+export const OUTLIER_BASELINE_WEEKS = 8;
+
+// 今週（最後の週バケット）が直前の週の平均の OUTLIER_MULTIPLIER 倍を超えていれば
+// { value, average, ratio, label } を返す。そうでなければ null（何も出さない）
+export function weeklyOutlier(
+  days,
+  metric,
+  { multiplier = OUTLIER_MULTIPLIER, baselineWeeks = OUTLIER_BASELINE_WEEKS } = {},
+) {
+  const weeks = bucketDays(days || [], 'week');
+  if (weeks.length < 2) return null;
+  const current = weeks[weeks.length - 1];
+  // 先頭の欠けた週は量が少なく見えるので平均に入れない
+  const baseline = weeks
+    .slice(0, -1)
+    .filter((w) => w.days === 7)
+    .slice(-baselineWeeks);
+  if (baseline.length === 0) return null;
+  const average = baseline.reduce((sum, w) => sum + (w[metric] || 0), 0) / baseline.length;
+  const value = current[metric] || 0;
+  if (average <= 0 || value <= average * multiplier) return null;
+  return { value, average, ratio: value / average, key: current.key, label: current.label };
+}
+
+export function outlierText(outlier) {
+  if (!outlier) return '';
+  return `今週 ${outlier.ratio.toFixed(1)}×`;
+}
+
+export function outlierTooltip(outlier, metric) {
+  if (!outlier) return '';
+  return `今週（${outlier.label}）は ${formatMetric(metric, outlier.value)}。直前 ${OUTLIER_BASELINE_WEEKS} 週の平均 ${formatMetric(
+    metric,
+    Math.round(outlier.average),
+  )} の ${OUTLIER_MULTIPLIER} 倍を超えている`;
+}
+
+// --- 畳んだときのスパークライン ---
+
+export const SPARKLINE_DAYS = 30;
+
+// 直近 n 日の値で折れ線の points 属性（"x,y x,y …"）を作る。上下 1px の余白を取る
+export function sparklinePoints(values, { width = 80, height = 16 } = {}) {
+  if (!values || values.length === 0) return '';
+  const max = Math.max(0, ...values);
+  const step = values.length > 1 ? width / (values.length - 1) : 0;
+  const usable = height - 2;
+  return values
+    .map((v, i) => {
+      const y = max > 0 ? 1 + usable - (v / max) * usable : height - 1;
+      return `${+(i * step).toFixed(2)},${+y.toFixed(2)}`;
+    })
+    .join(' ');
+}
+
+export function recentValues(days, metric, n = SPARKLINE_DAYS) {
+  return (days || []).slice(-n).map((d) => d[metric] || 0);
 }

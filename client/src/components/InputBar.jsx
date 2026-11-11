@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { TbArrowUp } from 'react-icons/tb';
 import './InputBar.css';
 
 // タブ（セッション）ごとの書きかけテキスト。InputBar は key={draftKey} で
@@ -130,7 +131,6 @@ export default function InputBar({
 
   return (
     <>
-      {notice && <div className="input-notice">{notice}</div>}
       <div className="input-bar">
         {showSuggestions && (
           <div className="slash-suggestions" ref={listRef}>
@@ -173,8 +173,17 @@ export default function InputBar({
             Esc
           </button>
         )}
-        <button className="btn btn-primary input-send" onClick={handleSubmit} disabled={disabled || !text.trim()}>
-          送信
+        {/* 届かない理由（未接続など）は帯にせず、送信ボタンの横に小さく出す。詳しい説明は title */}
+        {notice && <div className="input-notice">{notice}</div>}
+        {/* 送信は目立たせない（ピンクは「新しいセッション」だけ）。アイコンのみ */}
+        <button
+          className="input-send"
+          onClick={handleSubmit}
+          disabled={disabled || !text.trim()}
+          aria-label="送信"
+          title="送信（Enter）"
+        >
+          <TbArrowUp aria-hidden="true" />
         </button>
       </div>
     </>

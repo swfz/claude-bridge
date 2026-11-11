@@ -120,6 +120,13 @@ describe('JsonlWatcher', () => {
 
       watcher._readNewLines(state);
 
+      // 失敗した publish はツール失敗の印（toolresult）としてだけ流れる
+      const failed = messages.filter((m) => m.role === 'toolresult');
+      assert.deepEqual(
+        failed.map((m) => m.results),
+        [[{ id: 'toolu_2', error: true }]],
+      );
+      messages.splice(0, messages.length, ...messages.filter((m) => m.role !== 'toolresult'));
       assert.equal(messages.length, 1);
       assert.equal(messages[0].type, 'chat_message');
       assert.equal(messages[0].role, 'artifact');

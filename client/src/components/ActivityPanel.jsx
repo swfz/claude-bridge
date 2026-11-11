@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { TbInfoCircle, TbRefresh } from 'react-icons/tb';
 import {
   ACTIVITY_VIEWS,
+  BAR_GRANULARITIES,
   HEAT_METRICS,
   WEEKDAY_LABELS,
   barRatio,
@@ -11,14 +13,22 @@ import {
   buildWeeks,
   cellTooltip,
   computeThresholds,
-  formatCount,
+  fetchedAtLabel,
   formatDateLabel,
   formatMetric,
-  formatTokens,
+  legendTooltip,
   levelOf,
   monthLabels,
+  normalizeActivityView,
+  normalizeGranularity,
+  outlierText,
+  outlierTooltip,
   periodEquals,
+  recentValues,
+  sparklinePoints,
+  summaryText,
   weekdayTotals,
+  weeklyOutlier,
 } from '../utils/heatmap.js';
 import { shiftWeek, startOfWeek } from '../utils/calendar.js';
 import CalendarView from './CalendarView.jsx';
@@ -27,11 +37,32 @@ import './ActivityPanel.css';
 const METRIC_KEY = 'homeHeatmapMetric';
 const OPEN_KEY = 'homeHeatmapOpen';
 const VIEW_KEY = 'homeActivityView';
+const GRANULARITY_KEY = 'homeActivityBarGranularity';
 
-// 棒・升目のビューと、それが表す期間の単位
-const GRANULARITY_BY_VIEW = { daily: 'day', weekly: 'week', monthly: 'month' };
-const BARS_VIEWS = new Set(['daily', 'weekly', 'monthly']);
-const UNIT_LABEL = { day: '日', week: '週', month: '月' };
+const SPARK_WIDTH = 80;
+const SPARK_HEIGHT = 16;
+
+function readStorage(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // 保存できなくても表示は変わらない
+  }
+}
+
+// 初期のビューと棒の粒度。旧形式（日別・週別・月別が独立したビュー）の保存値もここで読み替える
+function loadInitialView() {
+  const { view, granularity } = normalizeActivityView(readStorage(VIEW_KEY));
+  return { view, granularity: granularity || normalizeGranularity(readStorage(GRANULARITY_KEY)) };
+}
 
 // 升目・棒は数百個並ぶので Tab の停止点にはしない（tabIndex=-1。検索欄まで 365 回押すことになる）。
 // 選択中の期間をもう一度押したら解除（同じ操作で戻せるようにする）
@@ -95,7 +126,8 @@ function HeatmapView({ days, metric, selectedPeriod, onSelectPeriod }) {
 
 // 日・週・月の棒。濃淡では潰れる「量の差」を高さで見るためのビューなので、
 // しきい値の分位ではなく最大値に対する線形の高さにする。
-function BarsView({ days, metric, granularity, selectedPeriod, onSelectPeriod }) {
+// outlierKey は今週が突出しているときの週バケットの key（週別のときだけその棒を警告色にする）
+function BarsView({ days, metric, granularity, selectedPeriod, onSelectPeriod, outlierKey }) {
   const buckets = useMemo(() => bucketDays(days, granularity), [days, granularity]);
   const max = useMemo(() => Math.max(0, ...buckets.map((b) => b[metric] || 0)), [buckets, metric]);
   const ticks = useMemo(() => bucketTicks(buckets, granularity), [buckets, granularity]);
@@ -119,7 +151,9 @@ function BarsView({ days, metric, granularity, selectedPeriod, onSelectPeriod })
               <button
                 key={bucket.key}
                 type="button"
-                className={`activity-bar-slot ${selected ? 'selected' : ''}`}
+                className={`activity-bar-slot ${selected ? 'selected' : ''} ${
+                  granularity === 'week' && bucket.key === outlierKey ? 'outlier' : ''
+                }`}
                 title={bucketTooltip(bucket, granularity)}
                 tabIndex={-1}
                 onClick={() => togglePeriod(selectedPeriod, period, onSelectPeriod)}
@@ -170,11 +204,30 @@ function WeekdayView({ days, metric }) {
   );
 }
 
+// 直近 30 日の推移。畳んだパネルの見出しに添える細い折れ線（色は中立）
+function Sparkline({ values }) {
+  const points = sparklinePoints(values, { width: SPARK_WIDTH, height: SPARK_HEIGHT });
+  if (!points) return null;
+  return (
+    <svg
+      className="activity-sparkline"
+      width={SPARK_WIDTH}
+      height={SPARK_HEIGHT}
+      viewBox={`0 0 ${SPARK_WIDTH} ${SPARK_HEIGHT}`}
+      aria-hidden="true"
+    >
+      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 // ホーム画面の活動パネル。日別の活動量（メッセージ数 / トークン数）を
-// 草・日別 / 週別 / 月別の棒・曜日別の 5 通りで見せる。集計はサーバー側で、ここは描くだけ。
+// 草・棒（日別 / 週別 / 月別）・曜日別で見せる。集計はサーバー側で、ここは描くだけ。
 // 棒・升目のクリックは「その期間」を選ぶ操作で、選んだ期間は下の一覧の絞り込みに使う。
 // 「カレンダー」だけは別データ（10 分枠の集計）で、表示する週はこのパネルが持ち、
 // 週が変わるたびに onRequestCalendar で取りに行く。
+// 見た目は「既定値は出さない、例外だけ目立たせる」: 色は濃淡（量）と、今週が突出したときの警告色だけ。
+// 凡例・最大値はツールチップへ逃がし、選択中のトグルは中立色の背景で示す。
 export default function ActivityPanel({
   data,
   loading,
@@ -185,10 +238,13 @@ export default function ActivityPanel({
   calendarLoading,
   onRequestCalendar,
   onOpenSession,
+  dirColorOf,
 }) {
-  const [metric, setMetric] = useState(() => localStorage.getItem(METRIC_KEY) || 'messages');
-  const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'heatmap');
-  const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) !== 'false');
+  const [metric, setMetric] = useState(() => (readStorage(METRIC_KEY) === 'tokens' ? 'tokens' : 'messages'));
+  const [initial] = useState(loadInitialView);
+  const [view, setView] = useState(initial.view);
+  const [granularity, setGranularity] = useState(initial.granularity);
+  const [open, setOpen] = useState(() => readStorage(OPEN_KEY) !== 'false');
   // 表示中の週（月曜 0:00 のローカル時刻 ms）。その場限りなので保存しない
   const [weekStartMs, setWeekStartMs] = useState(() => startOfWeek(Date.now()));
   const scrollRef = useRef(null);
@@ -204,63 +260,82 @@ export default function ActivityPanel({
     if (isCalendar) onRequestCalendar?.({ fromMs: weekStartMs, toMs: shiftWeek(weekStartMs, 1) });
   };
 
-  useEffect(() => {
-    localStorage.setItem(METRIC_KEY, metric);
-  }, [metric]);
-  useEffect(() => {
-    localStorage.setItem(VIEW_KEY, view);
-  }, [view]);
-  useEffect(() => {
-    localStorage.setItem(OPEN_KEY, String(open));
-  }, [open]);
+  useEffect(() => writeStorage(METRIC_KEY, metric), [metric]);
+  useEffect(() => writeStorage(VIEW_KEY, view), [view]);
+  useEffect(() => writeStorage(GRANULARITY_KEY, granularity), [granularity]);
+  useEffect(() => writeStorage(OPEN_KEY, String(open)), [open]);
 
   // 各ビューの useMemo が効くよう、参照を毎レンダー作り直さない
   const days = useMemo(() => data?.days || [], [data]);
   const total = data?.total;
-  const granularity = GRANULARITY_BY_VIEW[view] || 'day';
   // 草と棒のビューは横に長いので最新（右端）が見える位置から始める。曜日別は幅に収まる
   const scrolls = view !== 'weekday' && !isCalendar;
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el && scrolls) el.scrollLeft = el.scrollWidth;
-  }, [open, view, scrolls, days.length]);
+  }, [open, view, granularity, scrolls, days.length]);
 
-  // 凡例の「最大 … / 単位」。週別・月別は畳んだあとの値で見ないと意味が変わる
-  const maxPerUnit = useMemo(() => {
-    const values = granularity === 'day' ? days : bucketDays(days, granularity);
-    return Math.max(0, ...values.map((v) => v[metric] || 0));
-  }, [days, metric, granularity]);
+  const outlier = useMemo(() => weeklyOutlier(days, metric), [days, metric]);
+  const sparkValues = useMemo(() => recentValues(days, metric), [days, metric]);
+  const busy = isCalendar ? calendarLoading : loading;
 
   return (
-    <section className="activity">
+    <section className={`activity ${open ? '' : 'collapsed'}`}>
       <div className="activity-header">
         <button className="activity-toggle" onClick={() => setOpen((v) => !v)} title={open ? '畳む' : '開く'}>
           <span className="activity-caret">{open ? '▾' : '▸'}</span>
           活動
         </button>
-        {total && (
-          <span className="activity-summary">
-            {formatCount(total.messages)} メッセージ · {formatTokens(total.tokens)} トークン · {total.activeDays} 日
+        {!open && sparkValues.length > 1 && (
+          <span className="activity-spark-wrap" title={`直近 ${sparkValues.length} 日の推移`}>
+            <Sparkline values={sparkValues} />
+          </span>
+        )}
+        {selectedPeriod ? (
+          // 絞り込み中は合計の代わりに「何で絞っているか」を出す（解除はここの × で）
+          <span className="activity-summary activity-filtering">
+            {selectedPeriod.label} で絞り込み中
+            <button
+              className="activity-period-clear"
+              onClick={() => onSelectPeriod?.(null)}
+              title="期間の絞り込みを解除"
+            >
+              ×
+            </button>
+          </span>
+        ) : (
+          total && <span className="activity-summary">{summaryText(total, days.length)}</span>
+        )}
+        {outlier && !isCalendar && (
+          <span className="activity-outlier" title={outlierTooltip(outlier, metric)}>
+            {outlierText(outlier)}
+          </span>
+        )}
+        {open && !isCalendar && days.length > 0 && (
+          <span className="activity-info" title={legendTooltip({ view, metric, granularity, days })} aria-label="凡例">
+            <TbInfoCircle />
           </span>
         )}
         {open && (
           <div className="activity-actions">
-            <div className="activity-segmented">
-              {ACTIVITY_VIEWS.map((v) => (
-                <button
-                  key={v.key}
-                  className={`activity-segment ${view === v.key ? 'active' : ''}`}
-                  onClick={() => setView(v.key)}
-                  title={v.title}
-                >
-                  {v.label}
-                </button>
-              ))}
-            </div>
+            {view === 'bars' && (
+              <div className="activity-segmented small" role="group" aria-label="棒の粒度">
+                {BAR_GRANULARITIES.map((g) => (
+                  <button
+                    key={g.key}
+                    className={`activity-segment ${granularity === g.key ? 'active' : ''}`}
+                    onClick={() => setGranularity(g.key)}
+                    title={g.title}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* カレンダーはメッセージ / トークンの切り替えを使わない */}
             {!isCalendar && (
-              <div className="activity-segmented">
+              <div className="activity-segmented small" role="group" aria-label="指標">
                 {HEAT_METRICS.map((m) => (
                   <button
                     key={m.key}
@@ -272,13 +347,26 @@ export default function ActivityPanel({
                 ))}
               </div>
             )}
+            <div className="activity-segmented" role="group" aria-label="表示">
+              {ACTIVITY_VIEWS.map((v) => (
+                <button
+                  key={v.key}
+                  className={`activity-segment ${view === v.key ? 'active' : ''}`}
+                  onClick={() => setView(v.key)}
+                  title={v.title}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
             <button
-              className="activity-refresh"
+              className={`activity-refresh ${busy ? 'busy' : ''}`}
               onClick={handleRefresh}
-              disabled={isCalendar ? calendarLoading : loading}
-              title="集計し直す"
+              disabled={busy}
+              title={busy ? '集計中…' : fetchedAtLabel(data?.generatedAt)}
+              aria-label="集計し直す"
             >
-              {(isCalendar ? calendarLoading : loading) ? '集計中…' : '更新'}
+              <TbRefresh />
             </button>
           </div>
         )}
@@ -293,6 +381,7 @@ export default function ActivityPanel({
               weekStartMs={weekStartMs}
               onChangeWeek={setWeekStartMs}
               onOpenSession={onOpenSession}
+              dirColorOf={dirColorOf}
             />
           ) : loading && days.length === 0 ? (
             <div className="activity-loading">初回は全セッションを走査するので少し時間がかかります…</div>
@@ -306,46 +395,17 @@ export default function ActivityPanel({
                   onSelectPeriod={onSelectPeriod}
                 />
               )}
-              {BARS_VIEWS.has(view) && (
+              {view === 'bars' && (
                 <BarsView
                   days={days}
                   metric={metric}
                   granularity={granularity}
                   selectedPeriod={selectedPeriod}
                   onSelectPeriod={onSelectPeriod}
+                  outlierKey={outlier?.key}
                 />
               )}
               {view === 'weekday' && <WeekdayView days={days} metric={metric} />}
-            </div>
-          )}
-          {!isCalendar && (
-            <div className="activity-legend">
-              {view === 'heatmap' && (
-                <>
-                  <span className="activity-legend-label">少</span>
-                  {[0, 1, 2, 3, 4].map((level) => (
-                    <div key={level} className={`activity-cell level-${level}`} />
-                  ))}
-                  <span className="activity-legend-label">多</span>
-                </>
-              )}
-              <span className="activity-legend-note">
-                {view === 'weekday'
-                  ? `直近 ${days.length} 日の合計`
-                  : `最大 ${formatMetric(metric, maxPerUnit)} / ${UNIT_LABEL[granularity]}`}
-              </span>
-              {selectedPeriod && (
-                <span className="activity-period-chip">
-                  絞り込み中: {selectedPeriod.label}
-                  <button
-                    className="activity-period-clear"
-                    onClick={() => onSelectPeriod?.(null)}
-                    title="期間の絞り込みを解除"
-                  >
-                    ×
-                  </button>
-                </span>
-              )}
             </div>
           )}
         </div>

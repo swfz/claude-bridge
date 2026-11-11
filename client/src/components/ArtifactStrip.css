@@ -1,51 +1,62 @@
-/* チャット最上部に貼り付ける、公開済み Artifact のチップ列 */
+/* 公開済み Artifact。チャット右上に件数付きのアイコンだけを貼り付け、本文の幅を取らない。
+   高さ 0 の置き場にしてメッセージを押し下げず、中身はそこからはみ出して重ねる */
 .artifact-strip {
   position: sticky;
-  /* .chat-view の padding(16px) を打ち消して border box の端に貼る
-     （padding box に貼ると直前のメッセージが上から覗く） */
-  top: -16px;
+  top: 0;
   z-index: 5;
-  margin: -16px -16px 0;
-  padding: 6px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-secondary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  align-self: flex-end;
+  height: 0;
+  overflow: visible;
 }
 
-.artifact-strip-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+.artifact-strip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  margin-right: 2px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.artifact-strip-toggle:hover,
+.artifact-strip-toggle.open {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.artifact-strip-menu {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  min-width: 240px;
+  max-width: 420px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
 }
 
 .artifact-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
-  max-width: 320px;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  padding: 5px 8px;
+  border-radius: 6px;
   color: var(--text-primary);
   font-size: 12px;
-  font-family: inherit;
-  padding: 3px 10px;
   text-decoration: none;
 }
 
 .artifact-chip:hover {
-  border-color: var(--accent);
-}
-
-.artifact-chip-icon {
-  flex-shrink: 0;
-  font-size: 11px;
+  background: var(--bg-surface);
 }
 
 .artifact-chip-text {

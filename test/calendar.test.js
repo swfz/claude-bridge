@@ -134,21 +134,32 @@ describe('projectOf / buildLegend', () => {
     assert.equal(projectOf({ cwd: '', projectDir: '' }), '(不明)');
   });
 
-  it('counts sessions per project, most first', () => {
+  it('counts sessions per project, most first, with no color when colorOf is absent', () => {
     const legend = buildLegend([{ cwd: '/x/b' }, { cwd: '/x/a' }, { cwd: '/x/b' }]);
     assert.deepEqual(
       legend.map((l) => [l.project, l.count, l.color]),
       [
-        ['b', 2, 0],
-        ['a', 1, 1],
+        ['b', 2, null],
+        ['a', 1, null],
       ],
     );
   });
 
-  it('gives distinct colors to up to 8 projects and wraps after that', () => {
-    const sessions = Array.from({ length: 9 }, (_, i) => ({ cwd: `/x/p${i}` }));
-    const colors = buildLegend(sessions).map((l) => l.color);
-    assert.deepEqual(colors, [0, 1, 2, 3, 4, 5, 6, 7, 0]);
+  it('takes colors from the sidebar directory colors (null = neutral)', () => {
+    const colorOf = (cwd) => (cwd.startsWith('/x/a') ? 'var(--cal-3)' : null);
+    const legend = buildLegend([{ cwd: '/x/b' }, { cwd: '/x/a' }, { cwd: '' }], colorOf);
+    const byProject = Object.fromEntries(legend.map((l) => [l.project, l.color]));
+    assert.equal(byProject.a, 'var(--cal-3)');
+    assert.equal(byProject.b, null);
+  });
+
+  it('uses the first session that has a color for the project', () => {
+    const colorOf = (cwd) => (cwd === '/x/a/.claude/worktrees/w' ? 'var(--cal-1)' : null);
+    const legend = buildLegend([{ cwd: '/x/a' }, { cwd: '/x/a/.claude/worktrees/w' }], colorOf);
+    assert.deepEqual(
+      legend.map((l) => [l.project, l.count, l.color]),
+      [['a', 2, 'var(--cal-1)']],
+    );
   });
 });
 
@@ -217,13 +228,14 @@ describe('buildCalendarDays', () => {
         { sessionId: 'a', cwd: '/x/a', slots: [[slotAt(start), 1, 0, 0, 0]] },
         { sessionId: 'b', cwd: '/x/b', slots: [[slotAt(start), 1, 0, 0, 0]] },
       ],
-      { weekStartMs, slotMs: SLOT },
+      { weekStartMs, slotMs: SLOT, colorOf: (cwd) => (cwd === '/x/a' ? 'var(--cal-0)' : null) },
     );
     const segs = days[3].segments;
     assert.deepEqual(segs.map((s) => s.lane).sort(), [0, 1]);
     assert.ok(segs.every((s) => s.lanes === 2));
-    // 別プロジェクトは別の色
-    assert.notEqual(segs[0].color, segs[1].color);
+    // 色はサイドバーのディレクトリ色。グループの無いプロジェクトは null（中立色）
+    const colorBySession = Object.fromEntries(segs.map((s) => [s.sessionId, s.color]));
+    assert.deepEqual(colorBySession, { a: 'var(--cal-0)', b: null });
   });
 
   it('ignores activity outside the week', () => {

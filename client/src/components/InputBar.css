@@ -95,8 +95,23 @@
 }
 
 .input-send {
-  padding: 10px 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
   flex-shrink: 0;
+  width: 32px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.input-send:hover:not(:disabled) {
+  background: var(--border);
 }
 
 .input-send:disabled {
@@ -105,24 +120,38 @@
 }
 
 /* 入力欄の直上の注意書き（閲覧タブで tmux に繋がっていない等）。送信前に目に入る位置に置く */
+/* 送信ボタン横の小さな注意（未接続 · tmux で再開）。ホームのカードの「未接続」と同じ言葉と形 */
 .input-notice {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px 16px;
+  gap: 4px;
+  flex-shrink: 0;
+  align-self: center;
   font-size: 12px;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--warning) 14%, var(--bg-secondary));
-  border-top: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .input-notice-text {
-  flex: 1 1 auto;
-  min-width: 0;
+  cursor: help;
 }
 
-.input-notice .btn {
-  padding: 2px 10px;
+.input-notice-sep {
+  opacity: 0.6;
+}
+
+.input-notice-action {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--text-primary);
   font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.input-notice-action:hover {
+  background: var(--bg-surface);
 }

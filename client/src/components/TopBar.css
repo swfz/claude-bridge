@@ -1,0 +1,355 @@
+/* トップバー。左＝接続・ブランド・今のセッション / 中央＝表示切替・パネル / 右＝使用量・モード・メニュー。
+   色はブランド名の文字（ピンク）と、注意喚起（切断・しきい値超え・共有モード中）だけに使う */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 12px 6px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  /* 共有モードの枠線と同じ太さを常に確保して、オンオフで高さが揺れないようにする */
+  border-top: 2px solid transparent;
+  min-height: 46px;
+}
+
+/* 共有モード中は「見せている画面」だと一目で分かるよう注意色の枠で囲む */
+.app-header.share-on {
+  border-top-color: var(--warning);
+  border-left: 2px solid var(--warning);
+  border-right: 2px solid var(--warning);
+  padding-left: 14px;
+  padding-right: 10px;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.connected {
+  background: var(--success);
+}
+
+.status-dot.disconnected {
+  background: var(--danger);
+}
+
+/* 今見ているセッション。ブランド名から少し離し、タイトルは 1 行で省略 */
+.topbar-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: 10px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.topbar-dir-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 対応するディレクトリグループが無い（色を持たない）ときは輪郭だけ */
+.topbar-dir-dot.none {
+  border: 1px solid var(--text-secondary);
+  opacity: 0.6;
+}
+
+.topbar-current-dir {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.topbar-current-title {
+  min-width: 0;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Raw / Chat のセグメントコントロール。選択中はニュートラルな背景で示す（ピンクで塗らない） */
+.view-toggle {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  border: 0.5px solid var(--border);
+}
+
+.toggle-btn {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toggle-btn.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.toggle-btn:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+/* パネルの切り替え。ボタン枠は持たず、開いているものだけ背景と細い枠で浮かせる */
+.topbar-panels {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.panel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  background: transparent;
+  border: 0.5px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.panel-tab:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.panel-tab.active {
+  background: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.panel-tab-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* 件数は色を付けず、数字だけ添える */
+.panel-tab-count {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.topbar-modes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.topbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 0.5px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.topbar-icon-btn:hover,
+.topbar-icon-btn.open {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* 通知: オフは斜線のベルを薄く、オンは通常のベルを濃く（形と濃さで示し、色では塗らない） */
+.notify-toggle {
+  opacity: 0.55;
+}
+
+.notify-toggle.on {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+/* 共有モード: 目のアイコン＋ラベル＋スイッチ。押すと何かを送るボタンに見えないよう枠は持たない */
+.mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 0.5px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mode-toggle svg {
+  font-size: 15px;
+}
+
+.mode-toggle:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.mode-toggle.on {
+  color: var(--warning);
+}
+
+.mode-switch {
+  position: relative;
+  width: 24px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--meter-track);
+  transition: background 0.15s;
+}
+
+.mode-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  transition: transform 0.15s;
+}
+
+.mode-toggle.on .mode-switch {
+  background: var(--warning);
+}
+
+.mode-toggle.on .mode-switch::after {
+  transform: translateX(10px);
+}
+
+.topbar-more {
+  position: relative;
+}
+
+.topbar-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+}
+
+.topbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.topbar-menu-item:hover {
+  background: var(--bg-surface);
+}
+
+/* 共有モード中の帯（トップバー直下）。件数だけ出し、タイトルやディレクトリ名は出さない */
+.share-band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  background: color-mix(in srgb, var(--warning) 14%, var(--bg-secondary));
+  border: 2px solid var(--warning);
+  border-top: none;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.share-band svg {
+  color: var(--warning);
+  font-size: 14px;
+}
+
+.share-band-off {
+  margin-left: auto;
+  padding: 2px 10px;
+  background: transparent;
+  border: 0.5px solid var(--warning);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.share-band-off:hover {
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+}

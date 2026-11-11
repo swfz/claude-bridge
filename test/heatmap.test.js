@@ -15,6 +15,20 @@ import {
   bucketTooltip,
   barWidthFor,
   periodEquals,
+  ACTIVITY_VIEWS,
+  BAR_GRANULARITIES,
+  OUTLIER_BASELINE_WEEKS,
+  OUTLIER_MULTIPLIER,
+  fetchedAtLabel,
+  legendTooltip,
+  normalizeActivityView,
+  normalizeGranularity,
+  outlierText,
+  outlierTooltip,
+  recentValues,
+  sparklinePoints,
+  summaryText,
+  weeklyOutlier,
 } from '../client/src/utils/heatmap.js';
 
 const day = (date, extra = {}) => ({
@@ -326,5 +340,174 @@ describe('barWidthFor / periodEquals', () => {
     assert.ok(!periodEquals({ from: 'a', to: 'b' }, { from: 'a', to: 'c' }));
     assert.ok(!periodEquals(null, { from: 'a', to: 'b' }));
     assert.ok(!periodEquals({ from: 'a', to: 'b' }, null));
+  });
+});
+
+describe('normalizeActivityView / normalizeGranularity', () => {
+  it('has four views and three bar granularities', () => {
+    assert.deepEqual(
+      ACTIVITY_VIEWS.map((v) => v.label),
+      ['草', '棒', '曜日', 'カレンダー'],
+    );
+    assert.deepEqual(
+      BAR_GRANULARITIES.map((g) => g.label),
+      ['日別', '週別', '月別'],
+    );
+  });
+
+  it('migrates the old daily / weekly / monthly views to bars with that granularity', () => {
+    assert.deepEqual(normalizeActivityView('daily'), { view: 'bars', granularity: 'day' });
+    assert.deepEqual(normalizeActivityView('weekly'), { view: 'bars', granularity: 'week' });
+    assert.deepEqual(normalizeActivityView('monthly'), { view: 'bars', granularity: 'month' });
+  });
+
+  it('keeps current views and falls back to heatmap', () => {
+    assert.deepEqual(normalizeActivityView('calendar'), { view: 'calendar', granularity: null });
+    assert.deepEqual(normalizeActivityView('bars'), { view: 'bars', granularity: null });
+    assert.deepEqual(normalizeActivityView(null), { view: 'heatmap', granularity: null });
+    assert.deepEqual(normalizeActivityView('bogus'), { view: 'heatmap', granularity: null });
+  });
+
+  it('accepts only known granularities', () => {
+    assert.equal(normalizeGranularity('week'), 'week');
+    assert.equal(normalizeGranularity('month'), 'month');
+    assert.equal(normalizeGranularity('year'), 'day');
+    assert.equal(normalizeGranularity(null), 'day');
+  });
+});
+
+describe('summaryText', () => {
+  it('reads as the total of the last N days', () => {
+    assert.equal(
+      summaryText({ messages: 1234, tokens: 2_500_000, activeDays: 10 }, 365),
+      '直近 365 日 · 1,234 メッセージ · 2.5M トークン · 稼働 10 日',
+    );
+  });
+
+  it('is empty without totals', () => {
+    assert.equal(summaryText(null, 365), '');
+  });
+});
+
+describe('legendTooltip', () => {
+  const days = [day('2026-01-05', { messages: 3, tokens: 1000 }), day('2026-01-06', { messages: 7, tokens: 5000 })];
+
+  it('describes the heatmap scale and the daily max', () => {
+    const text = legendTooltip({ view: 'heatmap', metric: 'messages', days });
+    assert.match(text, /少 .* 多/);
+    assert.match(text, /最大 7 \/ 日/);
+  });
+
+  it('uses the bucketed max for bars', () => {
+    assert.match(legendTooltip({ view: 'bars', metric: 'messages', granularity: 'day', days }), /最大 7 \/ 日/);
+    assert.match(legendTooltip({ view: 'bars', metric: 'tokens', granularity: 'week', days }), /最大 6\.0K \/ 週/);
+  });
+
+  it('explains the weekday totals', () => {
+    assert.match(legendTooltip({ view: 'weekday', metric: 'tokens', days }), /直近 2 日のトークン/);
+  });
+
+  it('falls back to the raw metric key and handles no days', () => {
+    assert.match(legendTooltip({ view: 'heatmap', metric: 'other', days: [] }), /other/);
+    assert.match(legendTooltip({ view: 'calendar', metric: 'messages', days }), /絞り込む/);
+  });
+});
+
+describe('fetchedAtLabel', () => {
+  it('includes the last fetched time', () => {
+    const at = new Date(2026, 10, 12, 9, 5).toISOString();
+    assert.equal(fetchedAtLabel(at), '集計し直す（最終取得 11/12 09:05）');
+    assert.equal(fetchedAtLabel(new Date(2026, 0, 2, 14, 30).getTime()), '集計し直す（最終取得 1/2 14:30）');
+  });
+
+  it('omits the time when unknown or invalid', () => {
+    assert.equal(fetchedAtLabel(undefined), '集計し直す');
+    assert.equal(fetchedAtLabel('not a date'), '集計し直す');
+  });
+});
+
+describe('weeklyOutlier', () => {
+  // 2026-01-05 は月曜。完全な週を weeks 個 + 今週を thisWeekDays 日
+  const build = (weekValues, thisWeekValue, thisWeekDays = 3) => {
+    const days = range('2026-01-05', weekValues.length * 7 + thisWeekDays);
+    weekValues.forEach((v, w) => {
+      days[w * 7].messages = v;
+    });
+    days[weekValues.length * 7].messages = thisWeekValue;
+    return days;
+  };
+
+  it('flags this week when it exceeds the multiplier times the previous average', () => {
+    const outlier = weeklyOutlier(build([10, 10, 10, 10], 25), 'messages');
+    assert.ok(outlier);
+    assert.equal(outlier.value, 25);
+    assert.equal(outlier.average, 10);
+    assert.equal(outlier.ratio, 2.5);
+    assert.equal(outlier.key, '2026-02-02');
+    assert.equal(outlierText(outlier), '今週 2.5×');
+    assert.match(outlierTooltip(outlier, 'messages'), new RegExp(`平均 10 の ${OUTLIER_MULTIPLIER} 倍`));
+  });
+
+  it('does not flag values at or below the threshold', () => {
+    assert.equal(weeklyOutlier(build([10, 10], 20), 'messages'), null);
+    assert.equal(weeklyOutlier(build([10, 10], 5), 'messages'), null);
+  });
+
+  it('uses only the most recent full weeks as the baseline', () => {
+    // 古い多忙な週は平均に入れない
+    const weeks = [1000, ...new Array(OUTLIER_BASELINE_WEEKS).fill(10)];
+    assert.ok(weeklyOutlier(build(weeks, 30), 'messages'));
+  });
+
+  it('ignores a partial first week and needs an active baseline', () => {
+    // 先頭が水曜から始まる欠けた週だけ → 比べる相手が無い
+    const partial = range('2026-01-07', 8);
+    partial[7].messages = 50;
+    assert.equal(weeklyOutlier(partial, 'messages'), null);
+    // 直前の週が全部 0 なら平均 0 で判定しない
+    assert.equal(weeklyOutlier(build([0, 0], 10), 'messages'), null);
+  });
+
+  it('returns null for too little data', () => {
+    assert.equal(weeklyOutlier([], 'messages'), null);
+    assert.equal(weeklyOutlier(undefined, 'messages'), null);
+    assert.equal(weeklyOutlier(range('2026-01-05', 3), 'messages'), null);
+    assert.equal(outlierText(null), '');
+    assert.equal(outlierTooltip(null, 'messages'), '');
+  });
+
+  it('accepts a custom multiplier and metric', () => {
+    const days = build([10, 10], 0);
+    days[14].tokens = 15;
+    days[0].tokens = 10;
+    days[7].tokens = 10;
+    assert.ok(weeklyOutlier(days, 'tokens', { multiplier: 1.2 }));
+    assert.equal(weeklyOutlier(days, 'tokens'), null);
+  });
+});
+
+describe('sparklinePoints / recentValues', () => {
+  it('maps values into the box with a 1px margin', () => {
+    assert.equal(sparklinePoints([0, 5, 10], { width: 10, height: 12 }), '0,11 5,6 10,1');
+  });
+
+  it('draws a flat baseline when everything is zero', () => {
+    assert.equal(sparklinePoints([0, 0], { width: 4, height: 10 }), '0,9 4,9');
+  });
+
+  it('handles a single value and empty input', () => {
+    assert.equal(sparklinePoints([3]), '0,1');
+    assert.equal(sparklinePoints([]), '');
+    assert.equal(sparklinePoints(undefined), '');
+  });
+
+  it('takes the last N days of the metric', () => {
+    const days = range('2026-01-01', 40).map((d, i) => ({ ...d, messages: i }));
+    const values = recentValues(days, 'messages');
+    assert.equal(values.length, 30);
+    assert.equal(values[0], 10);
+    assert.equal(values[29], 39);
+    assert.deepEqual(recentValues(days, 'tokens', 2), [0, 0]);
+    assert.deepEqual(recentValues(undefined, 'messages'), []);
   });
 });

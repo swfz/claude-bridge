@@ -12,8 +12,9 @@ test.describe('ホーム画面', () => {
   test('直近セッション一覧に fixture のタイトルと cwd が表示される', async ({ page }) => {
     await page.goto('/');
 
-    // WS 接続後にヘッダーの接続状態が Connected になる
-    await expect(page.locator('.connection-status')).toContainText('Connected');
+    // WS 接続後にヘッダーの接続状態が connected になる（接続中は緑の点だけで文字は出さない）
+    await expect(page.locator('.connection-status.connected')).toBeVisible();
+    await expect(page.locator('.connection-status')).not.toContainText('Disconnected');
 
     const row = page.locator('.home-row', { hasText: FIXTURE_TITLE });
     await expect(row).toBeVisible();
@@ -38,7 +39,7 @@ test.describe('ホーム画面', () => {
     await expect(chips.first()).toHaveAttribute('title', /E2E ヘルスチェックレポート/);
   });
 
-  test('活動パネルが草・日別・週別・月別・曜日の 5 ビューを切り替えられる', async ({ page }) => {
+  test('活動パネルが草・棒（日別・週別・月別）・曜日を切り替えられる', async ({ page }) => {
     await page.goto('/');
 
     const activity = page.locator('.activity');
@@ -48,6 +49,10 @@ test.describe('ホーム画面', () => {
     await expect(activity.locator('.activity-week')).toHaveCount(53, { timeout: 30_000 });
     // 1 年分の升目（先頭の週は曜日合わせで欠ける日がある）
     expect(await activity.locator('.activity-week .activity-cell').count()).toBeGreaterThanOrEqual(365);
+
+    // 粒度の切り替えは「棒」を選んでいる間だけ出る
+    await expect(activity.getByRole('button', { name: '日別' })).toHaveCount(0);
+    await activity.getByRole('button', { name: '棒', exact: true }).click();
 
     // 日別: 1 日 1 本の棒
     await activity.getByRole('button', { name: '日別' }).click();
@@ -72,7 +77,7 @@ test.describe('ホーム画面', () => {
 
     // メトリック切替はビューをまたいで効く（fixture の活動量には依存しない）
     await activity.getByRole('button', { name: 'トークン' }).click();
-    await expect(activity.locator('.activity-segment.active')).toHaveText(['曜日', 'トークン']);
+    await expect(activity.locator('.activity-segment.active')).toHaveText(['トークン', '曜日']);
 
     await activity.getByRole('button', { name: '草' }).click();
     await expect(activity.locator('.activity-week')).toHaveCount(53);
@@ -83,6 +88,7 @@ test.describe('ホーム画面', () => {
 
     const activity = page.locator('.activity');
     await expect(activity.locator('.activity-week')).toHaveCount(53, { timeout: 30_000 });
+    await activity.getByRole('button', { name: '棒', exact: true }).click();
     await activity.getByRole('button', { name: '日別' }).click();
 
     // fixture の活動は 2 日ぶん。どのローカル TZ でも 2 日に分かれる（25 時間差）ので、
@@ -94,6 +100,8 @@ test.describe('ホーム画面', () => {
 
     // その日に活動したセッションだけが一覧に残る
     await expect(page.locator('.home-period-chip')).toBeVisible();
+    // 活動パネルの見出しは合計の代わりに絞り込み中の期間を出す
+    await expect(activity.locator('.activity-filtering')).toContainText('で絞り込み中');
     await expect(page.locator('.home-row', { hasText: FIXTURE_TITLE })).toBeVisible();
     await expect(page.locator('.home-row', { hasText: FIXTURE_SECOND_TITLE })).toHaveCount(0);
 
@@ -123,22 +131,23 @@ test.describe('ホーム画面', () => {
     await expect(interrupted).toContainText('次はビルドを流し直して計測してください');
     await expect(consult.locator('.home-row-away-label')).toHaveCount(0);
 
-    const filter = page.locator('.home-completion-filter');
-    await expect(filter.getByRole('button', { name: '途中で終了 1' })).toBeVisible();
-    await expect(filter.getByRole('button', { name: '相談のみ 2' })).toBeVisible();
-    await expect(filter.getByRole('button', { name: '回答待ち 1' })).toBeVisible();
-    await expect(filter.getByRole('button', { name: '完了 0' })).toBeVisible();
+    // 状態ごとの件数はプルダウン 1 つに畳んである
+    const filter = page.locator('select.home-completion-filter');
+    await expect(filter.locator('option', { hasText: '途中で終了 1' })).toHaveCount(1);
+    await expect(filter.locator('option', { hasText: '相談のみ 2' })).toHaveCount(1);
+    await expect(filter.locator('option', { hasText: '回答待ち 1' })).toHaveCount(1);
+    await expect(filter.locator('option', { hasText: '完了 0' })).toHaveCount(1);
 
-    await filter.getByRole('button', { name: '途中で終了 1' }).click();
+    await filter.selectOption({ label: '途中で終了 1' });
     await expect(page.locator('.home-row')).toHaveCount(1);
     await expect(interrupted).toBeVisible();
 
-    // もう一度押すと解除
-    await filter.getByRole('button', { name: '途中で終了 1' }).click();
+    // 「すべて」に戻すと解除
+    await filter.selectOption('');
     await expect(consult).toBeVisible();
     await expect(interrupted).toBeVisible();
 
-    await filter.getByRole('button', { name: '回答待ち 1' }).click();
+    await filter.selectOption({ label: '回答待ち 1' });
     await expect(page.locator('.home-row')).toHaveCount(1);
     await expect(asking).toBeVisible();
   });

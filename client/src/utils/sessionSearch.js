@@ -69,3 +69,17 @@ export function filterByProject(list, project) {
   if (!project) return items;
   return items.filter((session) => parseCwd(session?.cwd).project === project);
 }
+
+// 起動中セッションのプロジェクトを件数の多い順に並べる（同数は名前順）。フィルターのチップ用。
+// cwd は色ドットを引くための代表（最初に見つかったもの）
+export function rankProjects(list) {
+  const byProject = new Map();
+  for (const session of list || []) {
+    const { project } = parseCwd(session?.cwd);
+    if (!project) continue;
+    const entry = byProject.get(project) || { project, count: 0, cwd: session.cwd };
+    entry.count += 1;
+    byProject.set(project, entry);
+  }
+  return [...byProject.values()].sort((a, b) => b.count - a.count || a.project.localeCompare(b.project));
+}
