@@ -437,7 +437,7 @@ export default function SessionTabs({
                 e.stopPropagation();
                 onToggleStar(session.claudeSessionId);
               }}
-              title={isStarredTab ? 'Star を外す' : 'Star を付ける（未解決／続きをやる）'}
+              title={isStarredTab ? 'Star: 付いている（押すと外す）' : 'Star: なし（押すと付ける＝未解決／続きをやる）'}
               aria-label={isStarredTab ? 'Star を外す' : 'Star を付ける'}
               aria-pressed={isStarredTab}
             >
@@ -451,7 +451,11 @@ export default function SessionTabs({
                 e.stopPropagation();
                 onToggleSensitive(session.claudeSessionId);
               }}
-              title={isSensitiveTab ? '共有モードで隠す指定を外す' : '共有モード中は隠す'}
+              title={
+                isSensitiveTab
+                  ? '共有モードで隠す: オン（押すと解除）'
+                  : '共有モードで隠す: オフ（押すと共有モード中はこのタブを隠す）'
+              }
               aria-label={isSensitiveTab ? '共有モードで隠す指定を外す' : '共有モード中は隠す'}
               aria-pressed={isSensitiveTab}
             >

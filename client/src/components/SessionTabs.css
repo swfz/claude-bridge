@@ -282,9 +282,21 @@
   color: var(--danger);
 }
 
-/* 付いている印はボタンでも印と同じ色で示す（押すと外れることが分かるように） */
-.tab-toggle-star.on {
+/* 付いている印は「押されたボタン」に見せる（色付きのアイコン＋同色の薄い下地）。
+   アイコンの形（塗り／枠、閉じた鍵／開いた鍵）だけだと、灰色同士で今の状態が読み取りにくいため */
+.tab-toggle-star.on,
+.tab-toggle-lock.on {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.tab-toggle-star.on,
+.tab-toggle-star.on:hover {
   color: #e3a21a;
+}
+
+.tab-toggle-lock.on,
+.tab-toggle-lock.on:hover {
+  color: var(--warning);
 }
 
 /* ==== 行頭の状態ドット（状態はここ 1 か所だけで表す） ==== */
