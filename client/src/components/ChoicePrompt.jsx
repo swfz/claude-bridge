@@ -61,8 +61,9 @@ export default function ChoicePrompt({ prompt, waitingFor, error, onAnswer, onRe
       setFreeTextIndex(option.index);
       return;
     }
-    // 単一選択は数字キーで即確定、multiSelect は数字キーでトグルされる
-    onAnswer({ keys: [String(option.index)] });
+    // 単一選択は数字キーで即確定、multiSelect は数字キーでトグルされる。
+    // preview 付き（左右分割）のレイアウトだけは数字キーがカーソル移動なので Enter で確定する
+    onAnswer({ keys: prompt.preview ? [String(option.index), 'Enter'] : [String(option.index)] });
   };
 
   return (

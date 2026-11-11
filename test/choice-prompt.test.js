@@ -166,6 +166,24 @@ ${RULE}
   -- INSERT -- ⏵⏵ auto mode on (shift+tab to cycle)
 `;
 
+// preview 付きの AskUserQuestion（v2.1.322 の実測）。選択肢の右にプレビュー枠が並び、
+// 数字キーはカーソル移動だけで確定しない
+const PREVIEW_SELECT = `
+❯ AskUserQuestion で1問だけ質問して
+${RULE}
+ ☐ 図の選択
+どの図？
+❯ 1. A                            ┌──────────────────────────────────────────┐
+  2. B                            │ [Client] --> [API] --> [DB]              │
+                                  │    |                                     │
+                                  │    +--> [Cache]                          │
+                                  └──────────────────────────────────────────┘
+                                  Notes: press n to add notes
+${RULE}
+  Chat about this
+Enter to select · ↑/↓ to navigate · n to add notes · Esc to cancel
+`;
+
 describe('parseChoicePrompt', () => {
   it('parses a single-select AskUserQuestion prompt', () => {
     const prompt = parseChoicePrompt(SINGLE_SELECT);
@@ -359,5 +377,22 @@ Enter to select · ↑/↓ to navigate · Esc to cancel`;
       prompt.options.map((o) => o.label),
       ['新しいA', '新しいB'],
     );
+  });
+
+  it('preview 付きの左右分割レイアウトを preview として返し、ラベルから枠線を外す', () => {
+    const p = parseChoicePrompt(PREVIEW_SELECT);
+    assert.equal(p.preview, true);
+    assert.equal(p.question, 'どの図？');
+    assert.deepEqual(
+      p.options.map((o) => [o.index, o.label, o.description, o.cursor]),
+      [
+        [1, 'A', '', true],
+        [2, 'B', '', false],
+      ],
+    );
+  });
+
+  it('preview の無い通常の選択肢は preview: false', () => {
+    assert.equal(parseChoicePrompt(SINGLE_SELECT).preview, false);
   });
 });
