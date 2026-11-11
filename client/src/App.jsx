@@ -21,6 +21,7 @@ import HomeView from './components/HomeView.jsx';
 import RateLimitMeter from './components/RateLimitMeter.jsx';
 import ContextMeter from './components/ContextMeter.jsx';
 import { loadStarred, saveStarred, toggleStarred } from './utils/starredSessions.js';
+import { applyTabOrder, loadTabOrder, moveTab, saveTabOrder } from './utils/tabOrder.js';
 import { periodEquals } from './utils/heatmap.js';
 import {
   loadSensitive,
@@ -1130,10 +1131,23 @@ export default function App() {
 
   // 画面全体のキー操作（Ctrl+D/U の半画面スクロール、Alt+Shift+J/K・Alt+数字 のタブ移動）。
   // タブの並びと絞り込みはサイドバー（SessionTabs）と同じにする（隠しているタブへ飛ばないように）
+  // サイドバーのタブの並び（D&D で入れ替えたもの。localStorage だけで持つ）
+  const [tabOrder, setTabOrder] = useState(loadTabOrder);
+  const orderedSessions = useMemo(() => applyTabOrder(sessions, tabOrder), [sessions, tabOrder]);
+  const handleReorderTab = useCallback(
+    (fromId, targetId, after) => {
+      const next = moveTab(orderedSessions, fromId, targetId, after);
+      setTabOrder(next);
+      saveTabOrder(next);
+    },
+    [orderedSessions],
+  );
   const keyboardTabIds = useMemo(
     () =>
-      sessions.filter((s) => !(shareMode && s.claudeSessionId && sensitiveIds.has(s.claudeSessionId))).map((s) => s.id),
-    [sessions, shareMode, sensitiveIds],
+      orderedSessions
+        .filter((s) => !(shareMode && s.claudeSessionId && sensitiveIds.has(s.claudeSessionId)))
+        .map((s) => s.id),
+    [orderedSessions, shareMode, sensitiveIds],
   );
   useGlobalKeys({
     tabs: keyboardTabIds,
@@ -1572,7 +1586,7 @@ export default function App() {
 
       <div className="app-body">
         <SessionTabs
-          sessions={sessions}
+          sessions={orderedSessions}
           activeSessionId={showHome ? null : activeSessionId}
           homeActive={showHome}
           attentionIds={attentionIds}
@@ -1588,6 +1602,7 @@ export default function App() {
           onDetachTmux={handleDetachTmux}
           onCloseReadonly={handleCloseReadonly}
           onNew={() => setShowNewSession(true)}
+          onReorder={handleReorderTab}
         />
 
         <div className="app-workspace">
