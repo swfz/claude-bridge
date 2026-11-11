@@ -17,8 +17,11 @@ export default function CodeBlock({ children, className }) {
     return <MermaidBlock code={code} />;
   }
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
+  // PiP 窓（PreviewPip）に portal で描かれたときは、その窓の clipboard を使う。
+  // Clipboard API は呼び出し元 document のフォーカスを要求するので、親の navigator だと失敗する
+  const handleCopy = (e) => {
+    const win = e.currentTarget.ownerDocument.defaultView || window;
+    win.navigator.clipboard.writeText(code).catch((err) => console.warn('[copy] failed', err));
   };
 
   return (

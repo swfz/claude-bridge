@@ -233,7 +233,9 @@ TUI に出る「番号つきの選択肢」をブラウザから選べるよう�
 
 ### ファイルプレビューの種別（PreviewDrawer）
 
-拡張子ごとの描き分けは `client/src/utils/previewExts.js` の配列が唯一の定義で、`PreviewDrawer` はそれを見て `isImage` / `isHtml` / `isPdf` / `isVideo` / `isText` / `isMarkdownFile` / `isTable` を決める。
+拡張子ごとの描き分けは `client/src/utils/previewExts.js` の配列が唯一の定義で、`hooks/usePreviewSource.js` がそれを見て `isImage` / `isHtml` / `isPdf` / `isVideo` / `isText` / `isMarkdownFile` / `isTable` を決め、本文の読み込み・ハイライト・表の分解まで行う（`PreviewDrawer` と `PreviewPip` で共用。テキスト本文と frontmatter 表・Markdown の `components` は `PreviewContent.jsx`、URL は `utils/previewUrl.js`）。
+
+- **小窓（Document Picture-in-Picture）**: ドロワーのヘッダの「小窓」で、今のプレビューを PiP 窓に移す（`PreviewPip.jsx`。`'documentPictureInPicture' in window` が偽＝Chromium 以外ではボタンを出さない）。状態は App の `pipPreview`（`previewData` とは別で `activeSessionId` / `showHome` に依存させない）なので、**他のタブやホームへ移っても残る**。描画は `createPortal` で PiP の `body` に流し、親の `<style>` / `<link>` を複製し、`body.light-mode` は MutationObserver で追従させる。PiP の document は about:blank 由来なので、`img` / `iframe` / `video` の URL は `previewUrl(path, location.origin)` で絶対 URL にする（`fetch` は親の realm で走るので相対のままでよい）。**閲覧専用**で、レビュー・行ピック・選択コメントは持ち込まない（どれもメインの `document` に keydown 等を張るので、他セッションを操作している最中のキーを横取りしてしまう）。`requestWindow()` は user activation が要るのでクリックハンドラから直接呼ぶ。PiP 窓はタブにつき 1 つで、新しく開くとブラウザが前の窓を閉じる（その `pagehide` で新しい state を消さないよう、`handleClosePip` は自分の窓のときだけ片付ける）
 
 - **右側の「レビュースレッド」欄は見出しのクリックで畳める**（幅 32px の縦帯になり本文に幅を返す。localStorage `previewReviewPaneCollapsed`）。畳んでいても未送信の指摘欄が増えたら（行ピックの Enter 等）自動で開く（書けない欄にフォーカスが飛ばないように）
 

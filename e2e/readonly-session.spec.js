@@ -126,6 +126,21 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await page.keyboard.press('Escape');
   await expect(pinTarget).not.toHaveClass(/pinned/);
 
+  // プレビューは「小窓」で Document Picture-in-Picture に移せる（ドロワーは閉じる）。
+  // PiP の document は親のスクリプトから documentPictureInPicture.window で覗く
+  const pipState = () =>
+    page.evaluate(() => {
+      const w = globalThis.documentPictureInPicture?.window;
+      return w ? (w.document.querySelector('.drawer-markdown')?.textContent ?? '') : null;
+    });
+  const hasPip = await page.evaluate(() => 'documentPictureInPicture' in globalThis);
+  if (hasPip) {
+    await page.locator('.chat-message.assistant .btn-header-action', { hasText: 'Preview' }).first().click();
+    await page.locator('.drawer button', { hasText: '小窓' }).click();
+    await expect(page.locator('.drawer-overlay')).toHaveCount(0);
+    await expect.poll(pipState).toContain('ヘルスチェックのエンドポイントを追加します');
+  }
+
   // 開いたセッションはサイドバーのタブとしても残る
   const tab = page.locator('.tab', { hasText: FIXTURE_TITLE });
   await expect(tab).toHaveCount(1);
@@ -135,4 +150,11 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await page.locator('.tab-home').click();
   await expect(page.locator('.home-view')).toBeVisible();
   await expect(tab).toHaveCount(1);
+
+  // PiP はセッションに紐づかないのでホームへ移っても残り、窓を閉じると消える
+  if (hasPip) {
+    await expect.poll(pipState).toContain('ヘルスチェックのエンドポイントを追加します');
+    await page.evaluate(() => globalThis.documentPictureInPicture.window.close());
+    await expect.poll(pipState).toBeNull();
+  }
 });
