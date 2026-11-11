@@ -82,6 +82,42 @@ function collectSessionFiles(dir) {
   return candidates;
 }
 
+// `claude -p`（非対話の print モード）で動いたセッションか。JSONL の各レコードに書かれる
+// `entrypoint` が `sdk-cli`（対話は `cli`）になる。セッション内で変わらないので見つかった
+// 値はファイル単位で永続キャッシュする（先頭が session-owner / queue-operation のように
+// entrypoint を持たないレコードのこともあるので数行読む。見つからなければキャッシュしない）
+const entrypointCache = new Map();
+const ENTRYPOINT_HEAD_LINES = 20;
+
+export async function readSessionEntrypoint(filePath) {
+  if (entrypointCache.has(filePath)) return entrypointCache.get(filePath);
+  let lines;
+  try {
+    lines = await readFirstLines(filePath, ENTRYPOINT_HEAD_LINES);
+  } catch {
+    return null;
+  }
+  for (const line of lines) {
+    if (!line.includes('"entrypoint"')) continue;
+    try {
+      const { entrypoint } = JSON.parse(line);
+      if (typeof entrypoint === 'string') {
+        entrypointCache.set(filePath, entrypoint);
+        return entrypoint;
+      }
+    } catch {
+      // 書きかけの行は飛ばす
+    }
+  }
+  return null;
+}
+
+export function clearEntrypointCache() {
+  entrypointCache.clear();
+}
+
+export const isHeadlessEntrypoint = (entrypoint) => entrypoint === 'sdk-cli';
+
 // ホーム画面用: 直近 days 日以内に更新されたセッション。
 // 起動中かどうかは見ない（突合はクライアント側）。
 export async function listRecentSessions({
@@ -91,6 +127,7 @@ export async function listRecentSessions({
   now = Date.now(),
   includeSessionIds = [],
   sessionIds = null,
+  includeHeadless = true,
 } = {}) {
   const since = now - days * 24 * 60 * 60 * 1000;
   // Star を付けたセッションは「続きをやる」印なので、期間外でも limit で切らずに必ず返す
@@ -99,10 +136,17 @@ export async function listRecentSessions({
   // 活動グラフの棒で期間を選んだときは ID の集合で絞る。mtime は「最後に更新した日」
   // でしかなく、その日に活動して後日また続けたセッションが漏れるため使わない
   const inRange = sessionIds ? (c) => sessionIds.has(c.sessionId) : (c) => c.mtimeMs >= since;
-  const top = [
-    ...files.filter((c) => pinned.has(c.sessionId)),
-    ...files.filter((c) => !pinned.has(c.sessionId) && inRange(c)).slice(0, limit),
-  ].sort((a, b) => b.mtimeMs - a.mtimeMs);
+  let candidates = files.filter((c) => !pinned.has(c.sessionId) && inRange(c));
+  // `claude -p` のセッション（スケジュール実行など）は数が多く一覧を埋めるので、
+  // 除外するときは limit で切る前に落とす（後で落とすと表示件数が減るだけになる）。
+  // Star を付けたものは明示的に残したい印なので除外しない
+  if (!includeHeadless) {
+    const entrypoints = await Promise.all(candidates.map((c) => readSessionEntrypoint(c.filePath)));
+    candidates = candidates.filter((_, i) => !isHeadlessEntrypoint(entrypoints[i]));
+  }
+  const top = [...files.filter((c) => pinned.has(c.sessionId)), ...candidates.slice(0, limit)].sort(
+    (a, b) => b.mtimeMs - a.mtimeMs,
+  );
 
   return Promise.all(
     top.map(async (c) => {
