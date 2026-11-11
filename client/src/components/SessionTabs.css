@@ -282,6 +282,23 @@
   color: var(--danger);
 }
 
+/* 付いている印は「押されたボタン」に見せる（色付きのアイコン＋同色の薄い下地）。
+   アイコンの形（塗り／枠、閉じた鍵／開いた鍵）だけだと、灰色同士で今の状態が読み取りにくいため */
+.tab-toggle-star.on,
+.tab-toggle-lock.on {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.tab-toggle-star.on,
+.tab-toggle-star.on:hover {
+  color: #e3a21a;
+}
+
+.tab-toggle-lock.on,
+.tab-toggle-lock.on:hover {
+  color: var(--warning);
+}
+
 /* ==== 行頭の状態ドット（状態はここ 1 か所だけで表す） ==== */
 
 .tab-status {
@@ -452,10 +469,12 @@
   margin-top: 0;
 }
 
+/* 見出しの下に入っていることが分かるよう、行を少しだけ字下げする（折りたたみ表示では 0 に戻す） */
 .tab-group-body {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  margin-left: 12px;
 }
 
 .tab-group-header {
@@ -650,6 +669,7 @@
 .session-tabs.collapsed .tab-group-body {
   align-items: center;
   gap: 4px;
+  margin-left: 0;
 }
 
 .tab-group-mini-dot {

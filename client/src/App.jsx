@@ -1808,6 +1808,8 @@ export default function App() {
           onDetachTmux={handleDetachTmux}
           onTerminateTmux={handleTerminateTmuxTab}
           onCloseReadonly={handleCloseReadonly}
+          onToggleStar={handleToggleStar}
+          onToggleSensitive={handleToggleSensitive}
           onNew={() => setShowNewSession(true)}
           onReorder={handleReorderTab}
         />

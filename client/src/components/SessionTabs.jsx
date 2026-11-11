@@ -5,10 +5,12 @@ import {
   TbFolder,
   TbGitBranch,
   TbLock,
+  TbLockOpen,
   TbPencil,
   TbPictureInPicture,
   TbPower,
   TbRefresh,
+  TbStar,
   TbStarFilled,
   TbTag,
   TbTerminal2,
@@ -68,6 +70,8 @@ export default function SessionTabs({
   onDetachTmux,
   onTerminateTmux,
   onCloseReadonly,
+  onToggleStar,
+  onToggleSensitive,
   onNew,
   onReorder,
 }) {
@@ -328,7 +332,7 @@ export default function SessionTabs({
     const { project, worktree } = parseCwd(session.cwd);
     const hasAttention = session.alive && attentionIds?.has(session.id);
     const isWaiting = Boolean(session.waitingFor) && session.alive;
-    // Star / センシティブはホームと同じ claudeSessionId 単位。ここは表示専用（付け外しはホーム）
+    // Star / センシティブはホームと同じ claudeSessionId 単位。付け外しは展開表示のホバーボタンとホーム
     const isStarredTab = Boolean(session.claudeSessionId && starredIds?.has(session.claudeSessionId));
     const isSensitiveTab = Boolean(session.claudeSessionId && sensitiveIds?.has(session.claudeSessionId));
     // プレビューを小窓（PiP）に出しているセッション。小窓は他のタブへ移っても残るので、どこから開いたかを示す
@@ -425,6 +429,39 @@ export default function SessionTabs({
           )}
         </div>
         <span className="tab-actions">
+          {/* Star / 🔒 の付け外し。キーが claudeSessionId なので未解決のタブには出さない */}
+          {session.claudeSessionId && onToggleStar && (
+            <button
+              className={`tab-action tab-toggle-star${isStarredTab ? ' on' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleStar(session.claudeSessionId);
+              }}
+              title={isStarredTab ? 'Star: 付いている（押すと外す）' : 'Star: なし（押すと付ける＝未解決／続きをやる）'}
+              aria-label={isStarredTab ? 'Star を外す' : 'Star を付ける'}
+              aria-pressed={isStarredTab}
+            >
+              {isStarredTab ? <TbStarFilled /> : <TbStar />}
+            </button>
+          )}
+          {session.claudeSessionId && onToggleSensitive && (
+            <button
+              className={`tab-action tab-toggle-lock${isSensitiveTab ? ' on' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleSensitive(session.claudeSessionId);
+              }}
+              title={
+                isSensitiveTab
+                  ? '共有モードで隠す: オン（押すと解除）'
+                  : '共有モードで隠す: オフ（押すと共有モード中はこのタブを隠す）'
+              }
+              aria-label={isSensitiveTab ? '共有モードで隠す指定を外す' : '共有モード中は隠す'}
+              aria-pressed={isSensitiveTab}
+            >
+              {isSensitiveTab ? <TbLock /> : <TbLockOpen />}
+            </button>
+          )}
           {session.alive && session.type === 'tmux' && onTerminateTmux && (
             <button
               className="tab-action tab-terminate"
