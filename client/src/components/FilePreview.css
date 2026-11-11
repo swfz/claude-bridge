@@ -1,86 +1,90 @@
+/* 本文中のファイル名。チャットのツール行と同じ作法で、箱・ピンク・常時のボタンを持たず
+   文の流れに収まる 1 行（アイコン＋薄いディレクトリ＋ファイル名）にする */
+/* ただし本文の中で「どこにファイルがあるか」は一目で拾えないと困るので、枠は付けずに
+   リンク色（--accent-secondary）の薄い下地のピルで囲み、アイコンもリンク色にする。
+   名前は下地に沈まないよう本文色の太字にする */
 .file-preview-inline {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 6px 0;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.file-link-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  max-width: 100%;
+  margin: 1px 0;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-secondary) 14%, transparent);
+  vertical-align: baseline;
 }
 
 .file-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  background: rgba(233, 69, 96, 0.15);
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 700;
   flex-shrink: 0;
+  align-self: center;
+  font-size: 13px;
+  color: var(--accent-secondary);
 }
 
 .file-link {
+  min-width: 0;
   background: none;
   border: none;
-  color: var(--accent);
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
   padding: 0;
-  text-decoration: none;
-  word-break: break-all;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 0.9em;
   text-align: left;
-}
-
-.file-link:hover {
-  text-decoration: underline;
-}
-
-.file-btn {
-  border: 1px solid var(--border);
-  font-size: 11px;
-  padding: 2px 10px;
-  border-radius: 4px;
+  overflow-wrap: anywhere;
   cursor: pointer;
-  white-space: nowrap;
-  font-weight: 500;
 }
 
-.file-btn-preview {
-  background: none;
+.file-dir {
   color: var(--text-secondary);
+  opacity: 0.75;
 }
 
-.file-btn-preview:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.file-name {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
+.file-link:hover .file-name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* プレビューできない種別は押せる見た目にしない */
+.file-preview-inline.disabled .file-link {
+  cursor: default;
+}
+
+.file-preview-inline.disabled .file-name {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+/* レビューはホバー時だけ（枠付きの小さなボタン）。出し入れで行が揺れないよう幅は確保しない */
 .file-btn-review {
-  background: rgba(233, 69, 96, 0.1);
-  color: var(--accent);
-  border-color: var(--accent);
+  display: none;
+  align-self: center;
+  padding: 0 8px;
+  background: none;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.file-preview-inline:hover .file-btn-review,
+.file-preview-inline:focus-within .file-btn-review {
+  display: inline-block;
 }
 
 .file-btn-review:hover {
-  background: rgba(233, 69, 96, 0.2);
+  background: var(--bg-surface);
 }
 
-.file-path-display {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-  word-break: break-all;
-  opacity: 0.7;
+@media (hover: none) {
+  .file-btn-review {
+    display: inline-block;
+  }
 }

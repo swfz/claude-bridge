@@ -343,21 +343,34 @@
   -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
 }
 
+/* 折りたたんだ本文の続き。フェードした本文の直下に枠付きの小さなボタンで置き、
+   どこを押せば読めるかが一目で分かるようにする */
 .expand-bar {
-  display: block;
-  width: 100%;
-  background: none;
-  border: none;
-  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 3px 12px 3px 8px;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--text-secondary);
+  border-radius: 8px;
+  color: var(--text-primary);
   font-size: 12px;
-  padding: 4px 0;
-  margin-top: 2px;
   cursor: pointer;
-  text-align: left;
+}
+
+.expand-bar svg {
+  font-size: 14px;
 }
 
 .expand-bar:hover {
-  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.expand-bar-count {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* アクションボタン */
@@ -482,7 +495,7 @@
   color: var(--text-primary);
 }
 
-/* .file-link（FilePreview.css のピンク・太字）は p キーの目印として付けているだけなので見た目は打ち消す */
+/* .file-link（本文中のファイル名の見た目。FilePreview.css）は p キーの目印として付けているだけなので見た目は打ち消す */
 .tool-line .tool-line-name {
   color: var(--text-primary);
   font-weight: 400;

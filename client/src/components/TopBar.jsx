@@ -1,59 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
-import { TbBell, TbBellOff, TbDots, TbEye, TbEyeOff, TbMoon, TbSun } from 'react-icons/tb';
+import { TbBell, TbBellOff, TbEye, TbEyeOff, TbMoon, TbSun } from 'react-icons/tb';
 import { parseCwd } from '../utils/cwdLabel.js';
 import UsageMeter from './UsageMeter.jsx';
 import './TopBar.css';
 
-// 「…」メニュー（設定）。外側クリック・Esc で閉じる
-function MoreMenu({ appTheme, onToggleTheme }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e) => {
-      if (!rootRef.current?.contains(e.target)) setOpen(false);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
+// テーマの切り替え。メニューに挟まずアイコン 1 つで切り替える（今がダークなら太陽＝ライトへ）
+function ThemeToggle({ appTheme, onToggleTheme }) {
   const dark = appTheme !== 'light';
+  const label = dark ? 'ライトテーマにする' : 'ダークテーマにする';
   return (
-    <div className="topbar-more" ref={rootRef}>
-      <button
-        type="button"
-        className={`topbar-icon-btn${open ? ' open' : ''}`}
-        onClick={() => setOpen((v) => !v)}
-        aria-label="その他の設定"
-        aria-expanded={open}
-        title="その他の設定"
-      >
-        <TbDots />
-      </button>
-      {open && (
-        <div className="topbar-menu" role="menu">
-          <button
-            type="button"
-            role="menuitem"
-            className="topbar-menu-item"
-            onClick={() => {
-              onToggleTheme();
-              setOpen(false);
-            }}
-          >
-            {dark ? <TbSun /> : <TbMoon />}
-            {dark ? 'ライトテーマにする' : 'ダークテーマにする'}
-          </button>
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      className="topbar-icon-btn theme-toggle"
+      onClick={onToggleTheme}
+      aria-label={label}
+      title={label}
+    >
+      {dark ? <TbSun /> : <TbMoon />}
+    </button>
   );
 }
 
@@ -75,7 +38,7 @@ function CurrentSession({ session }) {
 
 // アプリのトップバー。要素を性質ごとにまとめて並べる:
 // 左＝接続状態のドット・ブランド名・今のセッション / 中央＝表示の切り替え・パネルのタブ /
-// 右＝使用量・モード（共有・通知）・「…」メニュー。
+// 右＝使用量・モード（共有・通知）・テーマ切り替え。
 // panels は [{key, label, icon, active, onClick, count, title}]（App 側で出し分ける）
 export default function TopBar({
   connected,
@@ -177,7 +140,7 @@ export default function TopBar({
               </button>
             )}
           </div>
-          <MoreMenu appTheme={appTheme} onToggleTheme={onToggleTheme} />
+          <ThemeToggle appTheme={appTheme} onToggleTheme={onToggleTheme} />
         </div>
       </header>
       {shareMode && (
