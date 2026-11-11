@@ -62,6 +62,7 @@ export default function PreviewDrawer({
   onDeleteComment,
   fileComments,
   responses,
+  onOpenPip,
 }) {
   const draftKey = reviewDraftKey(filePath, title);
   const [reviewItems, setReviewItems] = useState(() => (draftKey && reviewDrafts.get(draftKey)) || []);
@@ -870,6 +871,15 @@ export default function PreviewDrawer({
               <a href={previewUrl(filePath)} target="_blank" rel="noopener noreferrer" className="drawer-btn">
                 別タブ
               </a>
+            )}
+            {onOpenPip && (
+              <button
+                className="drawer-btn"
+                onClick={onOpenPip}
+                title="小窓（Picture-in-Picture）に出して、他のセッションを見ながら読む"
+              >
+                小窓
+              </button>
             )}
             <button className="drawer-close" onClick={onClose}>
               x
