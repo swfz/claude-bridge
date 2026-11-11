@@ -87,6 +87,17 @@ body.light-mode {
   --cal-7: #7c8043;
 }
 
+/* スクロールバーはどこでも細く・薄くし、カーソルが乗っている領域だけ少し濃くする
+   （灰色の太いバーが画面のあちこちで目立っていたため）。トラックは透明 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 22%, transparent) transparent;
+}
+
+*:hover {
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 45%, transparent) transparent;
+}
+
 /* mermaid 図 — 本文の明暗に関わらず白地カードで表示する */
 .mermaid-block {
   background: #ffffff;
