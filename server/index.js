@@ -13,6 +13,7 @@ import { JsonlWatcher } from './jsonl-watcher.js';
 import { CLAUDE_PROJECTS_DIR, cwdToProjectDir } from './jsonl-utils.js';
 import { readSessionSummary } from './session-summary.js';
 import { readSessionTurns } from './session-turns.js';
+import { readRecentExchanges } from './session-recent.js';
 import { listClaudeTmuxPanes, resolveTmuxJsonlTarget, resumeInTmuxWindow, TmuxSessionManager } from './tmux-session.js';
 import { listClaudeAgents } from './claude-agents.js';
 import { enrichPanesWithSessionMeta, readStatusByPid } from './claude-session-meta.js';
@@ -1224,6 +1225,31 @@ wss.on('connection', (ws) => {
                 type: 'session_turns',
                 sessionId,
                 error: `ターン詳細を読めませんでした: ${err.message}`,
+              }),
+            );
+          });
+        break;
+      }
+
+      case 'get_session_recent': {
+        // ホームの行リストの「直近のやりとり」ポップオーバー。ホバーで開いたときだけ呼ばれる。
+        // get_session_turns と同じく、パスはクライアントから受け取らず検証した値から組み立てる
+        const { sessionId, projectDir } = msg;
+        if (typeof sessionId !== 'string' || !/^[\w-]+$/.test(sessionId) || !isValidProjectDir(projectDir)) {
+          ws.send(JSON.stringify({ type: 'session_recent', sessionId, error: 'セッションの指定が不正です' }));
+          break;
+        }
+        const filePath = join(CLAUDE_PROJECTS_DIR, projectDir, `${sessionId}.jsonl`);
+        readRecentExchanges(filePath)
+          .then((result) => {
+            ws.send(JSON.stringify({ type: 'session_recent', sessionId, ...result }));
+          })
+          .catch((err) => {
+            ws.send(
+              JSON.stringify({
+                type: 'session_recent',
+                sessionId,
+                error: `直近のやりとりを読めませんでした: ${err.message}`,
               }),
             );
           });
