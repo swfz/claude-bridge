@@ -6,6 +6,7 @@ import {
   annotateRecentSessions,
   findUnmatchedTabs,
   statusClass,
+  terminateConfirmMessage,
   formatElapsed,
   readonlyDeliveryState,
 } from '../client/src/utils/runningSessions.js';
@@ -193,5 +194,22 @@ describe('readonlyDeliveryState', () => {
 
   it('is stopped when the tab has no claudeSessionId', () => {
     assert.equal(readonlyDeliveryState({ id: 't2' }, []).kind, 'stopped');
+  });
+});
+
+describe('terminateConfirmMessage', () => {
+  it('names the session and tmux target', () => {
+    const msg = terminateConfirmMessage({ name: 'my-task', status: 'idle', target: 'main:2.0' });
+    assert.match(msg, /「my-task」（tmux main:2\.0）の claude を終了/);
+    assert.doesNotMatch(msg, /作業中/);
+  });
+
+  it('warns when the session is busy', () => {
+    assert.match(terminateConfirmMessage({ name: 'x', status: 'busy' }), /作業中です/);
+    assert.match(terminateConfirmMessage({ name: 'x', status: 'working' }), /作業中です/);
+  });
+
+  it('falls back to a generic label', () => {
+    assert.match(terminateConfirmMessage(), /「このセッション」の claude を終了/);
   });
 });

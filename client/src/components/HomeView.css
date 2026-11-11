@@ -475,6 +475,19 @@
   color: var(--text-primary);
 }
 
+/* claude を終了してペインを閉じる（取り消せない操作なので危険色） */
+.home-action.danger {
+  /* 他の操作と離して右端に置き、押し間違えにくくする */
+  margin-left: auto;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.home-action.danger:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 .home-section {
   margin-top: 28px;
 }

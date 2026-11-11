@@ -39,7 +39,7 @@ import { collectSessionFiles } from './utils/sessionFiles.js';
 import { pinExcerpt } from './utils/pins.js';
 import { humanSenderLabel } from './utils/messageSender.js';
 import './App.css';
-import { readonlyDeliveryState } from './utils/runningSessions.js';
+import { readonlyDeliveryState, terminateConfirmMessage } from './utils/runningSessions.js';
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
 const RUNNING_POLL_INTERVAL = 5000;
@@ -920,6 +920,49 @@ export default function App() {
     [send],
   );
 
+  // tmux 上の claude を終了してペインを閉じる。タブからは sessionId（paneId 等はサーバーが引く）、
+  // ホームの起動中カードからは paneId + claudeSessionId を送る。
+  // サーバーが照合で拒否し得るので、タブの後始末は tmux_session_terminated を受けてから行う
+  const handleTerminateTmux = useCallback(
+    ({ sessionId, paneId, claudeSessionId, name, status, target }) => {
+      if (!window.confirm(terminateConfirmMessage({ name, status, target }))) return;
+      if (sessionId) {
+        send({ type: 'terminate_tmux_session', sessionId });
+      } else {
+        setHomeError(null);
+        send({ type: 'terminate_tmux_session', paneId, claudeSessionId });
+      }
+    },
+    [send],
+  );
+
+  const handleTerminateTmuxTab = useCallback(
+    (session) =>
+      handleTerminateTmux({
+        sessionId: session.id,
+        name: session.name,
+        status: session.status,
+        target: session.target,
+      }),
+    [handleTerminateTmux],
+  );
+
+  useEffect(() => {
+    return on('tmux_session_terminated', (msg) => {
+      const closed = msg.closedSessionIds || [];
+      for (const id of closed) localStorage.removeItem(`historyBoundary:${id}`);
+      if (closed.length > 0) {
+        setMessagesBySession((prev) => {
+          const next = { ...prev };
+          for (const id of closed) delete next[id];
+          return next;
+        });
+      }
+      // kill 直後は claude の pid がまだ残っていることがあるので、少し待ってから起動中一覧を取り直す
+      setTimeout(() => send({ type: 'list_running_sessions' }), 1500);
+    });
+  }, [on, send]);
+
   const handleResumeSession = useCallback(
     ({ claudeSessionId, name, cwd, projectDir }) => {
       // 履歴を先に取得
@@ -1644,6 +1687,7 @@ export default function App() {
           onRestart={handleRestartSession}
           onRemovePast={handleRemovePastSession}
           onDetachTmux={handleDetachTmux}
+          onTerminateTmux={handleTerminateTmuxTab}
           onCloseReadonly={handleCloseReadonly}
           onNew={() => setShowNewSession(true)}
           onReorder={handleReorderTab}
@@ -1715,6 +1759,7 @@ export default function App() {
                   }}
                   onSelectTab={handleSwitchSession}
                   onAttachTmux={handleAttachTmux}
+                  onTerminateTmux={handleTerminateTmux}
                   onOpenReadonly={handleOpenReadonly}
                   onResume={handleResumeSession}
                   onResumeInTmux={handleResumeInTmux}

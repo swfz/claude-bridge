@@ -184,6 +184,7 @@ export default function HomeView({
   onRefresh,
   onSelectTab,
   onAttachTmux,
+  onTerminateTmux,
   onOpenReadonly,
   onResume,
   onResumeInTmux,
@@ -491,6 +492,24 @@ export default function HomeView({
                       title="指示ごとのトークン・コミット・PR"
                     >
                       詳細
+                    </button>
+                  )}
+                  {r.paneId && onTerminateTmux && (
+                    <button
+                      className="home-action danger"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTerminateTmux({
+                          paneId: r.paneId,
+                          claudeSessionId: r.sessionId,
+                          name: label,
+                          status: r.status,
+                          target: r.tmuxTarget,
+                        });
+                      }}
+                      title="claude を終了してペインを閉じる"
+                    >
+                      終了
                     </button>
                   )}
                 </div>
