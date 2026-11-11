@@ -91,6 +91,19 @@
   cursor: default;
 }
 
+/* D&D 並べ替え。落とす位置は inset の影で線を引く（border を足すと高さが変わって位置がずれる） */
+.tab.tab-dragging {
+  opacity: 0.4;
+}
+
+.tab.tab-drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.tab.tab-drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .tab-row {
   display: flex;
   align-items: center;
