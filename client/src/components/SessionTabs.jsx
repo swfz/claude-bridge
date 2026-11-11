@@ -52,6 +52,7 @@ export default function SessionTabs({
   onDetachTmux,
   onCloseReadonly,
   onNew,
+  onReorder,
 }) {
   const [width, setWidth] = useState(readStoredWidth);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === '1');
@@ -88,6 +89,52 @@ export default function SessionTabs({
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   }, []);
+
+  // タブの D&D 並べ替え。落とす位置は対象タブの上半分なら前、下半分なら後ろ
+  const [dragId, setDragId] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null); // {id, after}
+  const endDrag = useCallback(() => {
+    setDragId(null);
+    setDropTarget(null);
+  }, []);
+  const dndPropsOf = (session) =>
+    onReorder
+      ? {
+          draggable: true,
+          onDragStart: (e) => {
+            setDragId(session.id);
+            e.dataTransfer.effectAllowed = 'move';
+            // Firefox はデータを積まないとドラッグが始まらない
+            e.dataTransfer.setData('text/plain', session.id);
+          },
+          onDragOver: (e) => {
+            if (!dragId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const rect = e.currentTarget.getBoundingClientRect();
+            const after = e.clientY > rect.top + rect.height / 2;
+            setDropTarget((prev) =>
+              prev?.id === session.id && prev.after === after ? prev : { id: session.id, after },
+            );
+          },
+          onDrop: (e) => {
+            if (!dragId) return;
+            e.preventDefault();
+            const rect = e.currentTarget.getBoundingClientRect();
+            onReorder(dragId, session.id, e.clientY > rect.top + rect.height / 2);
+            endDrag();
+          },
+          onDragEnd: endDrag,
+        }
+      : {};
+  const dndClassOf = (session) => {
+    if (!dragId) return '';
+    if (session.id === dragId) return ' tab-dragging';
+    if (dropTarget?.id === session.id && session.id !== dragId) {
+      return dropTarget.after ? ' tab-drop-after' : ' tab-drop-before';
+    }
+    return '';
+  };
 
   const shownWidth = collapsed ? COLLAPSED_WIDTH : width;
 
@@ -130,7 +177,7 @@ export default function SessionTabs({
             // Star / センシティブはホームと同じ claudeSessionId 単位。ここは表示専用（付け外しはホーム）
             const isStarredTab = Boolean(session.claudeSessionId && starredIds?.has(session.claudeSessionId));
             const isSensitiveTab = Boolean(session.claudeSessionId && sensitiveIds?.has(session.claudeSessionId));
-            const className = `tab ${session.id === activeSessionId ? 'active' : ''} ${!session.alive ? 'dead' : ''} ${hasAttention ? 'tab-attention' : ''}`;
+            const className = `tab ${session.id === activeSessionId ? 'active' : ''} ${!session.alive ? 'dead' : ''} ${hasAttention ? 'tab-attention' : ''}${dndClassOf(session)}`;
             // コンテキスト使用率は展開表示のみ（折りたたみ時は幅が足りない）
             const contextUsage = contextBySession?.get(session.id) || null;
             const contextPct = contextUsage ? contextPercent(contextUsage) : 0;
@@ -149,6 +196,7 @@ export default function SessionTabs({
               return (
                 <div
                   key={session.id}
+                  {...dndPropsOf(session)}
                   className={`${className} tab-mini ${isWaiting ? 'tab-mini-waiting' : ''}`}
                   onClick={() => session.alive && onSelect(session.id)}
                   title={`${session.name}${typeLabel}${stateLabel}${markLabel}\n${session.cwd || ''}`}
@@ -168,7 +216,12 @@ export default function SessionTabs({
             }
 
             return (
-              <div key={session.id} className={className} onClick={() => session.alive && onSelect(session.id)}>
+              <div
+                key={session.id}
+                {...dndPropsOf(session)}
+                className={className}
+                onClick={() => session.alive && onSelect(session.id)}
+              >
                 <div className="tab-row">
                   {session.status && (
                     <span className={`tab-status tab-status-${session.status}`} title={statusTitle(session.status)} />

@@ -126,7 +126,7 @@ pnpm run format:check  # Prettier の整形チェック（CI でも実行）。�
 - `App.jsx` -- 状態管理の中心。`sessionsRef` で sessions の最新値を参照（stale closure 対策）
 - `ChatView.jsx` -- highlight.js は静的 import で13言語を登録。`EditDiff` は全文ハイライト後に行分割。**react-markdown に渡す `components` / `remarkPlugins` / `urlTransform` はモジュール定数**（`MARKDOWN_COMPONENTS` 等）にし、ハンドラ（`sessionCwd` / `onOpenPreview` / `onOpenFileReview`）は `MarkdownHandlersContext` で渡す。inline で作り直すと React には別のコンポーネント型に見え、5 秒ごとのポーリング（`subagent_tasks`）で App が再描画されるたびに本文中の code / a 要素が全部再マウントされて `FilePreview` がチラつく（実測: 572 メッセージの閲覧タブで 22 秒に DOM 変更 2,460 件・50ms の long task が 5 秒ごと → 修正後 0）。同じ理由で `ChatMessage` は `memo` 化してあり、App 側から渡す props は useCallback / state の参照を保つこと（inline arrow を渡すと memo が無効になる）。**新着への自動スクロールは「最下部付近にいる間だけ」**（`hooks/useStickToBottom.js`）。上にスクロールして過去を読んでいる最中は位置を動かさず、代わりに `.scroll-to-latest`（「↓ 新しいメッセージ」）を sticky で出して押されたら末尾へ戻す。追従の再開判定は `utils/scroll.js` の `isScrolledToBottom()`（余白 80px）。タブ切替（`sessionId` = resetKey の変化）では追従状態に戻す
 - `ThreadPanel.jsx` -- リサイズハンドルは `widthRef` で useCallback の依存を空に
-- `SessionTabs.jsx` -- 左サイドバーのタブリスト。**Star（★）とセンシティブ指定（🔒）は表示専用**で、付け外しはホーム側だけ（キーはホームと同じ `claudeSessionId`）。折りたたみ時は状態ドットが右上なので印は左下に重ね、下地（`background: inherit`）を敷いて頭文字と重なっても読めるようにする
+- `SessionTabs.jsx` -- 左サイドバーのタブリスト。**Star（★）とセンシティブ指定（🔒）は表示専用**で、付け外しはホーム側だけ（キーはホームと同じ `claudeSessionId`）。折りたたみ時は状態ドットが右上なので印は左下に重ね、下地（`background: inherit`）を敷いて頭文字と重なっても読めるようにする。**タブは D&D で並べ替えられる**（HTML5 の draggable。対象タブの上半分に落とせば前、下半分なら後ろ）。並びは `utils/tabOrder.js` の純粋関数＋localStorage `sidebarTabOrder` で持ち、キーは `claudeSessionId` 優先（ブリッジの id はサーバー再起動で変わる）・照合は id / claudeSessionId のどちらでも当てる。並びに無い新しいタブはサーバーの順で末尾。並べ替えは App の `orderedSessions` で当てるので、`Alt+数字` などのタブ移動もこの並びに従う
 - `hooks/useGlobalKeys.js` -- 画面全体で効くキー（半画面スクロール・タブ移動）。App で 1 回だけ呼ぶ
 - `ShortcutHints.jsx` -- サイドバー最下部の「今使えるキー操作」カンペ。状態は DOM の目印から判定する（詳細は「レビューのキーボード操作（ピックモード）」の節）
 - `FileExplorer.jsx` -- ファイラ。**ルート（起点）は cwd 固定ではなく切り替えられる**（`cwd` / `~/tmp` / `~` / `/tmp` / 手入力の履歴）。候補と `~` 展開に必要な home は `/roots` から取り、クライアントは絶対パスだけを扱う（表示ラベルだけ `~` に畳む）。ロジックは `utils/filerRoots.js` の純粋関数、選択と手入力履歴は localStorage（`filerRoot` / `filerCustomRoots`）。ツリーも `/search` も選択中のルート配下。**どこまで開けるかを決めているのはサーバー側のサンドボックス（home か `/tmp` 配下のみ）**なので、ルートを増やしてもクライアント側に権限判断は持たせない。**`isPreviewable()` が偽のファイル（未知の拡張子・拡張子なし）も薄い表示のままクリックできる**（`PreviewDrawer` がテキストとして開くフォールバックを持つため。`disabled` 属性は付けない）
@@ -268,7 +268,9 @@ TUI に出る「番号つきの選択肢」をブラウザから選べるよう�
 
 ### ファイルプレビューの種別（PreviewDrawer）
 
-拡張子ごとの描き分けは `client/src/utils/previewExts.js` の配列が唯一の定義で、`PreviewDrawer` はそれを見て `isImage` / `isHtml` / `isPdf` / `isVideo` / `isText` / `isMarkdownFile` / `isTable` を決める。
+拡張子ごとの描き分けは `client/src/utils/previewExts.js` の配列が唯一の定義で、`hooks/usePreviewSource.js` がそれを見て `isImage` / `isHtml` / `isPdf` / `isVideo` / `isText` / `isMarkdownFile` / `isTable` を決め、本文の読み込み・ハイライト・表の分解まで行う（`PreviewDrawer` と `PreviewPip` で共用。テキスト本文と frontmatter 表・Markdown の `components` は `PreviewContent.jsx`、URL は `utils/previewUrl.js`）。
+
+- **小窓（Document Picture-in-Picture）**: ドロワーのヘッダの「小窓」で、今のプレビューを PiP 窓に移す（`PreviewPip.jsx`。`'documentPictureInPicture' in window` が偽＝Chromium 以外ではボタンを出さない）。状態は App の `pipPreview`（`previewData` とは別で `activeSessionId` / `showHome` に依存させない）なので、**他のタブやホームへ移っても残る**。描画は `createPortal` で PiP の `body` に流し、親の `<style>` / `<link>` を複製し、`body.light-mode` は MutationObserver で追従させる。PiP の document は about:blank 由来なので、`img` / `iframe` / `video` の URL は `previewUrl(path, location.origin)` で絶対 URL にする（`fetch` は親の realm で走るので相対のままでよい）。**閲覧専用**で、レビュー・行ピック・選択コメントは持ち込まない（どれもメインの `document` に keydown 等を張るので、他セッションを操作している最中のキーを横取りしてしまう）。`requestWindow()` は user activation が要るのでクリックハンドラから直接呼ぶ。PiP 窓はタブにつき 1 つで、新しく開くとブラウザが前の窓を閉じる（その `pagehide` で新しい state を消さないよう、`handleClosePip` は自分の窓のときだけ片付ける）
 
 - **右側の「レビュースレッド」欄は見出しのクリックで畳める**（幅 32px の縦帯になり本文に幅を返す。localStorage `previewReviewPaneCollapsed`）。畳んでいても未送信の指摘欄が増えたら（行ピックの Enter 等）自動で開く（書けない欄にフォーカスが飛ばないように）
 

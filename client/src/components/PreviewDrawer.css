@@ -1031,3 +1031,20 @@ body.light-mode .drawer-iframe,
   font-size: 11px;
   color: var(--text-secondary);
 }
+
+/* Document Picture-in-Picture 窓のプレビュー（PreviewPip）。窓いっぱいに広げて本文だけスクロールさせる */
+.preview-pip {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.preview-pip-header {
+  flex-shrink: 0;
+  padding: 6px 10px;
+}
+
+.preview-pip-body {
+  /* 💬 マーカーのガターは PiP では使わない */
+  padding-left: 0;
+}

@@ -15,12 +15,14 @@ import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
 import RefDrawer from './components/RefDrawer.jsx';
 import NewSessionDialog from './components/NewSessionDialog.jsx';
 import PreviewDrawer from './components/PreviewDrawer.jsx';
+import PreviewPip, { isDocumentPipSupported, openPreviewPipWindow } from './components/PreviewPip.jsx';
 import FileExplorer from './components/FileExplorer.jsx';
 import AgentSidePanel from './components/AgentSidePanel.jsx';
 import HomeView from './components/HomeView.jsx';
 import RateLimitMeter from './components/RateLimitMeter.jsx';
 import ContextMeter from './components/ContextMeter.jsx';
 import { loadStarred, saveStarred, toggleStarred } from './utils/starredSessions.js';
+import { applyTabOrder, loadTabOrder, moveTab, saveTabOrder } from './utils/tabOrder.js';
 import { periodEquals } from './utils/heatmap.js';
 import {
   loadSensitive,
@@ -197,6 +199,9 @@ export default function App() {
   const [tmuxPanes, setTmuxPanes] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [drawerOpenedAt, setDrawerOpenedAt] = useState(null);
+  // Document Picture-in-Picture に出したプレビュー { pipWindow, filePath, markdown, title }。
+  // previewData とは別に持ち、activeSessionId / showHome に依存させない（他セッションへ移っても残す）
+  const [pipPreview, setPipPreview] = useState(null);
   // agent view 連携パネル（一覧）。選択するとメインタブに readonly で開く
   const [agents, setAgents] = useState([]);
   const [showAgentPanel, setShowAgentPanel] = useState(false);
@@ -1148,10 +1153,23 @@ export default function App() {
 
   // 画面全体のキー操作（Ctrl+D/U の半画面スクロール、Alt+Shift+J/K・Alt+数字 のタブ移動）。
   // タブの並びと絞り込みはサイドバー（SessionTabs）と同じにする（隠しているタブへ飛ばないように）
+  // サイドバーのタブの並び（D&D で入れ替えたもの。localStorage だけで持つ）
+  const [tabOrder, setTabOrder] = useState(loadTabOrder);
+  const orderedSessions = useMemo(() => applyTabOrder(sessions, tabOrder), [sessions, tabOrder]);
+  const handleReorderTab = useCallback(
+    (fromId, targetId, after) => {
+      const next = moveTab(orderedSessions, fromId, targetId, after);
+      setTabOrder(next);
+      saveTabOrder(next);
+    },
+    [orderedSessions],
+  );
   const keyboardTabIds = useMemo(
     () =>
-      sessions.filter((s) => !(shareMode && s.claudeSessionId && sensitiveIds.has(s.claudeSessionId))).map((s) => s.id),
-    [sessions, shareMode, sensitiveIds],
+      orderedSessions
+        .filter((s) => !(shareMode && s.claudeSessionId && sensitiveIds.has(s.claudeSessionId)))
+        .map((s) => s.id),
+    [orderedSessions, shareMode, sensitiveIds],
   );
   useGlobalKeys({
     tabs: keyboardTabIds,
@@ -1363,6 +1381,28 @@ export default function App() {
   const messagesBySessionRef = useRef(messagesBySession);
   messagesBySessionRef.current = messagesBySession;
   const currentMessageCount = () => (messagesBySessionRef.current[activeSessionIdRef.current] || []).length;
+  // プレビューを PiP 窓に移す。requestWindow は user activation が要るのでクリックから直接呼ばれる前提。
+  // 窓は 1 つだけ（新しく開くとブラウザが前の窓を閉じる）なので、前の窓の pagehide で
+  // 新しい state を消さないよう onClose は自分の窓のときだけ片付ける
+  const pipSeqRef = useRef(0);
+  const handleOpenPip = useCallback(async () => {
+    if (!previewData) return;
+    const { filePath, markdown, title } = previewData;
+    try {
+      const pipWindow = await openPreviewPipWindow();
+      pipSeqRef.current += 1;
+      setPipPreview({ id: pipSeqRef.current, pipWindow, filePath, markdown, title });
+      // ドロワーは閉じる（.drawer-overlay が残ると後ろの画面を操作できない）
+      setPreviewData(null);
+      setDrawerOpenedAt(null);
+    } catch (err) {
+      console.warn('[pip] requestWindow failed', err);
+    }
+  }, [previewData]);
+  const handleClosePip = useCallback((pipWindow) => {
+    setPipPreview((cur) => (cur && cur.pipWindow === pipWindow ? null : cur));
+  }, []);
+
   const handleOpenPreview = useCallback((path) => {
     setPreviewData({ filePath: path });
     setDrawerOpenedAt(currentMessageCount());
@@ -1590,7 +1630,7 @@ export default function App() {
 
       <div className="app-body">
         <SessionTabs
-          sessions={sessions}
+          sessions={orderedSessions}
           activeSessionId={showHome ? null : activeSessionId}
           homeActive={showHome}
           attentionIds={attentionIds}
@@ -1606,6 +1646,7 @@ export default function App() {
           onDetachTmux={handleDetachTmux}
           onCloseReadonly={handleCloseReadonly}
           onNew={() => setShowNewSession(true)}
+          onReorder={handleReorderTab}
         />
 
         <div className="app-workspace">
@@ -1903,6 +1944,18 @@ export default function App() {
               : []
           }
           responses={drawerOpenedAt != null ? messages.slice(drawerOpenedAt).filter((m) => m.role === 'assistant') : []}
+          onOpenPip={isDocumentPipSupported() ? handleOpenPip : undefined}
+        />
+      )}
+
+      {pipPreview && (
+        <PreviewPip
+          key={pipPreview.id}
+          pipWindow={pipPreview.pipWindow}
+          filePath={pipPreview.filePath}
+          markdown={pipPreview.markdown}
+          title={pipPreview.title}
+          onClose={handleClosePip}
         />
       )}
     </div>
