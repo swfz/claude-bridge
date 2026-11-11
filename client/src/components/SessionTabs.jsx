@@ -369,9 +369,6 @@ export default function SessionTabs({
     const dirColor = showDir ? colorByKey.get(autoGroupKeyOf(session)) : null;
     const typeLabel = TYPE_LABELS[session.type || 'pty'];
     const TypeIcon = TYPE_ICONS[session.type || 'pty'];
-    const hasMeta =
-      isStarredTab || showDir || worktree || typeLabel || isSensitiveTab || isPipTab || Boolean(contextUsage);
-
     return (
       <div
         key={session.id}
@@ -381,53 +378,52 @@ export default function SessionTabs({
       >
         <div className="tab-row">
           <span className={`tab-status ${dot.className}`} title={dot.title} />
+          {/* Star / 🔒 / 小窓はタブを探す手がかりなのでタイトルの前に置く。右端だとホバーのボタンに隠れる */}
+          {isStarredTab && <TbStarFilled className="tab-mark tab-mark-star" title="Star 付き（未解決／続きをやる）" />}
+          {isSensitiveTab && <TbLock className="tab-mark tab-mark-lock" title="共有モード中は隠すセッション" />}
+          {isPipTab && (
+            <TbPictureInPicture
+              className="tab-mark tab-mark-pip"
+              title="このセッションのプレビューを小窓に出しています（レビューはこのセッションへ送られます）"
+            />
+          )}
           <span className="tab-name" title={session.name}>
             {session.name}
           </span>
         </div>
-        {hasMeta && (
-          <div className="tab-meta">
-            {isStarredTab && (
-              <TbStarFilled className="tab-mark tab-mark-star" title="Star 付き（未解決／続きをやる）" />
-            )}
-            {showDir && (
-              <span className="tab-meta-item tab-dir" title={session.cwd}>
-                {dirColor && <span className="tab-dir-dot" style={{ background: dirColor }} />}
-                <TbFolder className="tab-meta-icon" aria-hidden="true" />
-                <span className="tab-meta-text mono">{project}</span>
+        {/* 2 行目は中身が無くても常に出して高さを確保する。使用率は履歴を読み込んだ後（＝タブを開いた後）に
+            しか分からないので、出し入れするとクリックした瞬間に行が伸びる */}
+        <div className="tab-meta">
+          {showDir && (
+            <span className="tab-meta-item tab-dir" title={session.cwd}>
+              {dirColor && <span className="tab-dir-dot" style={{ background: dirColor }} />}
+              <TbFolder className="tab-meta-icon" aria-hidden="true" />
+              <span className="tab-meta-text mono">{project}</span>
+            </span>
+          )}
+          {worktree && (
+            <span className="tab-meta-item tab-branch" title={`worktree: ${worktree}`}>
+              <TbGitBranch className="tab-meta-icon" aria-hidden="true" />
+              <span className="tab-meta-text">{worktree}</span>
+            </span>
+          )}
+          {/* tmux は既定なので出さない。それ以外の実行形態だけ薄いアイコンで例外として示す */}
+          {typeLabel && TypeIcon && <TypeIcon className="tab-meta-icon tab-type" title={typeLabel} />}
+          {contextUsage && (
+            <span
+              className="tab-context"
+              title={`コンテキスト ${formatTokens(contextUsage.contextTokens)} / ${formatTokens(contextUsage.contextWindow)}`}
+            >
+              <span className="tab-context-bar">
+                <span
+                  className="tab-context-fill"
+                  style={{ width: `${contextPct}%`, background: sidebarUsageColor(contextPct) }}
+                />
               </span>
-            )}
-            {worktree && (
-              <span className="tab-meta-item tab-branch" title={`worktree: ${worktree}`}>
-                <TbGitBranch className="tab-meta-icon" aria-hidden="true" />
-                <span className="tab-meta-text">{worktree}</span>
-              </span>
-            )}
-            {/* tmux は既定なので出さない。それ以外の実行形態だけ薄いアイコンで例外として示す */}
-            {typeLabel && TypeIcon && <TypeIcon className="tab-meta-icon tab-type" title={typeLabel} />}
-            {isSensitiveTab && <TbLock className="tab-mark tab-mark-lock" title="共有モード中は隠すセッション" />}
-            {isPipTab && (
-              <TbPictureInPicture
-                className="tab-mark tab-mark-pip"
-                title="このセッションのプレビューを小窓に出しています（レビューはこのセッションへ送られます）"
-              />
-            )}
-            {contextUsage && (
-              <span
-                className="tab-context"
-                title={`コンテキスト ${formatTokens(contextUsage.contextTokens)} / ${formatTokens(contextUsage.contextWindow)}`}
-              >
-                <span className="tab-context-bar">
-                  <span
-                    className="tab-context-fill"
-                    style={{ width: `${contextPct}%`, background: sidebarUsageColor(contextPct) }}
-                  />
-                </span>
-                <span className="tab-context-num">{contextPct}%</span>
-              </span>
-            )}
-          </div>
-        )}
+              <span className="tab-context-num">{contextPct}%</span>
+            </span>
+          )}
+        </div>
         <span className="tab-actions">
           {session.alive && session.type === 'tmux' && onTerminateTmux && (
             <button
