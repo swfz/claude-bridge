@@ -1032,19 +1032,18 @@ body.light-mode .drawer-iframe,
   color: var(--text-secondary);
 }
 
-/* Document Picture-in-Picture 窓のプレビュー（PreviewPip）。窓いっぱいに広げて本文だけスクロールさせる */
-.preview-pip {
-  display: flex;
-  flex-direction: column;
+/* Document Picture-in-Picture 窓のプレビュー（PreviewPip → PreviewDrawer の pipWindow）。
+   overlay を持たず、ドロワーを窓いっぱいに広げる（幅の既定値・リサイズ・スライドインは要らない） */
+.drawer-pip-host {
   height: 100vh;
+  display: flex;
 }
 
-.preview-pip-header {
-  flex-shrink: 0;
-  padding: 6px 10px;
-}
-
-.preview-pip-body {
-  /* 💬 マーカーのガターは PiP では使わない */
-  padding-left: 0;
+.drawer-pip-host .drawer {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  border-left: none;
+  box-shadow: none;
+  animation: none;
 }

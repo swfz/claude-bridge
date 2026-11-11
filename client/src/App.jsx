@@ -1431,20 +1431,95 @@ export default function App() {
   const handleOpenPip = useCallback(async () => {
     if (!previewData) return;
     const { filePath, markdown, title } = previewData;
+    // レビューの送信先は「開いたときのセッション」に固定する（小窓は他のタブへ移っても残るため）
+    const sessionId = activeSessionIdRef.current;
+    const key = sessionsRef.current.find((s) => s.id === sessionId)?.claudeSessionId || sessionId;
     try {
       const pipWindow = await openPreviewPipWindow();
       pipSeqRef.current += 1;
-      setPipPreview({ id: pipSeqRef.current, pipWindow, filePath, markdown, title });
+      setPipPreview({
+        id: pipSeqRef.current,
+        pipWindow,
+        filePath,
+        markdown,
+        title,
+        sessionId,
+        sessionKey: key,
+        openedAt: drawerOpenedAt,
+      });
       // ドロワーは閉じる（.drawer-overlay が残ると後ろの画面を操作できない）
       setPreviewData(null);
       setDrawerOpenedAt(null);
     } catch (err) {
       console.warn('[pip] requestWindow failed', err);
     }
-  }, [previewData]);
+  }, [previewData, drawerOpenedAt]);
   const handleClosePip = useCallback((pipWindow) => {
     setPipPreview((cur) => (cur && cur.pipWindow === pipWindow ? null : cur));
   }, []);
+
+  // プレビューのファイルレビュー送信。ドロワーは今のセッション、小窓は開いたときのセッションへ送る。
+  // サーバーが対象セッション種別で PTY/inbox を出し分けるため readonly でも届く。各項目にファイル名を前置して文脈を残す
+  const submitFileReview = useCallback(
+    (sessionId, key, target, items) => {
+      if (!sessionId) {
+        console.warn('No session for review submit');
+        return;
+      }
+      const fileName = target.split('/').pop();
+      const labeled = items
+        .map((t) => (t || '').trim())
+        .filter(Boolean)
+        .map((t) => ({ text: `${fileName}: ${t}` }));
+      if (labeled.length === 0) return;
+      send({ type: 'submit_review', sessionId, sessionKey: key, items: labeled });
+    },
+    [send],
+  );
+  // プレビューで「コメントに残す」: 送信せずセッションのコメントに保存（ファイルアンカー付き）
+  const saveFileComment = useCallback(
+    (sessionId, key, filePath, note, location) => {
+      const t = (note || '').trim();
+      if (!sessionId || !t) return;
+      send({
+        type: 'save_comment',
+        sessionId,
+        sessionKey: key,
+        text: t,
+        anchor: {
+          type: 'file',
+          filePath: filePath || null,
+          quote: location?.selectedText || '',
+          label: location?.label || null,
+          line: location?.line ?? null,
+        },
+      });
+    },
+    [send],
+  );
+  const handlePipReviewSubmit = useCallback(
+    (target, items) => pipPreview && submitFileReview(pipPreview.sessionId, pipPreview.sessionKey, target, items),
+    [pipPreview, submitFileReview],
+  );
+  const handlePipSaveComment = useCallback(
+    (note, location) =>
+      pipPreview && saveFileComment(pipPreview.sessionId, pipPreview.sessionKey, pipPreview.filePath, note, location),
+    [pipPreview, saveFileComment],
+  );
+  // 小窓に出す「保存済みコメント」と「開いてからの Claude の応答」。コメントは今のセッションの分しか
+  // 手元に無いので、小窓を開いたセッションを見ている間だけ出す
+  const pipSessionMessages = pipPreview ? messagesBySession[pipPreview.sessionId] : undefined;
+  const pipFileComments = useMemo(() => {
+    if (!pipPreview?.filePath) return [];
+    // 手元の comments は今のセッションの分だけ。別セッションを見ている間は undefined を渡し、
+    // ドロワー側で「この小窓で残したコメント」の表示に切り替えさせる
+    if (pipPreview.sessionId !== activeSessionId) return undefined;
+    return comments.filter((c) => c.anchor?.type === 'file' && c.anchor.filePath === pipPreview.filePath);
+  }, [pipPreview, activeSessionId, comments]);
+  const pipResponses = useMemo(() => {
+    if (!pipPreview || pipPreview.openedAt == null || !pipSessionMessages) return [];
+    return pipSessionMessages.slice(pipPreview.openedAt).filter((m) => m.role === 'assistant');
+  }, [pipPreview, pipSessionMessages]);
 
   const handleOpenPreview = useCallback((path) => {
     setPreviewData({ filePath: path });
@@ -1679,6 +1754,7 @@ export default function App() {
           attentionIds={attentionIds}
           sensitiveIds={sensitiveIds}
           starredIds={starredIds}
+          pipSessionId={pipPreview?.sessionId}
           contextBySession={contextBySession}
           shareMode={shareMode}
           onHome={() => setShowHome(true)}
@@ -1948,40 +2024,10 @@ export default function App() {
             setPreviewData(null);
             setDrawerOpenedAt(null);
           }}
-          onReviewSubmit={(target, items) => {
-            if (!activeSessionId) {
-              console.warn('No active session for review submit');
-              return;
-            }
-            // ファイルレビューもセッションのレビューと同じ submit_review 経由で送る。
-            // サーバーが対象セッション種別で PTY/inbox を出し分けるため readonly でも届く。
-            // 各項目にファイル名を前置して文脈を残す。
-            const fileName = target.split('/').pop();
-            const labeled = items
-              .map((t) => (t || '').trim())
-              .filter(Boolean)
-              .map((t) => ({ text: `${fileName}: ${t}` }));
-            if (labeled.length === 0) return;
-            send({
-              type: 'submit_review',
-              sessionId: activeSessionId,
-              sessionKey,
-              items: labeled,
-            });
-          }}
-          onSaveComment={(note, location) => {
-            // プレビューで「コメントに残す」: 送信せずセッションのコメントに保存（ファイルアンカー付き）
-            if (!activeSessionId) return;
-            const t = (note || '').trim();
-            if (!t) return;
-            handleAddComment(t, {
-              type: 'file',
-              filePath: previewData.filePath || null,
-              quote: location?.selectedText || '',
-              label: location?.label || null,
-              line: location?.line ?? null,
-            });
-          }}
+          onReviewSubmit={(target, items) => submitFileReview(activeSessionId, sessionKey, target, items)}
+          onSaveComment={(note, location) =>
+            saveFileComment(activeSessionId, sessionKey, previewData.filePath, note, location)
+          }
           onDeleteComment={handleDeleteComment}
           fileComments={
             previewData.filePath
@@ -2001,6 +2047,11 @@ export default function App() {
           markdown={pipPreview.markdown}
           title={pipPreview.title}
           onClose={handleClosePip}
+          onReviewSubmit={handlePipReviewSubmit}
+          onSaveComment={handlePipSaveComment}
+          onDeleteComment={pipPreview.sessionId === activeSessionId ? handleDeleteComment : undefined}
+          fileComments={pipFileComments}
+          responses={pipResponses}
         />
       )}
     </div>

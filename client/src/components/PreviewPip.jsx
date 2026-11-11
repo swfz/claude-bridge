@@ -1,12 +1,5 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { remarkAlert } from 'remark-github-blockquote-alert';
-import { FrontmatterTable, PreviewTextBody, markdownComponents } from './PreviewContent.jsx';
-import { usePreviewSource } from '../hooks/usePreviewSource.js';
-import { previewUrl } from '../utils/previewUrl.js';
-import './PreviewDrawer.css';
+import { useEffect } from 'react';
+import PreviewDrawer from './PreviewDrawer.jsx';
 
 // Document Picture-in-Picture が使えるか（Chromium 116+）。使えなければ PiP ボタンを出さない
 export function isDocumentPipSupported() {
@@ -27,18 +20,11 @@ export async function openPreviewPipWindow({ width = 720, height = 640 } = {}) {
   return pipWindow;
 }
 
-// PiP 窓に描くプレビュー（閲覧専用）。レビュー・行ピック・選択コメントは持ち込まない
-// （それらはメインの document / window に keydown 等を張るので、PiP で他セッションを
-// 操作している最中のキーを横取りしてしまう）。
-// 描画は createPortal で PiP の body に流すだけで、状態は App 側が持つ。
-export default function PreviewPip({ pipWindow, filePath, markdown, title, onClose }) {
-  // 表 / テキストとライト表示はドロワーと同じ localStorage の値を初期値にする（PiP 内での切替は保存しない）
-  const [tableMode, setTableMode] = useState(() => localStorage.getItem('previewTableMode') !== 'text');
-  const [lightMode, setLightMode] = useState(() => localStorage.getItem('previewLight') === '1');
-  const src = usePreviewSource({ filePath, markdown, title, tableMode });
-  const origin = window.location.origin;
-  const url = filePath ? previewUrl(filePath, origin) : null;
-
+// PiP 窓に描くプレビュー。中身はドロワーと同じ PreviewDrawer を pipWindow 付きで描く
+// （createPortal で PiP の body に流し、キー・選択・ピックのリスナは PiP の document に張る。
+// そのため PiP にフォーカスがあるときだけ効き、メイン画面で他セッションを操作するキーは横取りしない）。
+// レビューの送信先は PiP を開いたセッションに固定する（App が onReviewSubmit を束ねて渡す）。
+export default function PreviewPip({ pipWindow, onClose, ...drawerProps }) {
   // ユーザーが PiP 窓を閉じたら状態を片付ける
   useEffect(() => {
     const handler = () => onClose(pipWindow);
@@ -47,9 +33,10 @@ export default function PreviewPip({ pipWindow, filePath, markdown, title, onClo
   }, [pipWindow, onClose]);
 
   // 窓のタイトルとテーマ（body.light-mode）を親に合わせる
+  const fileName = drawerProps.filePath ? drawerProps.filePath.split('/').pop() : drawerProps.title || 'Preview';
   useEffect(() => {
-    pipWindow.document.title = src.fileName;
-  }, [pipWindow, src.fileName]);
+    pipWindow.document.title = fileName;
+  }, [pipWindow, fileName]);
   useEffect(() => {
     const sync = () =>
       pipWindow.document.body.classList.toggle('light-mode', document.body.classList.contains('light-mode'));
@@ -59,55 +46,8 @@ export default function PreviewPip({ pipWindow, filePath, markdown, title, onClo
     return () => mo.disconnect();
   }, [pipWindow]);
 
-  return createPortal(
-    <div className="preview-pip">
-      <div className="drawer-header preview-pip-header">
-        <div className="drawer-title-area">
-          <span className="drawer-filename">{src.fileName}</span>
-          {filePath && <span className="drawer-path">{filePath}</span>}
-        </div>
-        <div className="drawer-actions">
-          <button className="drawer-btn" onClick={() => setLightMode((v) => !v)}>
-            {lightMode ? '🌙 ダーク' : '☀ ライト'}
-          </button>
-          {src.isTable && (
-            <button className="drawer-btn" onClick={() => setTableMode((v) => !v)}>
-              {tableMode ? '≡ テキスト' : '⊞ 表'}
-            </button>
-          )}
-          {url && (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="drawer-btn">
-              別タブ
-            </a>
-          )}
-        </div>
-      </div>
-      <div className={`drawer-body preview-pip-body ${lightMode ? 'preview-light' : ''}`}>
-        {src.markdownToRender ? (
-          <div className="drawer-markdown">
-            {src.frontmatter && <FrontmatterTable data={src.frontmatter} />}
-            <Markdown remarkPlugins={[remarkGfm, remarkAlert]} components={markdownComponents}>
-              {src.markdownBody}
-            </Markdown>
-          </div>
-        ) : (
-          <>
-            {src.isImage && <img src={url} alt={src.fileName} className="drawer-image" />}
-            {src.isHtml && (
-              <iframe
-                src={url}
-                className="drawer-iframe"
-                title={src.fileName}
-                sandbox="allow-scripts allow-same-origin"
-              />
-            )}
-            {src.isPdf && <iframe src={url} className="drawer-iframe" title={src.fileName} />}
-            {src.isVideo && <video controls preload="metadata" src={url} className="drawer-video" />}
-            {src.isCodeView && <PreviewTextBody source={src} />}
-          </>
-        )}
-      </div>
-    </div>,
-    pipWindow.document.body,
-  );
+  // x ボタンは窓ごと閉じる（pagehide で onClose が呼ばれて state が片付く）
+  const handleClose = () => pipWindow.close();
+
+  return <PreviewDrawer {...drawerProps} pipWindow={pipWindow} onClose={handleClose} />;
 }

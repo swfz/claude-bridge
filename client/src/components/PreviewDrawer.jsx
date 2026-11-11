@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
@@ -24,7 +25,7 @@ import './PreviewDrawer.css';
 // root 内テキストの、targetNode/targetOffset までの文字数を TreeWalker で求める（非再帰＝安全）。
 function textOffsetIn(root, targetNode, targetOffset) {
   let total = 0;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let n;
   while ((n = walker.nextNode())) {
     if (n === targetNode) return total + targetOffset;
@@ -63,7 +64,14 @@ export default function PreviewDrawer({
   fileComments,
   responses,
   onOpenPip,
+  pipWindow,
 }) {
+  // 小窓（Document Picture-in-Picture）に出しているときは、キー・選択・ドラッグを PiP 窓の
+  // document / window で扱う。メインの document に張るとメイン画面で打つキーを横取りするため
+  const hostWin = pipWindow || window;
+  const hostDoc = hostWin.document;
+  // PiP の document は about:blank 由来で相対 URL が解決できないので、PiP では絶対 URL にする
+  const fileUrl = filePath ? previewUrl(filePath, pipWindow ? window.location.origin : '') : null;
   const draftKey = reviewDraftKey(filePath, title);
   const [reviewItems, setReviewItems] = useState(() => (draftKey && reviewDrafts.get(draftKey)) || []);
   // 項目が変わるたびに下書きへ写す（空になったら消す）
@@ -157,29 +165,32 @@ export default function PreviewDrawer({
   const startX = useRef(0);
   const startWidth = useRef(0);
 
-  const onDragStart = useCallback((e) => {
-    e.preventDefault();
-    dragging.current = true;
-    startX.current = e.clientX;
-    // 未操作時は実際の描画幅を起点にする
-    const drawerEl = e.currentTarget.parentElement;
-    startWidth.current = widthRef.current ?? drawerEl?.getBoundingClientRect().width ?? 800;
+  const onDragStart = useCallback(
+    (e) => {
+      e.preventDefault();
+      dragging.current = true;
+      startX.current = e.clientX;
+      // 未操作時は実際の描画幅を起点にする
+      const drawerEl = e.currentTarget.parentElement;
+      startWidth.current = widthRef.current ?? drawerEl?.getBoundingClientRect().width ?? 800;
 
-    const onMove = (ev) => {
-      if (!dragging.current) return;
-      // 左端のハンドルを左へ動かすと幅が増える
-      const delta = startX.current - ev.clientX;
-      const max = window.innerWidth - 100;
-      setWidth(Math.max(400, Math.min(startWidth.current + delta, max)));
-    };
-    const onUp = () => {
-      dragging.current = false;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }, []);
+      const onMove = (ev) => {
+        if (!dragging.current) return;
+        // 左端のハンドルを左へ動かすと幅が増える
+        const delta = startX.current - ev.clientX;
+        const max = hostWin.innerWidth - 100;
+        setWidth(Math.max(400, Math.min(startWidth.current + delta, max)));
+      };
+      const onUp = () => {
+        dragging.current = false;
+        hostDoc.removeEventListener('mousemove', onMove);
+        hostDoc.removeEventListener('mouseup', onUp);
+      };
+      hostDoc.addEventListener('mousemove', onMove);
+      hostDoc.addEventListener('mouseup', onUp);
+    },
+    [hostDoc, hostWin],
+  );
 
   useEffect(() => {
     fileContentRef.current = fileContent;
@@ -194,14 +205,15 @@ export default function PreviewDrawer({
       if (e.key === 'Escape') {
         if (selectionPopup) {
           setSelectionPopup(null);
-        } else if (!pickActiveRef.current) {
+        } else if (!pickActiveRef.current && !pipWindow) {
+          // 小窓では Esc で窓を閉じない（読みながらの Esc で窓ごと消えると戻せないため。閉じるのは x）
           onClose();
         }
       }
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose, selectionPopup]);
+    hostDoc.addEventListener('keydown', handler);
+    return () => hostDoc.removeEventListener('keydown', handler);
+  }, [onClose, selectionPopup, hostDoc, pipWindow]);
 
   // 選択範囲から source（fileContent or markdown）上の位置情報を構築する。
   // コードファイルは DOM textContent と source が一致するので直接オフセット計算。
@@ -264,7 +276,7 @@ export default function PreviewDrawer({
 
   // テキスト選択を検出
   const handleMouseUp = useCallback(() => {
-    const selection = window.getSelection();
+    const selection = hostWin.getSelection();
     const text = selection?.toString().trim();
     if (!text || text.length < 2) {
       return;
@@ -313,7 +325,7 @@ export default function PreviewDrawer({
       top: rect.bottom - bodyRect.top + bodyRef.current.scrollTop,
       left: rect.left - bodyRect.left,
     });
-  }, [computeLocation, fileContent, showTable]);
+  }, [computeLocation, fileContent, showTable, hostWin]);
 
   // HTML プレビューは iframe 内に描画されるため、親の mouseup では選択を拾えない。
   // /preview は同一オリジンなので contentDocument に直接リスナを張り、
@@ -426,13 +438,16 @@ export default function PreviewDrawer({
     };
   }, [isHtml, filePath, lightMode]);
 
-  const addComment = useCallback((selectedText, location, kind = 'review') => {
-    const id = ++commentIdSeq;
-    setReviewItems((prev) => [...prev, { id, selectedText, location, comment: '', resolved: false, kind }]);
-    setEditingId(id);
-    setSelectionPopup(null);
-    window.getSelection()?.removeAllRanges();
-  }, []);
+  const addComment = useCallback(
+    (selectedText, location, kind = 'review') => {
+      const id = ++commentIdSeq;
+      setReviewItems((prev) => [...prev, { id, selectedText, location, comment: '', resolved: false, kind }]);
+      setEditingId(id);
+      setSelectionPopup(null);
+      hostWin.getSelection()?.removeAllRanges();
+    },
+    [hostWin],
+  );
 
   // 選択せずに「送る」項目を追加する（ファイル全体への指摘用）。
   // ReviewDraftPanel の「次の指摘欄を追加」と揃え、毎回マウス選択しなくても複数コメントを書けるようにする。
@@ -451,7 +466,7 @@ export default function PreviewDrawer({
       e.preventDefault();
       handleSubmitAllRef.current?.();
     };
-    document.addEventListener('keydown', handler);
+    hostDoc.addEventListener('keydown', handler);
 
     const iframe = iframeRef.current;
     let attached = null;
@@ -467,11 +482,11 @@ export default function PreviewDrawer({
       iframe.addEventListener('load', attach);
     }
     return () => {
-      document.removeEventListener('keydown', handler);
+      hostDoc.removeEventListener('keydown', handler);
       iframe?.removeEventListener('load', attach);
       attached?.removeEventListener('keydown', handler);
     };
-  }, [isHtml, filePath]);
+  }, [isHtml, filePath, hostDoc]);
 
   // 「コメントに残す」: 送信せずセッションのコメントに保存（ファイルアンカー付き）。
   // 保存後も、このプレビューを開いている間は右ペインに表示し続ける。
@@ -615,6 +630,7 @@ export default function PreviewDrawer({
     max: pickMax,
     allowBareDigits: true,
     extraDocs,
+    doc: hostDoc,
     onKey: handlePickKey,
     onPick: handlePickLine,
     onEmptyEnter: addFreeItem,
@@ -710,9 +726,9 @@ export default function PreviewDrawer({
 
   // 指摘欄を確定して本文へフォーカスを戻す（続けて次の行を数字で選べるように）
   const blurToBody = useCallback(() => {
-    document.activeElement?.blur?.();
+    hostDoc.activeElement?.blur?.();
     bodyRef.current?.focus?.({ preventScroll: true });
-  }, []);
+  }, [hostDoc]);
 
   // 欄の確定。「残す」は保存、「送る」は溜めたまま本文へ戻るだけ。
   // Enter の空押しで作った「選択なし」の欄に何も書かなかった場合は、残っても意味がないので消す。
@@ -729,10 +745,11 @@ export default function PreviewDrawer({
 
   // 「残したコメント」の表示元: ファイルプレビューは保存済み（filePath 一致）を正にし、
   // 件数もここに出す。markdown プレビュー等 filePath が無い場合は開いている間の savedComments。
+  // 小窓で別のセッションを見ている間は保存済みが手元に無い（fileComments が undefined）ので、これも savedComments。
   // 毎レンダーで新配列を作ると行マーカー effect が無限ループするため安定化する
   const displaySaved = useMemo(
     () =>
-      filePath
+      filePath && fileComments
         ? (fileComments || []).map((c) => ({
             id: c.id,
             selectedText: c.anchor?.quote || '',
@@ -820,8 +837,10 @@ export default function PreviewDrawer({
     };
   }, [displaySaved, markdownToRender, markdownBody, fileContent, showCode, width, lightMode]);
 
-  return (
-    <div className="drawer-overlay" onClick={onClose}>
+  // 小窓では overlay（背景の暗幕・クリックで閉じる）を持たず、窓いっぱいに広げる。
+  // .drawer-overlay を付けないのは、メイン側の「ドロワー表示中」判定（useGlobalKeys / ShortcutHints）と混ざらないようにするため
+  const content = (
+    <div className={pipWindow ? 'drawer-pip-host' : 'drawer-overlay'} onClick={pipWindow ? undefined : onClose}>
       <div
         ref={drawerRef}
         className={`drawer ${isHtml ? 'drawer-html' : ''} ${
@@ -832,7 +851,7 @@ export default function PreviewDrawer({
         style={width != null ? { width, maxWidth: 'none', minWidth: 'auto' } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="drawer-resize-handle" onMouseDown={onDragStart} />
+        {!pipWindow && <div className="drawer-resize-handle" onMouseDown={onDragStart} />}
         <div className="drawer-header">
           <div className="drawer-title-area">
             <span className="drawer-filename">
@@ -868,7 +887,7 @@ export default function PreviewDrawer({
               </button>
             )}
             {filePath && (
-              <a href={previewUrl(filePath)} target="_blank" rel="noopener noreferrer" className="drawer-btn">
+              <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="drawer-btn">
                 別タブ
               </a>
             )}
@@ -881,7 +900,7 @@ export default function PreviewDrawer({
                 小窓
               </button>
             )}
-            <button className="drawer-close" onClick={onClose}>
+            <button className="drawer-close" onClick={onClose} title={pipWindow ? '小窓を閉じる' : undefined}>
               x
             </button>
           </div>
@@ -911,18 +930,18 @@ export default function PreviewDrawer({
               </div>
             ) : (
               <>
-                {isImage && <img src={previewUrl(filePath)} alt={fileName} className="drawer-image" />}
+                {isImage && <img src={fileUrl} alt={fileName} className="drawer-image" />}
                 {isHtml && (
                   <iframe
                     ref={iframeRef}
-                    src={previewUrl(filePath)}
+                    src={fileUrl}
                     className="drawer-iframe"
                     title={fileName}
                     sandbox="allow-scripts allow-same-origin"
                   />
                 )}
-                {isPdf && <iframe src={previewUrl(filePath)} className="drawer-iframe" title={fileName} />}
-                {isVideo && <video controls preload="metadata" src={previewUrl(filePath)} className="drawer-video" />}
+                {isPdf && <iframe src={fileUrl} className="drawer-iframe" title={fileName} />}
+                {isVideo && <video controls preload="metadata" src={fileUrl} className="drawer-video" />}
                 {isCodeView && <PreviewTextBody source={src} />}
               </>
             )}
@@ -1210,4 +1229,5 @@ export default function PreviewDrawer({
       </div>
     </div>
   );
+  return pipWindow ? createPortal(content, hostDoc.body) : content;
 }

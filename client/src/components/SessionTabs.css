@@ -464,6 +464,12 @@ body.light-mode .tab-badge-attention {
   opacity: 0.75;
 }
 
+/* プレビューを小窓（PiP）に出しているセッション */
+.tab-mark-pip {
+  color: var(--accent-secondary);
+  font-size: 11px;
+}
+
 /* 折りたたみ時は状態ドット（右上）とぶつからないよう左下に寄せる。
    頭文字と重なる位置なので、下地を敷いて読めるようにする */
 .tab-mini-marks {
