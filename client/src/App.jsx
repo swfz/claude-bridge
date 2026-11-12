@@ -56,6 +56,7 @@ import { humanSenderLabel } from './utils/messageSender.js';
 import { TbBookmarks, TbChecklist, TbFiles, TbMessages, TbNote, TbRobot } from 'react-icons/tb';
 import './App.css';
 import { readonlyDeliveryState, terminateConfirmMessage } from './utils/runningSessions.js';
+import { dominantModel } from './utils/modelLabel.js';
 
 // ホーム表示中に起動中セッション一覧を取り直す間隔（status/新規起動の反映用）
 const RUNNING_POLL_INTERVAL = 5000;
@@ -1617,6 +1618,21 @@ export default function App() {
     return map;
   }, [messagesBySession]);
 
+  // 一覧で最も多いモデル。これと同じモデルはサイドバー・ホームに出さず、違うものだけ示す
+  // 開いているタブはホームの一覧にも出るので、claudeSessionId で 1 件にまとめてから数える
+  // （二重に数えると開いているセッションのモデルが「既定」に寄り、そのタブだけ表示が消える）
+  const defaultModel = useMemo(() => {
+    const bySession = new Map();
+    for (const r of [...(recentSessions || []), ...(runningSessions || [])]) {
+      if (r.contextUsage?.model) bySession.set(r.sessionId, r.contextUsage.model);
+    }
+    for (const s of sessions) {
+      const model = contextBySession.get(s.id)?.model;
+      if (model) bySession.set(s.claudeSessionId || s.id, model);
+    }
+    return dominantModel([...bySession.values()]);
+  }, [contextBySession, runningSessions, recentSessions, sessions]);
+
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -1818,6 +1834,7 @@ export default function App() {
           starredIds={starredIds}
           pipSessionId={pipPreview?.sessionId}
           contextBySession={contextBySession}
+          defaultModel={defaultModel}
           shareMode={shareMode}
           onHome={() => setShowHome(true)}
           onSelect={handleSwitchSession}
@@ -1845,6 +1862,7 @@ export default function App() {
               {showHome ? (
                 <HomeView
                   dirColorOf={dirColorOfCwd}
+                  defaultModel={defaultModel}
                   runningSessions={runningSessions}
                   recentSessions={recentSessions}
                   recentDays={recentDays}
