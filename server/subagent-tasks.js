@@ -53,14 +53,58 @@ async function scanAppendedLines(jsonlPath, entry) {
     const lastNewline = buf.subarray(0, bytesRead).lastIndexOf(0x0a);
     if (lastNewline >= 0) {
       const text = buf.subarray(0, lastNewline + 1).toString('utf-8');
-      for (const m of text.matchAll(/"tool_use_id"\s*:\s*"([^"]+)"/g)) {
-        entry.ids.add(m[1]);
+      // バックグラウンド起動のサブエージェントは tool_result ではなく
+      // <task-notification> の <tool-use-id> で完了が親に通知される
+      for (const m of text.matchAll(/"tool_use_id"\s*:\s*"([^"]+)"|<tool-use-id>([^<]+)<\/tool-use-id>/g)) {
+        entry.ids.add(m[1] ?? m[2]);
       }
       entry.offset += lastNewline + 1;
     }
   } finally {
     await fh.close();
   }
+}
+
+// トランスクリプトの最後のレコードが end_turn の assistant か（＝サブエージェントが最終回答を返した）。
+// 呼び出し元の JSONL に完了の印が見つからない場合（parentAgentId を持たない古い孫の meta 等）の最後の手がかり。
+// 末尾だけ読み、mtime+size でキャッシュする（一覧は数秒おきにポーリングされる）。
+const TAIL_BYTES = 64 * 1024;
+const endTurnCache = new Map();
+
+async function endsWithFinalAnswer(transcriptPath) {
+  let st;
+  try {
+    st = statSync(transcriptPath);
+  } catch {
+    return false;
+  }
+  const cached = endTurnCache.get(transcriptPath);
+  if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) return cached.value;
+
+  let value = false;
+  const fh = await open(transcriptPath, 'r');
+  try {
+    const length = Math.min(st.size, TAIL_BYTES);
+    const buf = Buffer.alloc(length);
+    const { bytesRead } = await fh.read(buf, 0, length, st.size - length);
+    const lines = buf.subarray(0, bytesRead).toString('utf-8').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      try {
+        const rec = JSON.parse(line);
+        value = rec.type === 'assistant' && rec.message?.stop_reason === 'end_turn';
+      } catch {
+        // 書きかけ・途中から読んだ行は判定材料にしない
+        value = false;
+      }
+      break;
+    }
+  } finally {
+    await fh.close();
+  }
+  endTurnCache.set(transcriptPath, { mtimeMs: st.mtimeMs, size: st.size, value });
+  return value;
 }
 
 // サブエージェントのトランスクリプトが置かれるディレクトリ
@@ -96,7 +140,7 @@ export async function listSubagentTasks({ projectDir, claudeSessionId, projectsD
   // 完了の tool_result は「その Agent ツールを呼んだ側」の JSONL に書かれる。
   // セッション本体が呼んだものは本体の JSONL、サブエージェント（チームメイト等）が呼んだ
   // 孫は meta.parentAgentId の agent-<id>.jsonl。本体だけを見ると孫は永久に running になる。
-  const isDone = async (meta) => {
+  const isDone = async (meta, agentId) => {
     // 新しい Claude Code は終了時に meta へ finished: true を書く
     if (meta.finished === true) return true;
     // toolUseId が無い形式（古い meta・チームメイト）は判定できないので完了扱いにする
@@ -104,7 +148,8 @@ export async function listSubagentTasks({ projectDir, claudeSessionId, projectsD
     const parent = meta.parentAgentId;
     const callerJsonl =
       typeof parent === 'string' && AGENT_ID_RE.test(parent) ? join(dir, `agent-${parent}.jsonl`) : sessionJsonl;
-    return (await collectToolResultIds(callerJsonl)).has(meta.toolUseId);
+    if ((await collectToolResultIds(callerJsonl)).has(meta.toolUseId)) return true;
+    return endsWithFinalAnswer(join(dir, `agent-${agentId}.jsonl`));
   };
 
   const tasks = [];
@@ -136,7 +181,7 @@ export async function listSubagentTasks({ projectDir, claudeSessionId, projectsD
       agentId,
       agentType: meta.agentType || '',
       description: meta.description || '',
-      status: (await isDone(meta)) ? 'completed' : 'running',
+      status: (await isDone(meta, agentId)) ? 'completed' : 'running',
       updatedAt,
       size,
     });
