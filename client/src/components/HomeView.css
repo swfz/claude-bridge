@@ -964,3 +964,26 @@
   color: var(--text-primary);
   font-size: 10px;
 }
+
+/* モデル名。一覧で最も多いモデルと違うときだけ出すので、色は付けず小さな等幅の文字に留める */
+.home-model {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.home-row-name {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.home-row-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

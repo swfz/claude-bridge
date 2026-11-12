@@ -195,6 +195,7 @@ TUI の補完はブラウザからは使えないので、入力欄でスキル�
 - **`/compact` 直後は次の応答まで古い（大きい）値が残る**。usage は assistant レコードにしか書かれないので、圧縮された文脈の実サイズは次の応答が来て初めて分かる
 - 抽出は `server/jsonl-utils.js` の `extractContextUsage(record)`（`{inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens, contextTokens, contextWindow, model}` か null）。会話列には `parseHistoryLines()` と `JsonlWatcher` が assistant メッセージの `contextUsage` として添え、ホームの一覧には `summarizeTail()` が summary の `contextUsage` として乗せる
 - 表示側の整形は `client/src/utils/contextUsage.js` の純粋関数（`latestContextUsage` / `contextPercent` / `formatTokens` / `usageColor` / `isUsageNotable`）。**しきい値は `USAGE_WARN` / `USAGE_DANGER`（40 / 60%）でトップバー・サイドバー・ホームに共通**（`SIDEBAR_USAGE_*` / `sidebarUsageColor` は旧名の別名。`contextColorFor` の 50 / 80% はセッション詳細のドロワーだけが使う）。トップバーは `UsageMeter.jsx`、タブは `.tab-context`、ホームはカードのフッターと行リストの `Ctx` 列
+- **モデル名**も同じ `contextUsage.model`（直近の応答のモデル）から出す。整形は `client/src/utils/modelLabel.js`（`shortModelName` で `claude-opus-5-5` → `opus 5.5`）。**一覧（開いているタブ＋ホームの上下段）で最も多いモデル（`dominantModel`、App の `defaultModel`）は出さず、それと違うものだけ**をタブの 2 行目（`.tab-model`）とホームのタイトルの右（`.home-model`）に薄い等幅文字で出す。使用率の tooltip には常にフルのモデル ID を添える。途中で `/model` を切り替えたセッションは最新のモデルだけが分かり、サブエージェントのモデルは本体には出ない
 
 ### ホーム画面（起動中セッション＋直近セッション）
 

@@ -720,3 +720,9 @@
   width: 9px;
   height: 9px;
 }
+
+/* モデル名は一覧で最も多いものと違うときだけ出す（例外だけ表示する） */
+.tab-model {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
