@@ -22,6 +22,8 @@ import { contextPercent, formatTokens, sidebarUsageColor } from '../utils/contex
 import { shortModelName, modelTitleLine } from '../utils/modelLabel.js';
 import {
   autoGroupKeyOf,
+  GROUP_PALETTE_NAMES,
+  GROUP_PALETTE_SIZE,
   groupColorMap,
   representativeDirOf,
   shouldShowDir,
@@ -58,10 +60,40 @@ function miniLabel(project) {
   return String(project).slice(0, 2).toUpperCase();
 }
 
+// グループの色を選ぶパレット（見出しの直下に差し込む）。selected は固定した色の番号、null なら自動
+function GroupColorPalette({ selected, onPick }) {
+  return (
+    <div className="tab-group-palette" role="group" aria-label="グループの色">
+      {Array.from({ length: GROUP_PALETTE_SIZE }, (_, i) => (
+        <button
+          key={i}
+          type="button"
+          className={`tab-group-swatch${selected === i ? ' selected' : ''}`}
+          style={{ background: `var(--cal-${i})` }}
+          onClick={() => onPick(i)}
+          title={GROUP_PALETTE_NAMES[i]}
+          aria-label={GROUP_PALETTE_NAMES[i]}
+          aria-pressed={selected === i}
+        />
+      ))}
+      <button
+        type="button"
+        className={`tab-group-swatch-auto${selected === null ? ' selected' : ''}`}
+        onClick={() => onPick(null)}
+        title="自動（並び順で色を回す）"
+        aria-pressed={selected === null}
+      >
+        自動
+      </button>
+    </div>
+  );
+}
+
 export default function SessionTabs({
   sessions,
   groups,
   groupActions,
+  groupColors,
   activeSessionId,
   homeActive,
   attentionIds,
@@ -124,6 +156,24 @@ export default function SessionTabs({
   const [dragId, setDragId] = useState(null);
   const [dragGroupKey, setDragGroupKey] = useState(null);
   const [dropTarget, setDropTarget] = useState(null); // {id, after} | {group}
+  // 色を選んでいるグループのキー（見出しのドットのクリックで開く）
+  const [colorPickerKey, setColorPickerKey] = useState(null);
+  // Esc・パレットの外側のクリックで閉じる
+  useEffect(() => {
+    if (!colorPickerKey) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setColorPickerKey(null);
+    };
+    const onDown = (e) => {
+      if (!e.target.closest?.('.tab-group-palette, .tab-group-dot')) setColorPickerKey(null);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [colorPickerKey]);
   const endDrag = useCallback(() => {
     setDragId(null);
     setDragGroupKey(null);
@@ -213,8 +263,9 @@ export default function SessionTabs({
     isHidden,
   );
 
-  // グループ色はドット（見出しとディレクトリ前）にだけ使う。並び順でパレットを回す（ホーム・トップバーも同じ規則）
-  const colorByKey = groupColorMap(shownGroups);
+  // グループ色（見出しのドット・ガイド線・ディレクトリ前のドット）。固定した色が優先で、残りは並び順で
+  // パレットを回す（ホーム・トップバー・カレンダーも同じ規則）
+  const colorByKey = groupColorMap(shownGroups, groupColors);
 
   const shownWidth = collapsed ? COLLAPSED_WIDTH : width;
 
@@ -272,7 +323,18 @@ export default function SessionTabs({
               ) : (
                 <TbFolder className="tab-group-kind" aria-label="ディレクトリグループ" />
               )}
-              <span className="tab-group-dot" style={{ background: groupColor }} />
+              <button
+                type="button"
+                className={`tab-group-dot${colorPickerKey === group.key ? ' open' : ''}`}
+                style={{ background: groupColor }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setColorPickerKey((k) => (k === group.key ? null : group.key));
+                }}
+                title="グループの色を選ぶ"
+                aria-label="グループの色を選ぶ"
+                aria-expanded={colorPickerKey === group.key}
+              />
               <span className="tab-group-label">{group.label}</span>
               {repDir && (
                 <span className="tab-group-dir" title={repDir}>
@@ -315,8 +377,19 @@ export default function SessionTabs({
               title={collapsed ? group.label : undefined}
             >
               {header}
+              {!collapsed && colorPickerKey === group.key && (
+                <GroupColorPalette
+                  selected={groupColors?.[group.key] ?? null}
+                  onPick={(index) => {
+                    groupActions?.onColor(group.key, index);
+                    setColorPickerKey(null);
+                  }}
+                />
+              )}
               {visible.length > 0 && (
-                <div className="tab-group-body">{visible.map((session) => renderTab(session, group))}</div>
+                <div className="tab-group-body" style={groupColor ? { '--group-color': groupColor } : undefined}>
+                  {visible.map((session) => renderTab(session, group))}
+                </div>
               )}
             </div>
           );

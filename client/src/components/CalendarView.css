@@ -167,7 +167,9 @@
   padding: 0;
   border: 1px solid var(--seg-color);
   border-radius: 3px;
-  background: color-mix(in srgb, var(--seg-color) 35%, transparent);
+  /* 中立色（グループの無いプロジェクト）は 35% に薄める。グループ色は背景に寄せた控えめな色なので
+     inline の --seg-mix で 85% にしてほぼそのまま塗る（35% だと背景に溶けて見分けられない） */
+  background: color-mix(in srgb, var(--seg-color) var(--seg-mix, 35%), transparent);
   cursor: pointer;
   overflow: hidden;
 }
@@ -175,6 +177,10 @@
 .cal-seg:hover {
   background: color-mix(in srgb, var(--seg-color) 60%, transparent);
   z-index: 1;
+}
+
+.cal-seg[style*='--seg-mix']:hover {
+  background: var(--seg-color);
 }
 
 /* 調査 / 実装の色分け。帯自体はプロジェクト色を消して枠の色だけを見せる */
@@ -191,11 +197,13 @@
 }
 
 .phase-research {
-  background: var(--cal-2);
+  /* パレットの 青 */
+  background: var(--cal-1);
 }
 
 .phase-edit {
-  background: var(--cal-1);
+  /* パレットの 砂 */
+  background: var(--cal-3);
 }
 
 .phase-talk {

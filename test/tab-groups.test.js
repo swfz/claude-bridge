@@ -8,9 +8,13 @@ import {
   createGroup,
   deleteGroup,
   flattenTabGroups,
+  groupColorIndexMap,
+  groupColorMap,
   groupKeyOf,
+  loadTabGroups,
   renameGroup,
   representativeDirOf,
+  setGroupColor,
   shouldShowDir,
   toggleGroupCollapsed,
   visibleTabsOf,
@@ -148,5 +152,76 @@ describe('visibleTabsOf', () => {
     );
     assert.deepEqual(visibleTabsOf(group, null), []);
     assert.equal(visibleTabsOf({ ...group, collapsed: false }, null).length, 2);
+  });
+});
+
+describe('group colors', () => {
+  const g = (key) => ({ key, sessions: [] });
+
+  it('setGroupColor pins a palette index and null resets to auto', () => {
+    let st = setGroupColor(empty, 'p:x/one', 3);
+    assert.deepEqual(st.colors, { 'p:x/one': 3 });
+    st = setGroupColor(st, 'p:x/one', null);
+    assert.deepEqual(st.colors, {});
+    assert.deepEqual(setGroupColor(empty, 'p:x/one', 8).colors, {});
+    assert.deepEqual(setGroupColor(empty, 'p:x/one', 1.5).colors, {});
+  });
+
+  it('pinned groups keep their color and the rest rotate over unused colors', () => {
+    const groups = [g('a'), g('b'), g('c')];
+    const map = groupColorIndexMap(groups, { b: 0 });
+    assert.equal(map.get('b'), 0);
+    assert.equal(map.get('a'), 1);
+    assert.equal(map.get('c'), 2);
+  });
+
+  it('pinned colors stay put when the group order changes', () => {
+    const colors = { c: 5 };
+    assert.equal(groupColorIndexMap([g('a'), g('b'), g('c')], colors).get('c'), 5);
+    assert.equal(groupColorIndexMap([g('c'), g('a')], colors).get('c'), 5);
+  });
+
+  it('allows duplicates: two groups may pin the same color', () => {
+    const map = groupColorIndexMap([g('a'), g('b')], { a: 2, b: 2 });
+    assert.equal(map.get('a'), 2);
+    assert.equal(map.get('b'), 2);
+  });
+
+  it('falls back to rotating over all colors when every color is pinned', () => {
+    const pinned = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`p${i}`, i]));
+    const groups = [...Object.keys(pinned).map(g), g('free')];
+    assert.equal(groupColorIndexMap(groups, pinned).get('free'), 0);
+  });
+
+  it('ignores pins for groups that are not shown when picking free colors', () => {
+    const map = groupColorIndexMap([g('a')], { hidden: 0 });
+    assert.equal(map.get('a'), 0);
+  });
+
+  it('groupColorMap returns CSS variables', () => {
+    assert.equal(groupColorMap([g('a')], { a: 4 }).get('a'), 'var(--cal-4)');
+  });
+
+  it('deleteGroup drops the color of the deleted manual group', () => {
+    let st = createGroup(empty, 'g', 'g1');
+    st = setGroupColor(st, 'g:g1', 2);
+    st = setGroupColor(st, 'p:x/one', 3);
+    assert.deepEqual(deleteGroup(st, 'g1').colors, { 'p:x/one': 3 });
+  });
+
+  it('loadTabGroups keeps only valid palette indexes', () => {
+    const store = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => store.get(k) ?? null,
+      setItem: (k, v) => store.set(k, v),
+    };
+    try {
+      store.set('sidebarTabGroups', JSON.stringify({ colors: { a: 1, b: 9, c: 'x', d: -1 } }));
+      assert.deepEqual(loadTabGroups().colors, { a: 1 });
+      store.set('sidebarTabGroups', JSON.stringify({ groups: [] }));
+      assert.deepEqual(loadTabGroups().colors, {});
+    } finally {
+      delete globalThis.localStorage;
+    }
   });
 });

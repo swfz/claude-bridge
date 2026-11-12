@@ -177,7 +177,7 @@ export default function CalendarView({
                       style={{
                         // 調査 / 実装の色分けと、サイドバーにグループの無いプロジェクトは
                         // プロジェクト色を使わない（CSS 側の中立色にする）
-                        ...(isPhase || !seg.color ? {} : { '--seg-color': seg.color }),
+                        ...(isPhase || !seg.color ? {} : { '--seg-color': seg.color, '--seg-mix': '85%' }),
                         top: pct(seg.startMs - day.dayStartMs),
                         height: pct(duration),
                         // 隣の帯と接しないよう左右 1px ずつ縮める
