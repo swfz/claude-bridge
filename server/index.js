@@ -41,6 +41,8 @@ import { listSubagentTasks, readSubagentTranscript } from './subagent-tasks.js';
 import { listShellTasks, readShellTaskOutput } from './shell-tasks.js';
 import { readRateLimits } from './rate-limits.js';
 import { listSlashCommands } from './slash-commands.js';
+import { readSessionDiff } from './session-diff.js';
+import { readSessionEditedFiles } from './session-completion.js';
 import { getActivityCalendar, getActivityHeatmap, listActiveSessionIds } from './activity-heatmap.js';
 import { isSensitivePath } from './sensitive-paths.js';
 
@@ -1918,6 +1920,29 @@ wss.on('connection', (ws) => {
         } catch (e) {
           console.error('list_slash_commands failed:', e.message);
           sendTo(ws, { type: 'slash_commands', sessionId: msg.sessionId, commands: [] });
+        }
+        break;
+      }
+
+      // 入力欄の /diff で開く差分ドロワー。cwd と JSONL のパスはクライアントから受け取らず、
+      // セッションから解決する（任意のディレクトリで git を走らせないため）
+      case 'get_session_diff': {
+        const scope = msg.scope === 'session' ? 'session' : 'all';
+        try {
+          const session = findSession(msg.sessionId);
+          if (!session) throw new Error('セッションが見つかりません');
+          const target = resolveClaudeTarget(session);
+          const filePath = target
+            ? join(CLAUDE_PROJECTS_DIR, target.projectDir, `${target.claudeSessionId}.jsonl`)
+            : null;
+          let cwd = session.cwd;
+          if (!cwd && filePath) cwd = (await readSessionSummary(filePath)).cwd;
+          if (scope === 'session' && !filePath) throw new Error('セッションの記録（JSONL）がまだ見つかりません');
+          const editedFiles = scope === 'session' ? await readSessionEditedFiles(filePath) : [];
+          const result = await readSessionDiff({ cwd, scope, editedFiles });
+          sendTo(ws, { type: 'session_diff', sessionId: msg.sessionId, ...result });
+        } catch (e) {
+          sendTo(ws, { type: 'session_diff', sessionId: msg.sessionId, scope, files: [], error: e.message });
         }
         break;
       }

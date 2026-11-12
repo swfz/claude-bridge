@@ -1,0 +1,244 @@
+/* 入力欄の /diff で開く差分ドロワー（ShellOutputDrawer と同じ見え方） */
+.diff-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.diff-drawer {
+  position: relative;
+  width: 60%;
+  max-width: 1100px;
+  min-width: 400px;
+  height: 100%;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 640px) {
+  .diff-drawer {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.diff-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-drawer-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.diff-drawer-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.diff-drawer-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.diff-drawer-root {
+  font-family: monospace;
+}
+
+.diff-drawer-scope {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.diff-scope-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.diff-scope-btn.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.diff-drawer-icon,
+.diff-drawer-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+}
+
+.diff-drawer-icon:hover,
+.diff-drawer-close:hover {
+  color: var(--text-primary);
+}
+
+.diff-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diff-drawer-empty,
+.diff-drawer-note {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.diff-drawer-error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.diff-add {
+  color: var(--success);
+}
+
+.diff-del {
+  color: var(--danger);
+}
+
+.diff-file {
+  /* 本文が flex column なので、縮めると各ファイルの差分が潰れる */
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.diff-file.no-change {
+  opacity: 0.6;
+}
+
+.diff-file-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  font-size: 12px;
+}
+
+.diff-file-toggle {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  padding: 0;
+}
+
+.diff-file-toggle:disabled {
+  visibility: hidden;
+}
+
+.diff-file-path {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: monospace;
+  font-size: 12px;
+  cursor: pointer;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-file-path:disabled {
+  cursor: default;
+}
+
+.diff-file-path:not(:disabled):hover .diff-file-name {
+  text-decoration: underline;
+}
+
+.diff-file-dir {
+  color: var(--text-secondary);
+}
+
+.diff-file-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.diff-file-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.diff-file-stat {
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.diff-file-note {
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.diff-lines {
+  margin: 0;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.diff-line {
+  padding: 0 12px;
+  white-space: pre;
+  color: var(--text-primary);
+  min-width: max-content;
+}
+
+.diff-line.add {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.diff-line.del {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.diff-line.hunk {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.diff-line.meta {
+  color: var(--text-secondary);
+}

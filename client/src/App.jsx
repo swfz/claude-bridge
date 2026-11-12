@@ -12,6 +12,8 @@ import ChoicePrompt from './components/ChoicePrompt.jsx';
 import TaskStrip from './components/TaskStrip.jsx';
 import SubagentDrawer from './components/SubagentDrawer.jsx';
 import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
+import DiffDrawer from './components/DiffDrawer.jsx';
+import { DIFF_SCOPE_STORAGE_KEY, isDiffCommand, normalizeDiffScope } from './utils/diffView.js';
 import RefDrawer from './components/RefDrawer.jsx';
 import NewSessionDialog from './components/NewSessionDialog.jsx';
 import PreviewDrawer from './components/PreviewDrawer.jsx';
@@ -139,6 +141,8 @@ export default function App() {
   const [subagentDrawer, setSubagentDrawer] = useState(null);
   // 出力を表示中のシェルタスク（null なら閉じている）
   const [shellDrawer, setShellDrawer] = useState(null);
+  // 入力欄の /diff で開く差分ドロワー: { sessionId, scope, data: {loading} | session_diff の中身 }
+  const [diffDrawer, setDiffDrawer] = useState(null);
   // セッション内でやり取りしたリンク・ファイルの一覧のドロワー（Refs）
   const [showRefDrawer, setShowRefDrawer] = useState(false);
   // 「未解決／続きをやる」印を付けた claudeSessionId（localStorage のみ）
@@ -403,6 +407,16 @@ export default function App() {
     });
   }, [on]);
 
+  // 差分ドロワーの中身。開いているセッション・範囲と違う応答（範囲の切り替え直後の古い応答）は捨てる
+  useEffect(() => {
+    return on('session_diff', (msg) => {
+      setDiffDrawer((prev) => {
+        if (!prev || prev.sessionId !== msg.sessionId || prev.scope !== msg.scope) return prev;
+        return { ...prev, data: msg };
+      });
+    });
+  }, [on]);
+
   // 入力欄の補完候補（スキル・コマンド・組み込み）
   useEffect(() => {
     return on('slash_commands', (msg) => {
@@ -641,8 +655,45 @@ export default function App() {
   useEffect(() => {
     setSubagentDrawer(null);
     setShellDrawer(null);
+    setDiffDrawer(null);
     setShowRefDrawer(false);
   }, [activeSessionId, showHome]);
+
+  const requestDiff = useCallback(
+    (sessionId, scope) => {
+      setDiffDrawer({ sessionId, scope, data: { loading: true } });
+      send({ type: 'get_session_diff', sessionId, scope });
+    },
+    [send],
+  );
+
+  // ブリッジが横取りするコマンド（Claude には送らない）。処理したら true
+  const handleLocalCommand = useCallback(
+    (text) => {
+      if (!isDiffCommand(text) || !activeSessionId) return false;
+      let scope = 'all';
+      try {
+        scope = normalizeDiffScope(localStorage.getItem(DIFF_SCOPE_STORAGE_KEY));
+      } catch {
+        // localStorage が使えない環境は既定の範囲
+      }
+      requestDiff(activeSessionId, scope);
+      return true;
+    },
+    [activeSessionId, requestDiff],
+  );
+
+  const handleChangeDiffScope = useCallback(
+    (scope) => {
+      try {
+        localStorage.setItem(DIFF_SCOPE_STORAGE_KEY, scope);
+      } catch {
+        // 保存できなくても切り替えはする
+      }
+      if (diffDrawer) requestDiff(diffDrawer.sessionId, scope);
+    },
+    [diffDrawer, requestDiff],
+  );
 
   const handleOpenSubagentTask = useCallback((task) => {
     setSubagentDrawer({
@@ -2007,6 +2058,7 @@ export default function App() {
               placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
               slashCommands={slashCommands[activeSessionId] || []}
               notice={readonlyNotice}
+              onLocalCommand={handleLocalCommand}
             />
           ) : (
             <InputBar
@@ -2016,6 +2068,7 @@ export default function App() {
               disabled={!activeSessionId}
               slashCommands={slashCommands[activeSessionId] || []}
               onSendEscape={handleSendEscape}
+              onLocalCommand={handleLocalCommand}
             />
           )}
         </div>
@@ -2076,6 +2129,20 @@ export default function App() {
           truncated={shellDrawer.truncated}
           onRequestOutput={handleRequestShellOutput}
           onClose={() => setShellDrawer(null)}
+        />
+      )}
+
+      {diffDrawer && (
+        <DiffDrawer
+          scope={diffDrawer.scope}
+          data={diffDrawer.data}
+          onChangeScope={handleChangeDiffScope}
+          onRefresh={() => requestDiff(diffDrawer.sessionId, diffDrawer.scope)}
+          onOpenPreview={(path) => {
+            setDiffDrawer(null);
+            handleOpenPreview(path);
+          }}
+          onClose={() => setDiffDrawer(null)}
         />
       )}
 

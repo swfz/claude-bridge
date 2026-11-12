@@ -128,6 +128,14 @@ describe('listSlashCommands', () => {
     );
   });
 
+  it('ブリッジが処理する /diff は同名のユーザースキルより優先して出す', async () => {
+    const dir = join(root, 'bridge-diff');
+    await mkdir(join(dir, 'skills', 'diff'), { recursive: true });
+    await writeFile(join(dir, 'skills', 'diff', 'SKILL.md'), '---\ndescription: user diff\n---\n');
+    const commands = await listSlashCommands({ claudeDir: dir });
+    assert.equal(find(commands, 'diff').source, 'bridge');
+  });
+
   it('ブラウザから操作できない組み込みコマンドは候補に出さない', async () => {
     const commands = await listSlashCommands({ claudeDir: join(root, 'missing') });
     // モーダルを開くもの（ブラウザ側に何も出ない）と実在しないもの
