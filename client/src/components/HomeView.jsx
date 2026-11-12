@@ -247,7 +247,6 @@ export default function HomeView({
   onOpenReadonly,
   onResume,
   onResumeInTmux,
-  onNew,
   dirColorOf = () => null,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -415,9 +414,6 @@ export default function HomeView({
           </span>
           <button className="btn btn-ghost" onClick={onRefresh} title="一覧を更新">
             更新
-          </button>
-          <button className="btn btn-primary" onClick={onNew}>
-            新しいセッション
           </button>
         </div>
       </div>

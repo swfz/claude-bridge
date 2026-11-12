@@ -1904,7 +1904,6 @@ export default function App() {
                   onOpenReadonly={handleOpenReadonly}
                   onResume={handleResumeSession}
                   onResumeInTmux={handleResumeInTmux}
-                  onNew={() => setShowNewSession(true)}
                 />
               ) : activeSessionId ? (
                 effectiveViewMode === 'raw' ? (
