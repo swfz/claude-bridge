@@ -1619,15 +1619,19 @@ export default function App() {
   }, [messagesBySession]);
 
   // 一覧で最も多いモデル。これと同じモデルはサイドバー・ホームに出さず、違うものだけ示す
-  const defaultModel = useMemo(
-    () =>
-      dominantModel([
-        ...[...contextBySession.values()].map((u) => u.model),
-        ...(runningSessions || []).map((r) => r.contextUsage?.model),
-        ...(recentSessions || []).map((r) => r.contextUsage?.model),
-      ]),
-    [contextBySession, runningSessions, recentSessions],
-  );
+  // 開いているタブはホームの一覧にも出るので、claudeSessionId で 1 件にまとめてから数える
+  // （二重に数えると開いているセッションのモデルが「既定」に寄り、そのタブだけ表示が消える）
+  const defaultModel = useMemo(() => {
+    const bySession = new Map();
+    for (const r of [...(recentSessions || []), ...(runningSessions || [])]) {
+      if (r.contextUsage?.model) bySession.set(r.sessionId, r.contextUsage.model);
+    }
+    for (const s of sessions) {
+      const model = contextBySession.get(s.id)?.model;
+      if (model) bySession.set(s.claudeSessionId || s.id, model);
+    }
+    return dominantModel([...bySession.values()]);
+  }, [contextBySession, runningSessions, recentSessions, sessions]);
 
   const unresolvedCount = threads.filter((t) => !t.resolved).length;
 

@@ -33,8 +33,9 @@ describe('dominantModel', () => {
       'opus 5.5',
     );
   });
-  it('prefers the first one on ties and handles empty input', () => {
-    assert.equal(dominantModel(['claude-sonnet-5-5', 'claude-opus-5-5']), 'sonnet 5.5');
+  it('returns null when the evidence is weak (single session or a tie)', () => {
+    assert.equal(dominantModel(['claude-sonnet-5-5']), null);
+    assert.equal(dominantModel(['claude-sonnet-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-opus-5-5']), null);
     assert.equal(dominantModel([]), null);
     assert.equal(dominantModel(undefined), null);
   });

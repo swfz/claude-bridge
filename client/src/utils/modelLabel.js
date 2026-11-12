@@ -21,7 +21,8 @@ export function shortModelName(model) {
 }
 
 // 一覧に出ているセッションのうち最も多いモデル（短縮名）。これを「既定」とみなして表示を省く。
-// 同数なら先に現れた方
+// 根拠が弱いとき（2 件未満・同数で並ぶ）は既定を決めず null＝全部出す。
+// タブ 1 つだけ（ホームの一覧を未取得）でそのモデルが既定になり、表示が消えるのを避けるため
 export function dominantModel(models) {
   const counts = new Map();
   for (const m of models || []) {
@@ -29,15 +30,10 @@ export function dominantModel(models) {
     if (!name) continue;
     counts.set(name, (counts.get(name) || 0) + 1);
   }
-  let best = null;
-  let bestCount = 0;
-  for (const [name, count] of counts) {
-    if (count > bestCount) {
-      best = name;
-      bestCount = count;
-    }
-  }
-  return best;
+  const sorted = [...counts].sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0 || sorted[0][1] < 2) return null;
+  if (sorted.length > 1 && sorted[1][1] === sorted[0][1]) return null;
+  return sorted[0][0];
 }
 
 // 一覧に出すラベル。既定（dominant）と同じなら出さない（null）
