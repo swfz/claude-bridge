@@ -232,6 +232,41 @@ describe('listSubagentTasks', () => {
     );
   });
 
+  it('reports completed when a background agent is reported via <task-notification>', async () => {
+    const { projectsDir, subagents } = await setupProject({
+      parentRecords: [
+        {
+          type: 'queue-operation',
+          operation: 'enqueue',
+          content:
+            '<task-notification>\n<task-id>bg1</task-id>\n<tool-use-id>toolu_bg</tool-use-id>\n</task-notification>',
+        },
+      ],
+    });
+    await writeAgent(subagents, 'bg1', { agentType: 'general-purpose', toolUseId: 'toolu_bg' }, agentRecords);
+
+    const tasks = await listSubagentTasks({ projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir });
+    assert.equal(tasks[0].status, 'completed');
+  });
+
+  it('reports completed when the transcript ends with an end_turn answer but no caller result is found', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    const finalAnswer = {
+      type: 'assistant',
+      isSidechain: true,
+      uuid: 'a2',
+      message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: '完了しました' }] },
+    };
+    // parentAgentId を持たない古い孫（spawnDepth: 2）の meta
+    await writeAgent(subagents, 'orphan', { toolUseId: 'toolu_orphan', spawnDepth: 2 }, [...agentRecords, finalAnswer]);
+    // 最後が tool_use の途中なら実行中のまま
+    await writeAgent(subagents, 'midway', { toolUseId: 'toolu_midway' }, [finalAnswer, ...agentRecords]);
+
+    const tasks = await listSubagentTasks({ projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir });
+    const byId = Object.fromEntries(tasks.map((t) => [t.agentId, t.status]));
+    assert.deepEqual(byId, { orphan: 'completed', midway: 'running' });
+  });
+
   it('treats a meta without toolUseId as completed (old format)', async () => {
     const { projectsDir, subagents } = await setupProject();
     await writeAgent(subagents, 'e1', { agentType: 'general-purpose', description: '旧形式' }, agentRecords);
