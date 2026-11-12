@@ -8,7 +8,15 @@ import { tabKeyOf } from './tabOrder.js';
 
 export const TAB_GROUPS_KEY = 'sidebarTabGroups';
 
-const EMPTY_STATE = Object.freeze({ groups: [], assign: {}, collapsed: [] });
+const EMPTY_STATE = Object.freeze({ groups: [], assign: {}, collapsed: [], colors: {} });
+
+// ディレクトリ色のパレットの数（index.css の --cal-0〜--cal-7）
+export const GROUP_PALETTE_SIZE = 8;
+export const GROUP_PALETTE_NAMES = ['紫', '青', '青緑', '砂', '藤', 'オリーブ', '鼠青', '煉瓦'];
+
+function isPaletteIndex(v) {
+  return Number.isInteger(v) && v >= 0 && v < GROUP_PALETTE_SIZE;
+}
 
 export function autoGroupKeyOf(session) {
   const { parent, project } = parseCwd(session?.cwd);
@@ -101,7 +109,16 @@ export function deleteGroup(state, id) {
     groups: (state.groups || []).filter((g) => g.id !== id),
     assign,
     collapsed: (state.collapsed || []).filter((k) => k !== key),
+    colors: Object.fromEntries(Object.entries(state.colors || {}).filter(([k]) => k !== key)),
   };
+}
+
+// グループの色を固定する（index は --cal-N の N）。null で自動（表示順で回す）に戻す
+export function setGroupColor(state, groupKey, index) {
+  const colors = { ...(state.colors || {}) };
+  if (isPaletteIndex(index)) colors[groupKey] = index;
+  else delete colors[groupKey];
+  return { ...state, colors };
 }
 
 export function toggleGroupCollapsed(state, groupKey) {
@@ -124,7 +141,11 @@ export function loadTabGroups() {
         ? Object.fromEntries(Object.entries(raw.assign).filter(([, v]) => typeof v === 'string'))
         : {};
     const collapsed = Array.isArray(raw.collapsed) ? raw.collapsed.filter((k) => typeof k === 'string') : [];
-    return { groups, assign, collapsed };
+    const colors =
+      raw.colors && typeof raw.colors === 'object'
+        ? Object.fromEntries(Object.entries(raw.colors).filter(([, v]) => isPaletteIndex(v)))
+        : {};
+    return { groups, assign, collapsed, colors };
   } catch {
     return EMPTY_STATE;
   }
@@ -173,9 +194,26 @@ export function shownTabGroups(groups, isHidden = () => false) {
     .filter((group) => group.manual || group.sessions.length > 0);
 }
 
-// グループ色（--cal-0〜7）を表示順で回す。サイドバー・ホーム・トップバーで同じ色を使う
-export function groupColorMap(groups) {
-  return new Map((groups || []).map((group, index) => [group.key, `var(--cal-${index % 8})`]));
+// グループ色（--cal-0〜7）。サイドバー・ホーム・トップバー・カレンダーで同じ色を使う。
+// 色を固定したグループ（colors）はその色、それ以外は固定で使われていない色を表示順で回す
+// （空きが無ければ全色で回す）。同じ色の重複は許す
+export function groupColorIndexMap(groups, colors = {}) {
+  const list = groups || [];
+  const fixed = new Set(list.map((g) => colors?.[g.key]).filter(isPaletteIndex));
+  const free = Array.from({ length: GROUP_PALETTE_SIZE }, (_, i) => i).filter((i) => !fixed.has(i));
+  const pool = free.length > 0 ? free : Array.from({ length: GROUP_PALETTE_SIZE }, (_, i) => i);
+  let next = 0;
+  return new Map(
+    list.map((group) => {
+      const pinned = colors?.[group.key];
+      if (isPaletteIndex(pinned)) return [group.key, pinned];
+      return [group.key, pool[next++ % pool.length]];
+    }),
+  );
+}
+
+export function groupColorMap(groups, colors = {}) {
+  return new Map([...groupColorIndexMap(groups, colors)].map(([key, i]) => [key, `var(--cal-${i})`]));
 }
 
 // cwd に対応するディレクトリグループの色。サイドバーにそのグループが無ければ null（色を付けない）

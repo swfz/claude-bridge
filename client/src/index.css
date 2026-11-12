@@ -40,15 +40,18 @@ body,
   --heat-2: #006d32;
   --heat-3: #26a641;
   --heat-4: #39d353;
-  /* ディレクトリ色の 8 色。サイドバーのグループ・ホームのカード・週間カレンダーの帯で共有する（tabGroups.js の groupColorMap） */
-  --cal-0: #8b7cf6;
-  --cal-1: #e0a83a;
-  --cal-2: #4aa3df;
-  --cal-3: #e2656b;
-  --cal-4: #4fb987;
-  --cal-5: #d07ad6;
-  --cal-6: #3fb7b0;
-  --cal-7: #a3a86b;
+  /* ディレクトリ色の 8 色。サイドバーのグループ・ホームのカード・週間カレンダーの帯で共有する（tabGroups.js の groupColorMap）。
+     意味を持つ色（--danger / --warning / --success / --accent）と紛らわしい赤・緑・橙黄・ピンクは避け、
+     OKLCH で明度と彩度を揃えて背景に寄せてある（ダーク L 0.49 / ライト L 0.79、C 0.08 前後）。
+     並びは紫・青・青緑・砂・藤・オリーブ・鼠青・煉瓦（GROUP_PALETTE_NAMES と同じ順） */
+  --cal-0: #60588b;
+  --cal-1: #40628d;
+  --cal-2: #0e6e72;
+  --cal-3: #745c34;
+  --cal-4: #765273;
+  --cal-5: #5c663c;
+  --cal-6: #506371;
+  --cal-7: #815440;
 }
 
 /* アプリ全体のライトテーマ。body.light-mode が付くと配下の var() 参照を
@@ -77,14 +80,14 @@ body.light-mode {
   --heat-2: #40c463;
   --heat-3: #30a14e;
   --heat-4: #216e39;
-  --cal-0: #6d5bd0;
-  --cal-1: #b7801a;
-  --cal-2: #2b7cc0;
-  --cal-3: #c8454c;
-  --cal-4: #2f8f63;
-  --cal-5: #a54cad;
-  --cal-6: #1f8b85;
-  --cal-7: #7c8043;
+  --cal-0: #b9b2eb;
+  --cal-1: #98bdee;
+  --cal-2: #79cacf;
+  --cal-3: #d0b78c;
+  --cal-4: #d4abd0;
+  --cal-5: #b5c193;
+  --cal-6: #a9becd;
+  --cal-7: #e1ad97;
 }
 
 /* スクロールバーはどこでも細く・薄くし、カーソルが乗っている領域だけ少し濃くする

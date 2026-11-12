@@ -32,6 +32,7 @@ import {
   dirColorOf,
   flattenTabGroups,
   groupColorMap,
+  setGroupColor,
   loadTabGroups,
   renameGroup,
   saveTabGroups,
@@ -1311,6 +1312,7 @@ export default function App() {
       onRename: (id, name) => updateTabGroups((st) => renameGroup(st, id, name)),
       onDelete: (id) => updateTabGroups((st) => deleteGroup(st, id)),
       onToggle: (key) => updateTabGroups((st) => toggleGroupCollapsed(st, key)),
+      onColor: (key, index) => updateTabGroups((st) => setGroupColor(st, key, index)),
     }),
     [updateTabGroups],
   );
@@ -1337,8 +1339,9 @@ export default function App() {
     () =>
       groupColorMap(
         shownTabGroups(tabGroups, (s) => shareMode && s.claudeSessionId && sensitiveIds.has(s.claudeSessionId)),
+        tabGroupState.colors,
       ),
-    [tabGroups, shareMode, sensitiveIds],
+    [tabGroups, tabGroupState.colors, shareMode, sensitiveIds],
   );
   const dirColorOfCwd = useCallback((cwd) => dirColorOf(dirColors, cwd), [dirColors]);
 
@@ -1862,6 +1865,7 @@ export default function App() {
           sessions={orderedSessions}
           groups={tabGroups}
           groupActions={tabGroupActions}
+          groupColors={tabGroupState.colors}
           activeSessionId={showHome ? null : activeSessionId}
           homeActive={showHome}
           attentionIds={attentionIds}
