@@ -397,14 +397,13 @@
 }
 
 .btn-action:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .btn-action-primary {
-  background: rgba(233, 69, 96, 0.1);
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -679,8 +678,8 @@
 }
 
 .selection-menu button:hover {
-  background: var(--accent);
-  color: #fff;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 /* 選択 → ノート入力ポップオーバー（指摘/コメントを書く） */
@@ -707,7 +706,7 @@
 .selection-note-quote {
   font-size: 12px;
   color: var(--text-secondary);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--border);
   padding-left: 6px;
   margin-bottom: 6px;
   max-height: 48px;
@@ -749,10 +748,20 @@
   cursor: pointer;
 }
 
+.selection-note-actions button:hover:not(:disabled):not(.primary) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* 確定は主ボタン（.btn-primary）と同じ枠だけピンク */
 .selection-note-actions button.primary {
-  background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.selection-note-actions button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .selection-note-actions button:disabled {
@@ -800,7 +809,7 @@
 .inline-comment-quote {
   font-size: 11px;
   color: var(--text-secondary);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--border);
   padding-left: 6px;
   margin-bottom: 3px;
 }
@@ -867,8 +876,7 @@
 }
 
 .scroll-to-latest:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--text-secondary);
 }
 
 /* メッセージピック（Alt+R → 数字 → Enter）の番号バッジ。ヘッダの先頭に出す */
@@ -878,7 +886,7 @@
   padding: 1px 5px;
   border: 1px solid var(--accent);
   border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text-primary);
   font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 11px;
@@ -920,7 +928,7 @@
 }
 
 .msg-pick-hud-value.invalid {
-  color: var(--accent-hover);
+  color: var(--danger);
 }
 
 .msg-pick-hud-hint {
@@ -957,7 +965,7 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 /* p / Tab で開く対象になっているファイルリンク */
@@ -997,7 +1005,40 @@
 }
 
 /* ピン留めはホバーの操作に入る。ピン済みは見出しの印（.chat-pinned-mark）で示す */
+/* 時刻の右に置くピン。未ピンはホバー（キーボードなら focus-within）のときだけ出す */
+.pin-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 1px 3px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.chat-message:hover .pin-toggle,
+.chat-message:focus-within .pin-toggle,
 .pin-toggle.active {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .pin-toggle {
+    opacity: 1;
+  }
+}
+
+.pin-toggle:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.pin-toggle.active,
+.pin-toggle.active:hover {
   color: var(--warning);
 }
 

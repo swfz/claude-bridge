@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { TbFile, TbTrash, TbX } from 'react-icons/tb';
 import './CommentPanel.css';
 
 // セッションに残すコメント（送信されない・参照専用）のパネル。
@@ -58,8 +59,8 @@ export default function CommentPanel({ comments, onAdd, onDelete, onJump, onClos
           コメント
           {comments.length > 0 && <span className="comment-count-badge">{comments.length}</span>}
         </h3>
-        <button className="comment-panel-close" onClick={onClose} title="閉じる">
-          x
+        <button className="comment-panel-close" onClick={onClose} title="閉じる" aria-label="閉じる">
+          <TbX size={16} />
         </button>
       </div>
 
@@ -71,16 +72,14 @@ export default function CommentPanel({ comments, onAdd, onDelete, onJump, onClos
           placeholder="このセッションにコメントを残す（送信されません / Cmd+Enterで追加）..."
           rows={2}
         />
-        <button onClick={handleAdd} disabled={!text.trim()}>
+        <button className="btn btn-primary" onClick={handleAdd} disabled={!text.trim()} title="追加（Cmd+Enter）">
           追加
         </button>
       </div>
 
       <div className="comment-panel-body">
         {sorted.length === 0 ? (
-          <p className="comment-panel-empty">
-            コメントなし — 上の欄からセッションにコメントを残せます（送信されません）
-          </p>
+          <p className="comment-panel-empty">コメントなし</p>
         ) : (
           sorted.map((c) => {
             const quote = c.anchor?.quote || c.messageSnippet || '';
@@ -102,7 +101,10 @@ export default function CommentPanel({ comments, onAdd, onDelete, onJump, onClos
                 >
                   {/* どの箇所に対するコメントか（引用 / ファイル） */}
                   {c.anchor?.type === 'file' && (
-                    <div className="comment-panel-snippet">📄 {(c.anchor.filePath || '').split('/').pop()}</div>
+                    <div className="comment-panel-snippet comment-panel-file">
+                      <TbFile size={12} />
+                      {(c.anchor.filePath || '').split('/').pop()}
+                    </div>
                   )}
                   {quote && (
                     <div className="comment-panel-snippet">
@@ -115,8 +117,13 @@ export default function CommentPanel({ comments, onAdd, onDelete, onJump, onClos
                     {c.timestamp ? new Date(c.timestamp).toLocaleString('ja-JP') : ''}
                   </div>
                 </div>
-                <button className="comment-panel-delete" onClick={() => onDelete?.(c.id)} title="このコメントを削除">
-                  x
+                <button
+                  className="comment-panel-delete"
+                  onClick={() => onDelete?.(c.id)}
+                  title="このコメントを削除"
+                  aria-label="このコメントを削除"
+                >
+                  <TbTrash size={14} />
                 </button>
               </div>
             );

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { TbArrowBackUp, TbCheck, TbCopy } from 'react-icons/tb';
 import { filesToMarkdown, isModified, relativeToCwd } from '../utils/sessionFiles.js';
 import './FileList.css';
 
@@ -12,12 +13,12 @@ const OP_FILTERS = [
   { value: 'readonly', label: '参照のみ', test: (f) => !isModified(f) },
 ];
 
-// op バッジ（0 のものは出さない）
+// op バッジ（0 のものは出さない）。読んだだけは薄い文字、変更系（modifies）だけを目立たせる
 const OP_BADGES = [
-  { key: 'read', label: '読' },
-  { key: 'edit', label: '編集' },
-  { key: 'write', label: '作成' },
-  { key: 'artifact', label: 'Artifact' },
+  { key: 'read', label: '読', modifies: false },
+  { key: 'edit', label: '編集', modifies: true },
+  { key: 'write', label: '作成', modifies: true },
+  { key: 'artifact', label: 'Artifact', modifies: true },
 ];
 
 function splitPath(relPath) {
@@ -81,22 +82,30 @@ export default function FileList({ files, cwd, onOpenPreview, onJumpToMessage })
           onChange={(e) => setFilter(e.target.value)}
           placeholder="パスで絞り込み"
         />
-        <button className="file-drawer-copy" onClick={handleCopy} disabled={visibleFiles.length === 0}>
-          {copied ? 'コピーしました' : 'パスをコピー'}
+        <button
+          className="file-drawer-copy"
+          onClick={handleCopy}
+          disabled={visibleFiles.length === 0}
+          title={copied ? 'コピーしました' : '表示中のパスをコピー'}
+          aria-label={copied ? 'コピーしました' : 'パスをコピー'}
+        >
+          {copied ? <TbCheck /> : <TbCopy />}
         </button>
       </div>
 
       <div className="file-drawer-ops">
-        {OP_FILTERS.map(({ value, label }) => (
-          <button
-            key={value}
-            className={`file-op-toggle ${opFilter === value ? 'active' : ''}`}
-            onClick={() => setOpFilter(value)}
-            aria-pressed={opFilter === value}
-          >
-            {label} {opCounts[value]}
-          </button>
-        ))}
+        <div className="file-op-segmented">
+          {OP_FILTERS.map(({ value, label }) => (
+            <button
+              key={value}
+              className={`file-op-toggle ${opFilter === value ? 'active' : ''}`}
+              onClick={() => setOpFilter(value)}
+              aria-pressed={opFilter === value}
+            >
+              {label} {opCounts[value]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="file-drawer-body">
@@ -125,16 +134,21 @@ export default function FileList({ files, cwd, onOpenPreview, onJumpToMessage })
                     </div>
                   )}
                   <div className="file-row-meta">
-                    {OP_BADGES.filter(({ key }) => file.ops[key] > 0).map(({ key, label }) => (
-                      <span className="file-badge" key={key}>
+                    {OP_BADGES.filter(({ key }) => file.ops[key] > 0).map(({ key, label, modifies }) => (
+                      <span className={`file-badge ${modifies ? 'file-badge-modified' : 'file-badge-read'}`} key={key}>
                         {label} ×{file.ops[key]}
                       </span>
                     ))}
                   </div>
                 </div>
                 {file.lastUuid && (
-                  <button className="file-row-jump" onClick={() => onJumpToMessage(file.lastUuid)}>
-                    会話へ
+                  <button
+                    className="file-row-jump"
+                    onClick={() => onJumpToMessage(file.lastUuid)}
+                    title="会話へ"
+                    aria-label="会話へ"
+                  >
+                    <TbArrowBackUp />
                   </button>
                 )}
               </div>

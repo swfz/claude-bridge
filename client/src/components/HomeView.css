@@ -628,11 +628,13 @@
 }
 
 .home-tab-item:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--text-secondary);
 }
 
+/* 表示中のタブ。カードの .current と同じく枠・背景を一段濃くするだけ */
 .home-tab-item.active {
-  border-color: var(--accent);
+  border-color: var(--text-secondary);
+  background: var(--bg-surface);
 }
 
 .home-tab-item.dead {

@@ -41,7 +41,7 @@
 }
 
 .home-artifact-chip:hover {
-  border-color: var(--accent);
+  border-color: var(--text-secondary);
 }
 
 /* 「+N」はリンクではないのでホバーの手掛かりを出さない */

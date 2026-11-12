@@ -162,7 +162,7 @@
 
 .choice-btn-plain:hover {
   color: var(--text-primary);
-  border-color: var(--accent);
+  border-color: var(--text-secondary);
 }
 
 .choice-prompt-footer {

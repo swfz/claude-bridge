@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { TbMessage, TbSparkles, TbUser } from 'react-icons/tb';
 import { peekPosition } from '../utils/recentPeek.js';
 import { formatTurnTime } from '../utils/sessionTurns.js';
 import './RecentPeek.css';
@@ -130,7 +131,7 @@ export default function RecentPeek({ data, onRequest }) {
         onMouseDown={stop}
         onClick={handleClick}
       >
-        💬
+        <TbMessage aria-hidden="true" />
       </button>
       {open &&
         createPortal(
@@ -183,7 +184,10 @@ function RecentPeekBody({ data }) {
           <div key={`${ex.promptAt}-${i}`} className="recent-peek-exchange">
             <div className="recent-peek-turn user">
               <div className="recent-peek-meta">
-                <span className="recent-peek-who">You</span>
+                <span className="recent-peek-who">
+                  <TbUser aria-hidden="true" />
+                  You
+                </span>
                 {promptAt && <span> · {promptAt}</span>}
               </div>
               <div className="recent-peek-text">
@@ -193,7 +197,10 @@ function RecentPeekBody({ data }) {
             </div>
             <div className="recent-peek-turn claude">
               <div className="recent-peek-meta">
-                <span className="recent-peek-who">Claude</span>
+                <span className="recent-peek-who">
+                  <TbSparkles aria-hidden="true" />
+                  Claude
+                </span>
                 {replyAt && <span> · {replyAt}</span>}
                 {ex.toolCount > 0 && <span className="recent-peek-tools">ツール {ex.toolCount} 回</span>}
               </div>

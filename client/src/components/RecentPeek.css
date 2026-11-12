@@ -9,10 +9,19 @@
   border: none;
   border-radius: 4px;
   background: none;
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
   opacity: 0.45;
+}
+
+.recent-peek-button svg {
+  display: block;
+}
+
+.recent-peek-button:hover {
+  color: var(--text-primary);
 }
 
 .home-row:hover .recent-peek-button,
@@ -23,7 +32,7 @@
 
 .recent-peek-button.pinned {
   background: var(--bg-surface);
-  outline: 1px solid var(--accent-secondary);
+  color: var(--text-primary);
 }
 
 /* body 直下に portal で出す。位置は JS（peekPosition）が決める */
@@ -46,8 +55,9 @@
   user-select: text;
 }
 
+/* 固定表示は枠を一段濃くするだけ（色は付けない） */
 .recent-peek.pinned {
-  border-color: var(--accent-secondary);
+  border-color: var(--text-secondary);
 }
 
 .recent-peek-header {
@@ -84,7 +94,7 @@
 }
 
 .recent-peek-status.error {
-  color: var(--accent);
+  color: var(--danger);
 }
 
 .recent-peek-exchange {
@@ -106,11 +116,19 @@
 }
 
 .recent-peek-who {
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: middle;
+}
+
+.recent-peek-who svg {
+  display: block;
+  font-size: 12px;
 }
 
 .recent-peek-turn.user .recent-peek-who {
-  color: var(--accent-secondary);
+  color: var(--text-primary);
 }
 
 .recent-peek-tools {

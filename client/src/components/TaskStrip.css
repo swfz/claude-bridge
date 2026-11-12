@@ -1,40 +1,33 @@
-/* 入力欄の直上に置くサブエージェントタスクのチップ列 */
+/* 入力欄の直上に置くサブエージェントタスク・シェルのチップ列。
+   チップは枠なしの「アイコン＋ラベル」で、実行中だけ回転アイコンで目を引く */
 .task-strip {
   border-top: 1px solid var(--border);
   background: var(--bg-secondary);
-  padding: 6px 16px;
+  padding: 4px 12px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px 4px;
   flex-wrap: wrap;
-}
-
-.task-strip-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  margin-right: 2px;
 }
 
 .task-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   max-width: 320px;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  background: none;
+  border: none;
+  border-radius: 4px;
   color: var(--text-primary);
   font-size: 12px;
   font-family: inherit;
-  padding: 3px 10px;
+  padding: 2px 6px;
   cursor: pointer;
 }
 
 .task-chip:hover {
-  border-color: var(--accent);
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .task-chip-text {
@@ -45,49 +38,50 @@
 
 .task-chip-icon {
   flex-shrink: 0;
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
 }
 
-/* 実行中は歯車が回っていることが分かるよう点滅させる */
-.task-chip-running {
-  border-color: var(--warning);
-}
-
+/* 実行中。回転するアイコンで動いていることを示す（色は付けない） */
 .task-chip-running .task-chip-icon {
-  color: var(--warning);
-  animation: task-chip-pulse 1.4s ease-in-out infinite;
+  color: var(--text-primary);
 }
 
-@keyframes task-chip-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
+.task-chip-spin {
+  animation: task-chip-spin 1s linear infinite;
+}
+
+@keyframes task-chip-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .task-chip-spin {
+    animation: none;
+  }
+}
+
+/* 完了は既定の状態なので薄くする */
 .task-chip-done {
   color: var(--text-secondary);
 }
 
 .task-chip-done .task-chip-icon {
-  color: var(--success);
+  color: var(--text-secondary);
 }
 
 .task-chip-more {
   color: var(--text-secondary);
-  border-style: dashed;
 }
 
-/* 終了コードが 0 以外だったシェル。テーマに専用のエラー色が無いので警告色を借り、
-   点滅しない ✗ アイコンで実行中と区別する */
+/* 終了コードが 0 以外だったシェル。ラベルは薄く、✗ アイコンだけ危険色にする */
 .task-chip-failed {
-  border-color: var(--warning);
   color: var(--text-secondary);
 }
 
 .task-chip-failed .task-chip-icon {
-  color: var(--warning);
+  color: var(--danger);
 }

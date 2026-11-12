@@ -62,7 +62,7 @@
 }
 
 .ref-drawer-close:hover {
-  color: var(--accent);
+  color: var(--text-primary);
 }
 
 .ref-drawer-tabs {
@@ -82,10 +82,11 @@
 }
 
 .ref-drawer-tab:hover {
-  color: var(--accent);
+  color: var(--text-primary);
 }
 
+/* 選択中は中立の下線（ピンクにしない） */
 .ref-drawer-tab.active {
   color: var(--text-primary);
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--text-primary);
 }

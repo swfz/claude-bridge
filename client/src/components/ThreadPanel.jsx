@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { TbArrowBackUp, TbCheck, TbTrash } from 'react-icons/tb';
 import './ThreadPanel.css';
 
 function ThreadItem({ thread, draft, onDraftChange, onSubmitBatch, onResolve, onDelete }) {
@@ -15,12 +16,21 @@ function ThreadItem({ thread, draft, onDraftChange, onSubmitBatch, onResolve, on
   return (
     <div className={`thread-item ${thread.resolved ? 'resolved' : ''}`}>
       <div className="thread-header" onClick={() => setExpanded(!expanded)}>
-        <span className="thread-indicator">{thread.resolved ? 'done' : 'open'}</span>
+        <span
+          className="thread-indicator"
+          role="img"
+          title={thread.resolved ? '解決済み' : '未解決'}
+          aria-label={thread.resolved ? '解決済み' : '未解決'}
+        />
         <span className="thread-selected-text">
           {thread.selectedText.slice(0, 60)}
           {thread.selectedText.length > 60 ? '...' : ''}
         </span>
-        <span className="thread-reply-count">{thread.replies.length} 件の返信</span>
+        {thread.replies.length > 0 && (
+          <span className="thread-reply-count" title={`${thread.replies.length} 件の返信`}>
+            {thread.replies.length}
+          </span>
+        )}
         {hasDraft && (
           <span className="thread-draft-indicator" title="未送信の下書きあり">
             下書き
@@ -32,9 +42,10 @@ function ThreadItem({ thread, draft, onDraftChange, onSubmitBatch, onResolve, on
             e.stopPropagation();
             onResolve(thread.id);
           }}
-          title={thread.resolved ? '未解決に戻す' : '解決済みにする'}
+          title={thread.resolved ? '未解決に戻す（Reopen）' : '解決済みにする（Resolve）'}
+          aria-label={thread.resolved ? 'Reopen' : 'Resolve'}
         >
-          {thread.resolved ? 'Reopen' : 'Resolve'}
+          {thread.resolved ? <TbArrowBackUp size={14} /> : <TbCheck size={14} />}
         </button>
         <button
           className="thread-delete-btn"
@@ -43,8 +54,9 @@ function ThreadItem({ thread, draft, onDraftChange, onSubmitBatch, onResolve, on
             onDelete(thread.id);
           }}
           title="スレッドを削除"
+          aria-label="スレッドを削除"
         >
-          x
+          <TbTrash size={14} />
         </button>
       </div>
 

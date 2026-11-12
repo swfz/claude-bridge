@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TbCheck, TbLoader2, TbX } from 'react-icons/tb';
 import './TaskStrip.css';
 
 // 完了タスクをそのまま出し続けると邪魔なので、この件数を超えたら折りたたむ
@@ -21,6 +22,7 @@ function shellTitle(task) {
 
 // セッションが起動したサブエージェントと Bash 出力のチップ列（入力欄の直上）。
 // クリックでサブエージェントの会話／シェルの出力をドロワーで開く。
+// 枠なしの「アイコン＋ラベル」を並べ、実行中だけ回転アイコンで目を引く（種別は title で示す）
 export default function TaskStrip({ tasks, shellTasks, onOpenTask, onOpenShellTask }) {
   const [showAllCompleted, setShowAllCompleted] = useState(false);
 
@@ -45,7 +47,7 @@ export default function TaskStrip({ tasks, shellTasks, onOpenTask, onOpenShellTa
       onClick={() => onOpenTask(task)}
       title={`${task.agentType || 'agent'} — ${done ? '完了' : '実行中'}`}
     >
-      <span className="task-chip-icon">{done ? '✓' : '⚙'}</span>
+      <span className="task-chip-icon">{done ? <TbCheck /> : <TbLoader2 className="task-chip-spin" />}</span>
       <span className="task-chip-text">{taskLabel(task)}</span>
     </button>
   );
@@ -61,7 +63,9 @@ export default function TaskStrip({ tasks, shellTasks, onOpenTask, onOpenShellTa
         onClick={() => onOpenShellTask(task)}
         title={shellTitle(task)}
       >
-        <span className="task-chip-icon">{running ? '$' : failed ? '✗' : '✓'}</span>
+        <span className="task-chip-icon">
+          {running ? <TbLoader2 className="task-chip-spin" /> : failed ? <TbX /> : <TbCheck />}
+        </span>
         <span className="task-chip-text">{shellLabel(task)}</span>
       </button>
     );
@@ -69,7 +73,6 @@ export default function TaskStrip({ tasks, shellTasks, onOpenTask, onOpenShellTa
 
   return (
     <div className="task-strip">
-      <span className="task-strip-label">Tasks</span>
       {runningAgents.map((task) => renderAgent(task, false))}
       {runningShells.map(renderShell)}
       {visibleCompleted.map((item) => (item.kind === 'agent' ? renderAgent(item.task, true) : renderShell(item.task)))}
@@ -79,7 +82,10 @@ export default function TaskStrip({ tasks, shellTasks, onOpenTask, onOpenShellTa
           onClick={() => setShowAllCompleted(true)}
           title="完了したタスクをすべて表示"
         >
-          ✓ 他 {hiddenCount} 件
+          <span className="task-chip-icon">
+            <TbCheck />
+          </span>
+          他 {hiddenCount} 件
         </button>
       )}
       {showAllCompleted && completed.length > COMPLETED_VISIBLE && (

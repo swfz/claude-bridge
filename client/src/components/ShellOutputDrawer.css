@@ -75,29 +75,78 @@
   flex-wrap: wrap;
 }
 
+/* 種別・ID は薄い等幅の文字。枠・背景は付けない */
 .shell-badge {
   font-size: 11px;
   color: var(--text-secondary);
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1px 8px;
   font-family: 'Cascadia Code', 'Fira Code', monospace;
 }
 
-.shell-badge-status.running {
-  color: var(--warning);
-  border-color: var(--warning);
+/* 状態はドット＋短い文字（色付きピルにしない）。既定の「完了」は灰色のドット */
+.shell-badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
 }
 
-.shell-badge-status.done {
-  color: var(--success);
-  border-color: var(--success);
+.shell-status-dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-secondary);
 }
 
+/* 実行中は SessionTabs の処理中と同じ緑の波紋 */
+.shell-badge-status.running .shell-status-dot {
+  background: var(--success);
+}
+
+.shell-badge-status.running .shell-status-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--success);
+  animation: shell-status-ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes shell-status-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  80%,
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-badge-status.running .shell-status-dot::after {
+    animation: none;
+  }
+}
+
+.shell-badge-status.failed {
+  color: var(--danger);
+}
+
+.shell-badge-status.failed .shell-status-dot {
+  background: var(--danger);
+}
+
+.shell-badge-id {
+  opacity: 0.8;
+}
+
+/* 末尾だけ返ってきた（例外）。注意色の文字で示す */
 .shell-badge-truncated {
   color: var(--warning);
-  border-color: var(--warning);
+  font-family: inherit;
 }
 
 .shell-drawer-close {
@@ -111,7 +160,7 @@
 }
 
 .shell-drawer-close:hover {
-  color: var(--accent);
+  color: var(--text-primary);
 }
 
 .shell-drawer-body {

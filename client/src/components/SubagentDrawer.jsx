@@ -53,13 +53,15 @@ export default function SubagentDrawer({
           <div className="subagent-drawer-title-area">
             <span className="subagent-drawer-title">{description || agentType || agentId}</span>
             <div className="subagent-drawer-meta">
-              {agentType && <span className="subagent-badge">{agentType}</span>}
+              {/* 状態はドット＋短い文字（実行中だけ緑の波紋で動いていると分かるようにする） */}
               <span className={`subagent-badge subagent-badge-status ${status === 'running' ? 'running' : 'done'}`}>
+                <span className="subagent-status-dot" aria-hidden="true" />
                 {status === 'running' ? '実行中' : '完了'}
               </span>
+              {agentType && <span className="subagent-badge">{agentType}</span>}
             </div>
           </div>
-          <button className="subagent-drawer-close" onClick={onClose}>
+          <button className="subagent-drawer-close" onClick={onClose} title="閉じる">
             ×
           </button>
         </div>

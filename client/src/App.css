@@ -30,13 +30,22 @@
   transition: background 0.2s;
 }
 
+/* 主ボタン（送る・確定）。ピンクは「送る操作」と「今の操作対象」だけに使う決まりで、塗らずに枠だけピンクにする */
 .btn-primary {
-  background: var(--accent);
-  color: white;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  font-weight: 600;
 }
 
-.btn-primary:hover {
-  background: var(--accent-hover);
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .btn-ghost {
