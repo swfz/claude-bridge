@@ -19,6 +19,7 @@ import {
 } from 'react-icons/tb';
 import { parseCwd } from '../utils/cwdLabel.js';
 import { contextPercent, formatTokens, sidebarUsageColor } from '../utils/contextUsage.js';
+import { shortModelName, modelTitleLine } from '../utils/modelLabel.js';
 import {
   autoGroupKeyOf,
   groupColorMap,
@@ -376,6 +377,7 @@ export default function SessionTabs({
     // コンテキスト使用率は展開表示のみ（折りたたみ時は幅が足りない）
     const contextUsage = contextBySession?.get(session.id) || null;
     const contextPct = contextUsage ? contextPercent(contextUsage) : 0;
+    const modelLabel = shortModelName(contextUsage?.model);
     const showDir = shouldShowDir(session, group) && Boolean(project);
     // 対応するディレクトリグループが表示されていれば、その色のドットで出どころを紐づける
     const dirColor = showDir ? colorByKey.get(autoGroupKeyOf(session)) : null;
@@ -421,10 +423,15 @@ export default function SessionTabs({
           )}
           {/* tmux は既定なので出さない。それ以外の実行形態だけ薄いアイコンで例外として示す */}
           {typeLabel && TypeIcon && <TypeIcon className="tab-meta-icon tab-type" title={typeLabel} />}
+          {modelLabel && (
+            <span className="tab-meta-item tab-model" title={`モデル: ${contextUsage.model}`}>
+              <span className="tab-meta-text">{modelLabel}</span>
+            </span>
+          )}
           {contextUsage && (
             <span
               className="tab-context"
-              title={`コンテキスト ${formatTokens(contextUsage.contextTokens)} / ${formatTokens(contextUsage.contextWindow)}`}
+              title={`コンテキスト ${formatTokens(contextUsage.contextTokens)} / ${formatTokens(contextUsage.contextWindow)}${modelTitleLine(contextUsage.model)}`}
             >
               <span className="tab-context-bar">
                 <span
