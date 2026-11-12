@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { shortModelName, dominantModel, modelBadgeLabel, modelTitleLine } from '../client/src/utils/modelLabel.js';
+import { shortModelName, modelTitleLine } from '../client/src/utils/modelLabel.js';
 
 describe('shortModelName', () => {
   it('shortens current model ids', () => {
@@ -23,29 +23,6 @@ describe('shortModelName', () => {
   });
   it('keeps unknown names as is', () => {
     assert.equal(shortModelName('gpt-x'), 'gpt-x');
-  });
-});
-
-describe('dominantModel', () => {
-  it('returns the most frequent short name', () => {
-    assert.equal(
-      dominantModel(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5', null, '<synthetic>']),
-      'opus 5.5',
-    );
-  });
-  it('returns null when the evidence is weak (single session or a tie)', () => {
-    assert.equal(dominantModel(['claude-sonnet-5-5']), null);
-    assert.equal(dominantModel(['claude-sonnet-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-opus-5-5']), null);
-    assert.equal(dominantModel([]), null);
-    assert.equal(dominantModel(undefined), null);
-  });
-});
-
-describe('modelBadgeLabel', () => {
-  it('hides the dominant model and shows others', () => {
-    assert.equal(modelBadgeLabel('claude-opus-5-5', 'opus 5.5'), null);
-    assert.equal(modelBadgeLabel('claude-sonnet-5-5', 'opus 5.5'), 'sonnet 5.5');
-    assert.equal(modelBadgeLabel(null, 'opus 5.5'), null);
   });
 });
 

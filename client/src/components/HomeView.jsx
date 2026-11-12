@@ -39,7 +39,7 @@ import HomeArtifactChips from './HomeArtifactChips.jsx';
 import RecentPeek from './RecentPeek.jsx';
 import { contextPercent, formatTokens, isUsageNotable, usageColor } from '../utils/contextUsage.js';
 import { groupArtifactPublishes } from '../utils/artifacts.js';
-import { modelBadgeLabel, modelTitleLine } from '../utils/modelLabel.js';
+import { shortModelName, modelTitleLine } from '../utils/modelLabel.js';
 import './HomeView.css';
 
 // 「その他の開いているタブ」は name/cwd しか持たないので検索対象をこの2つに絞る
@@ -168,9 +168,9 @@ function contextTitle(usage) {
 }
 
 // 行リストの Ctx 列。使用率だけを色付きで出し、内訳は tooltip に逃がす。
-// モデル名。一覧で最も多いモデル（defaultModel）と違うときだけ出す
-function ModelLabel({ usage, defaultModel, className }) {
-  const label = modelBadgeLabel(usage?.model, defaultModel);
+// モデル名（直近の応答のモデル）。フルの ID は tooltip
+function ModelLabel({ usage, className }) {
+  const label = shortModelName(usage?.model);
   if (!label) return null;
   return (
     <span className={className} title={`モデル: ${usage.model}`}>
@@ -206,7 +206,6 @@ function CompletionBadge({ session, running }) {
 // ホーム画面。今このマシンで起動している Claude セッションと、
 // 直近 N 日に動いていた（終了済みを含む）セッションを一覧する。
 export default function HomeView({
-  defaultModel,
   runningSessions,
   recentSessions,
   recentDays,
@@ -544,7 +543,7 @@ export default function HomeView({
                 <div className="home-card-name" title={label}>
                   <span className={`home-status home-status-${dotClass}`} title={dotTitle || 'unknown'} />
                   <span className="home-card-name-text">{label}</span>
-                  <ModelLabel usage={r.contextUsage} defaultModel={defaultModel} className="home-model" />
+                  <ModelLabel usage={r.contextUsage} className="home-model" />
                 </div>
 
                 <div className="home-card-snippets">
@@ -730,7 +729,7 @@ export default function HomeView({
                   <PathLine cwd={s.cwd} branch={s.gitBranch} color={dirColorOf(s.cwd)} />
                   <span className="home-row-name" title={label}>
                     <span className="home-row-name-text">{label}</span>
-                    <ModelLabel usage={s.contextUsage} defaultModel={defaultModel} className="home-model" />
+                    <ModelLabel usage={s.contextUsage} className="home-model" />
                   </span>
                   {/* 直近のやりとりのポップオーバー。タイトルの右隣に置く。行ホバーで重なる
                       .home-row-actions（left: 65px から）より前面に出す（z-index は CSS 側） */}
