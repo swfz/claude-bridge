@@ -30,11 +30,12 @@ export function formatTokens(n) {
   return String(Math.round(n));
 }
 
-// バー色。しきい値は RateLimitMeter と揃える（50%未満=success, 80%以上=accent）
+// セッション詳細のターンごとの ctx% の色（50 / 80%）。普段の値（50% 未満）は色を付けず（undefined）、
+// 超えたときだけ注意色・危険色にする（「既定値は出さない、例外だけ目立たせる」）
 export function contextColorFor(pct) {
-  if (pct >= 80) return 'var(--accent)';
+  if (pct >= 80) return 'var(--danger)';
   if (pct >= 50) return 'var(--warning)';
-  return 'var(--success)';
+  return undefined;
 }
 
 // 使用率（コンテキスト・レート制限）のしきい値。サイドバー・ホーム・トップバーで共通にし、
