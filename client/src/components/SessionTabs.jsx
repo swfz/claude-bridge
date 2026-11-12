@@ -19,7 +19,7 @@ import {
 } from 'react-icons/tb';
 import { parseCwd } from '../utils/cwdLabel.js';
 import { contextPercent, formatTokens, sidebarUsageColor } from '../utils/contextUsage.js';
-import { modelBadgeLabel, modelTitleLine } from '../utils/modelLabel.js';
+import { shortModelName, modelTitleLine } from '../utils/modelLabel.js';
 import {
   autoGroupKeyOf,
   groupColorMap,
@@ -69,7 +69,6 @@ export default function SessionTabs({
   starredIds,
   pipSessionId,
   contextBySession,
-  defaultModel,
   shareMode,
   onHome,
   onSelect,
@@ -378,8 +377,7 @@ export default function SessionTabs({
     // コンテキスト使用率は展開表示のみ（折りたたみ時は幅が足りない）
     const contextUsage = contextBySession?.get(session.id) || null;
     const contextPct = contextUsage ? contextPercent(contextUsage) : 0;
-    // 一覧で最も多いモデルと違うときだけ出す（既定値は出さない）
-    const modelLabel = modelBadgeLabel(contextUsage?.model, defaultModel);
+    const modelLabel = shortModelName(contextUsage?.model);
     const showDir = shouldShowDir(session, group) && Boolean(project);
     // 対応するディレクトリグループが表示されていれば、その色のドットで出どころを紐づける
     const dirColor = showDir ? colorByKey.get(autoGroupKeyOf(session)) : null;

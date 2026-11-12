@@ -721,7 +721,7 @@
   height: 9px;
 }
 
-/* モデル名は一覧で最も多いものと違うときだけ出す（例外だけ表示する） */
+/* モデル名。全タブに付くので薄い等幅の文字に留める */
 .tab-model {
   flex-shrink: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
