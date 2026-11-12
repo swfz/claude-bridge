@@ -1,11 +1,12 @@
-/* 前回動いていたセッションの再開待ち。.home-notice と同じ控えめな色（エラーではない） */
+/* 前回動いていたセッションの再開待ち。注意が要る例外なので帯は残すが、色は「待ち」の
+   --warning を左の細い線にだけ使い、枠は中立・背景は塗らない（エラーではない） */
 .restorable-banner {
   margin-bottom: 16px;
-  padding: 10px 12px;
-  border: 1px solid var(--accent-secondary);
-  border-left-width: 3px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--warning);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--accent-secondary) 10%, transparent);
+  background: none;
 }
 
 .restorable-head {
@@ -25,11 +26,16 @@
 .restorable-banner button {
   font-size: 12px;
   padding: 3px 10px;
-  border-radius: 4px;
-  border: 1px solid var(--border, rgba(128, 128, 128, 0.4));
-  background: transparent;
-  color: var(--text-primary);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-secondary);
   cursor: pointer;
+}
+
+.restorable-banner button:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .restorable-banner button:disabled {
@@ -37,10 +43,14 @@
   cursor: default;
 }
 
+/* 主アクションは中立の枠で他のボタンと区別するだけ（ピンクで塗らない） */
 .restorable-banner button.restorable-resume {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.restorable-banner .restorable-dismiss:hover:not(:disabled) {
+  color: var(--danger);
 }
 
 .restorable-list {
@@ -68,12 +78,10 @@
   max-width: 40%;
 }
 
+/* 「タブだった」は全件ではない例外の印。色付きピルにせず薄い小さな文字で */
 .restorable-badge {
   font-size: 10px;
-  padding: 0 5px;
-  border-radius: 3px;
-  border: 1px solid var(--accent-secondary);
-  color: var(--accent-secondary);
+  color: var(--text-secondary);
 }
 
 .restorable-meta {

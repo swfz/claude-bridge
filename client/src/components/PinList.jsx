@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { TbArrowBackUp, TbPinnedOff } from 'react-icons/tb';
 import { resolvePins } from '../utils/pins.js';
 import { MarkdownContent } from './ChatView.jsx';
 import './PinList.css';
@@ -55,19 +56,29 @@ function PinRow({ pin, cwd, onOpenPreview, onJumpToMessage, onUnpin }) {
       </div>
       <div className="pin-row-actions">
         {pin.loaded && (
-          <button className="pin-row-jump" onClick={() => onJumpToMessage(pin.messageUuid)}>
-            会話へ
+          <button
+            className="pin-row-jump"
+            onClick={() => onJumpToMessage(pin.messageUuid)}
+            title="会話へ"
+            aria-label="会話へ"
+          >
+            <TbArrowBackUp />
           </button>
         )}
-        <button className="pin-row-unpin" onClick={() => onUnpin(pin.messageUuid)} title="ピンを外す">
-          外す
+        <button
+          className="pin-row-unpin"
+          onClick={() => onUnpin(pin.messageUuid)}
+          title="ピンを外す"
+          aria-label="ピンを外す"
+        >
+          <TbPinnedOff />
         </button>
       </div>
     </div>
   );
 }
 
-// Refs ドロワーの「ピン」タブの中身。メッセージヘッダの 📌 で留めたものを会話の順に並べる。
+// Refs ドロワーの「ピン」タブの中身。メッセージヘッダのピンで留めたものを会話の順に並べる。
 // 外枠（overlay・Esc・タブ）は RefDrawer
 export default function PinList({ pins, messages, cwd, onOpenPreview, onJumpToMessage, onUnpin }) {
   const items = useMemo(() => resolvePins(pins, messages), [pins, messages]);
@@ -76,7 +87,7 @@ export default function PinList({ pins, messages, cwd, onOpenPreview, onJumpToMe
     <div className="pin-drawer-body">
       {items.length === 0 ? (
         <div className="pin-drawer-empty">
-          ピンはまだありません。メッセージ見出しの 📌 で、後から見返したい返答を留められます
+          ピンはまだありません。メッセージ見出しのピンで、後から見返したい返答を留められます
         </div>
       ) : (
         items.map((pin) => (

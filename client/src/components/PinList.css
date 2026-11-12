@@ -43,11 +43,11 @@
   font-weight: 600;
 }
 
+/* 未読込（例外）だけバッジにする */
 .pin-row-badge {
-  background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0 6px;
+  border-radius: 4px;
+  padding: 0 5px;
 }
 
 /* 読み込み済みメッセージは Markdown 本文。長いものは折りたたむ */
@@ -86,33 +86,65 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
+/* 「会話へ」「外す」は行ホバー時だけ出す枠なしのアイコン */
 .pin-row-jump,
-.pin-row-expand,
 .pin-row-unpin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   background: none;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
-  padding: 2px 8px;
+  font-size: 15px;
+  opacity: 0;
 }
 
+.pin-row:hover .pin-row-jump,
+.pin-row:hover .pin-row-unpin,
+.pin-row:focus-within .pin-row-jump,
+.pin-row:focus-within .pin-row-unpin {
+  opacity: 1;
+}
+
+.pin-row-jump:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+/* ピンを外すのは取り消しを伴う操作なので hover で危険色 */
+.pin-row-unpin:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+@media (hover: none) {
+  .pin-row-jump,
+  .pin-row-unpin {
+    opacity: 1;
+  }
+}
+
+/* 全文表示は本文の続きを開く操作なので常に出す。枠は付けず薄い文字 */
 .pin-row-expand {
   align-self: flex-start;
   margin-top: 2px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
 }
 
-.pin-row-jump:hover,
 .pin-row-expand:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.pin-row-unpin:hover {
-  color: var(--warning);
-  border-color: var(--warning);
+  color: var(--text-primary);
+  text-decoration: underline;
 }

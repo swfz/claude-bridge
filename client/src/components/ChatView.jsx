@@ -564,8 +564,20 @@ export const ChatMessage = memo(function ChatMessage({
           <TbSparkles className="chat-role-icon" aria-label="Claude" />
         )}
         <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
-        {/* そのメッセージ固有の状態（ピン留め済み・コメント）だけ常に出す */}
-        {pinned && <TbPinFilled className="chat-pinned-mark" aria-label="ピン留め済み" />}
+        {/* ピンは時刻のすぐ右。ピン済みは印として常に出し（押すと外せる）、未ピンはホバー時だけ出す */}
+        {onTogglePin && message.uuid ? (
+          <button
+            className={`pin-toggle ${pinned ? 'active chat-pinned-mark' : ''}`}
+            onClick={() => onTogglePin(message, !pinned)}
+            title={pinned ? 'ピンを外す' : 'ピン留め（Refs の「ピン」から見返せる）'}
+            aria-label={pinned ? 'ピンを外す' : 'ピン留め'}
+            aria-pressed={!!pinned}
+          >
+            {pinned ? <TbPinFilled /> : <TbPin />}
+          </button>
+        ) : (
+          pinned && <TbPinFilled className="chat-pinned-mark" aria-label="ピン留め済み" />
+        )}
         {messageComments.length > 0 && (
           <button
             className="comment-marker"
@@ -594,17 +606,6 @@ export const ChatMessage = memo(function ChatMessage({
           {!isHuman && !readonly && onStartThread && (
             <button className="btn-header-action" onClick={() => onStartThread(message.id, '')} title="スレッドを開始">
               Thread
-            </button>
-          )}
-          {onTogglePin && message.uuid && (
-            <button
-              className={`btn-header-action pin-toggle ${pinned ? 'active' : ''}`}
-              onClick={() => onTogglePin(message, !pinned)}
-              title={pinned ? 'ピンを外す' : 'ピン留め（Refs の「ピン」から見返せる）'}
-              aria-label={pinned ? 'ピンを外す' : 'ピン留め'}
-              aria-pressed={!!pinned}
-            >
-              {pinned ? <TbPinFilled /> : <TbPin />}
             </button>
           )}
         </div>

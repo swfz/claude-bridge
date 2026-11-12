@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { TbRefresh } from 'react-icons/tb';
 import './AgentSidePanel.css';
 
 // agent view 連携パネル（一覧ランチャー）。
@@ -37,8 +38,8 @@ export default function AgentSidePanel({ agents, activeClaudeSessionId, syncNoti
       <div className="agent-panel-header">
         <h3>Agents</h3>
         <div className="agent-panel-actions">
-          <button onClick={onRefreshAgents} title="一覧を更新">
-            更新
+          <button onClick={onRefreshAgents} title="一覧を更新" aria-label="一覧を更新">
+            <TbRefresh size={16} />
           </button>
         </div>
       </div>

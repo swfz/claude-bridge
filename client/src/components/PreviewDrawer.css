@@ -43,7 +43,7 @@
 
 .drawer-resize-handle:hover,
 .drawer-resize-handle:active {
-  background: var(--accent);
+  background: var(--border);
 }
 
 .drawer-with-review {
@@ -111,58 +111,60 @@
 .drawer-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
-.drawer-btn {
-  font-size: 12px;
+/* ヘッダの操作は枠なしのアイコン（TopBar の .topbar-icon-btn と同じ形）。名前は title / aria-label */
+.drawer-btn,
+.drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 16px;
   color: var(--text-secondary);
   text-decoration: none;
-  border: 1px solid var(--border);
-  padding: 3px 10px;
-  border-radius: 4px;
   white-space: nowrap;
-  background: none;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
 }
 
-.drawer-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.drawer-btn:hover,
+.drawer-close:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
+/* 見た目には出さないボタン名（E2E が「小窓」の文字でボタンを探す） */
+.drawer-btn-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* 未送信の指摘があるときだけ出る一括送信。送る操作なので .btn-primary と同じ枠だけピンク */
 .drawer-btn-submit {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
+  margin-right: 6px;
+  padding: 0 10px;
+  font-size: 12px;
   font-weight: 600;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
 }
 
 .drawer-btn-submit:hover {
-  background: var(--accent-hover);
-}
-
-.drawer-close {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 18px;
-  padding: 0 4px;
-  line-height: 1;
-}
-
-.drawer-close:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
-}
-
-.drawer-hint {
-  padding: 4px 16px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: rgba(233, 69, 96, 0.05);
-  border-bottom: 1px solid var(--border);
 }
 
 .drawer-content {
@@ -191,6 +193,9 @@
   position: absolute;
   left: 1px;
   transform: translateY(-2px);
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -203,13 +208,15 @@
 }
 
 .comment-gutter-marker:hover {
-  border-color: var(--accent);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
-/* コメントが付いたブロック（markdown は行が見えないのでブロックを強調して位置を示す） */
+/* コメントが付いたブロック（markdown は行が見えないのでブロックを強調して位置を示す）。
+   行ピックの対象（outline 付き）と見分けられるよう、こちらは薄い下地＋左線だけ */
 .comment-anchored {
-  background: rgba(97, 175, 239, 0.12);
-  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-left: 3px solid var(--text-secondary);
   border-radius: 3px;
   padding-left: 6px !important;
 }
@@ -223,12 +230,12 @@ tr.comment-anchored {
 
 tr.comment-anchored > td,
 tr.comment-anchored > th {
-  background: rgba(97, 175, 239, 0.14);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
 tr.comment-anchored > td:first-child,
 tr.comment-anchored > th:first-child {
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 3px 0 0 var(--text-secondary);
 }
 
 .comment-gutter-popup {
@@ -254,6 +261,7 @@ tr.comment-anchored > th:first-child {
 }
 
 .comment-gutter-popup-head button {
+  display: inline-flex;
   background: none;
   border: none;
   color: var(--text-secondary);
@@ -261,9 +269,13 @@ tr.comment-anchored > th:first-child {
   font-size: 13px;
 }
 
+.comment-gutter-popup-head button:hover {
+  color: var(--text-primary);
+}
+
 .comment-gutter-item {
   padding: 4px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border);
 }
 
 .comment-gutter-item:first-of-type {
@@ -273,7 +285,7 @@ tr.comment-anchored > th:first-child {
 .comment-gutter-quote {
   font-size: 11px;
   color: var(--text-secondary);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--border);
   padding-left: 6px;
   margin-bottom: 3px;
 }
@@ -500,7 +512,11 @@ body.light-mode .drawer-iframe,
   color: var(--text-secondary);
 }
 .drawer-markdown a {
-  color: var(--accent);
+  color: var(--accent-secondary);
+  text-decoration: none;
+}
+.drawer-markdown a:hover {
+  text-decoration: underline;
 }
 .drawer-markdown hr {
   border: none;
@@ -604,6 +620,8 @@ body.light-mode .drawer-iframe,
 .selection-popup {
   position: absolute;
   z-index: 10;
+  display: flex;
+  gap: 4px;
   animation: popup-in 0.1s ease-out;
 }
 
@@ -618,10 +636,11 @@ body.light-mode .drawer-iframe,
   }
 }
 
+/* 選択直後に出す操作。「レビューに追加（送る）」は送る操作なので枠だけピンク。本文の上に浮くので地は敷く */
 .selection-popup-btn {
-  background: var(--accent);
-  color: white;
-  border: none;
+  background: var(--bg-secondary);
+  color: var(--accent);
+  border: 1px solid var(--accent);
   padding: 6px 14px;
   border-radius: 6px;
   font-size: 12px;
@@ -632,7 +651,18 @@ body.light-mode .drawer-iframe,
 }
 
 .selection-popup-btn:hover {
-  background: var(--accent-hover);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-secondary));
+}
+
+/* 「残す（送らない）」は控えめにして、送る方と見分ける */
+.selection-popup-btn.secondary {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.selection-popup-btn.secondary:hover {
+  background: var(--bg-surface);
 }
 
 /* レビューペイン */
@@ -667,8 +697,9 @@ body.light-mode .drawer-iframe,
 }
 
 .review-pane-toggle {
+  display: inline-flex;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 /* 畳んだときは細い縦帯にして本文に幅を返す */
@@ -703,11 +734,10 @@ body.light-mode .drawer-iframe,
   gap: 6px;
 }
 
+/* 項目は箱にせず、罫線で区切るだけ */
 .review-pane-item {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
+  padding: 8px 4px 10px;
+  border-bottom: 1px solid var(--border);
 }
 
 .review-pane-item.resolved {
@@ -721,13 +751,34 @@ body.light-mode .drawer-iframe,
   margin-bottom: 4px;
 }
 
+/* 未送信の指摘の番号。送るのを待っているものなので注意色のドット＋短い文字で示す */
 .review-pane-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
-  font-weight: 700;
-  color: var(--accent);
-  background: rgba(233, 69, 96, 0.12);
-  padding: 1px 6px;
-  border-radius: 4px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.review-pane-num::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+/* 保存済み（残した）コメント・送信済みはドットを出さず薄く */
+.review-pane-num.saved,
+.review-pane-num.sent {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.review-pane-num.saved::before,
+.review-pane-num.sent::before {
+  content: none;
 }
 
 .review-pane-item-actions {
@@ -735,30 +786,45 @@ body.light-mode .drawer-iframe,
   gap: 4px;
 }
 
+/* 項目ごとの操作はホバー時だけ出す */
 .review-pane-resolve,
 .review-pane-remove {
+  display: inline-flex;
   background: none;
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   padding: 0 3px;
+  opacity: 0;
+}
+
+.review-pane-item:hover .review-pane-resolve,
+.review-pane-item:hover .review-pane-remove,
+.review-pane-item:focus-within .review-pane-resolve,
+.review-pane-item:focus-within .review-pane-remove {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .review-pane-resolve,
+  .review-pane-remove {
+    opacity: 1;
+  }
 }
 
 .review-pane-resolve:hover {
-  color: var(--success);
+  color: var(--text-primary);
 }
 .review-pane-remove:hover {
-  color: var(--accent);
+  color: var(--danger);
 }
 
 .review-pane-selected {
   font-size: 12px;
   color: var(--text-secondary);
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border-left: 2px solid var(--accent);
-  border-radius: 0 4px 4px 0;
+  padding: 2px 8px;
+  border-left: 2px solid var(--border);
   margin-bottom: 6px;
   line-height: 1.4;
 }
@@ -788,20 +854,24 @@ body.light-mode .drawer-iframe,
 }
 
 .review-pane-edit-btn {
+  margin-top: 4px;
   background: none;
-  border: 1px dashed var(--border);
+  border: 1px solid var(--border);
   color: var(--text-secondary);
   font-size: 12px;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  width: 100%;
-  text-align: center;
 }
 
-.review-pane-edit-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.review-pane-edit-btn:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.review-pane-edit-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .review-pane-thread {
@@ -815,7 +885,6 @@ body.light-mode .drawer-iframe,
 
 .review-pane-send-area {
   padding: 8px 0;
-  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
@@ -829,15 +898,8 @@ body.light-mode .drawer-iframe,
 
 .review-thread-label {
   font-size: 11px;
-  font-weight: 600;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  padding: 6px 0 4px;
-}
-
-.review-pane-num.sent {
-  background: rgba(76, 175, 80, 0.15);
-  color: var(--success);
+  padding: 8px 4px 0;
 }
 
 .review-pane-comment-sent {
@@ -857,31 +919,33 @@ body.light-mode .drawer-iframe,
   font-size: 13px;
 }
 
-/* 送信ボタンの左隣に置く「選択なしで指摘欄を追加」ボタン。控えめな見た目で edit-btn と揃える */
+/* 送信ボタンの左隣に置く「選択なしで指摘欄を追加」ボタン。枠なしの控えめな文字ボタン */
 .review-pane-add {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   background: none;
-  border: 1px dashed var(--border);
+  border: none;
   color: var(--text-secondary);
   font-size: 12px;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
 }
 
 .review-pane-add:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .review-pane-status {
   flex: 1 0 100%;
   font-size: 12px;
-  color: var(--success);
+  color: var(--text-secondary);
   text-align: center;
   padding: 4px 0;
-  font-weight: 600;
 }
 
 /* Claude からの返信 */
@@ -890,7 +954,7 @@ body.light-mode .drawer-iframe,
 }
 
 .review-pane-response {
-  padding: 10px 14px;
+  padding: 10px 4px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -903,9 +967,8 @@ body.light-mode .drawer-iframe,
 
 .review-pane-response-role {
   font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--success);
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .review-pane-response-time {
@@ -926,7 +989,7 @@ body.light-mode .drawer-iframe,
   margin-bottom: 0;
 }
 .review-pane-response-body code {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-surface);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 12px;
@@ -937,15 +1000,15 @@ body.light-mode .drawer-iframe,
   margin: 4px 0;
 }
 
-/* プレビューのファイル名横に出すコメント件数バッジ */
+/* プレビューのファイル名横に出すコメント件数（コメントがあるときだけ。枠は付けない） */
 .drawer-comment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   margin-left: 8px;
   font-size: 11px;
+  font-weight: 400;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1px 7px;
   vertical-align: middle;
 }
 
@@ -967,9 +1030,9 @@ body.light-mode .drawer-iframe,
   user-select: none;
 }
 
-/* 行ピックで今指している行/ブロック */
+/* 行ピックで今指している行/ブロック（今の操作対象＝ピンクの outline と薄い下地） */
 .line-pick-target {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-radius: 3px;
@@ -978,7 +1041,7 @@ body.light-mode .drawer-iframe,
 /* 表モードの行（tr）は outline が描かれない環境があるので、セルの背景でも示す */
 .drawer-table tr.line-pick-target > th,
 .drawer-table tr.line-pick-target > td {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 /* Markdown プレビューの左ガターに出すソース行番号（数字キーで指す先の目印） */
@@ -1024,7 +1087,7 @@ body.light-mode .drawer-iframe,
 }
 
 .line-pick-hud-value.invalid {
-  color: var(--accent-hover);
+  color: var(--danger);
 }
 
 .line-pick-hud-hint {

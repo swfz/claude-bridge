@@ -32,6 +32,8 @@ export default function ShellOutputDrawer({
   const running = status === 'running';
   // 前景の Bash は終了で出力ファイルが消えるので、終了コードは分からない（最後に読めた本文だけ残る）
   const gone = status === 'gone';
+  // 終了コードが 0 以外（不明を含む）は失敗として区別する（TaskStrip と同じ判定）
+  const failed = !running && !gone && exitCode !== 0;
 
   return (
     <div className="shell-drawer-overlay" onClick={onClose}>
@@ -40,14 +42,16 @@ export default function ShellOutputDrawer({
           <div className="shell-drawer-title-area">
             <span className="shell-drawer-title">{label || taskId}</span>
             <div className="shell-drawer-meta">
-              <span className="shell-badge">{taskId}</span>
-              <span className={`shell-badge shell-badge-status ${running ? 'running' : 'done'}`}>
+              {/* 状態はドット＋短い文字。実行中は緑の波紋、終了コードが 0 以外なら危険色 */}
+              <span className={`shell-badge shell-badge-status ${running ? 'running' : failed ? 'failed' : 'done'}`}>
+                <span className="shell-status-dot" aria-hidden="true" />
                 {running ? '実行中' : gone ? '終了（出力ファイルは削除済み）' : `終了 (code ${exitCode ?? '?'})`}
               </span>
+              <span className="shell-badge shell-badge-id">{taskId}</span>
               {truncated && <span className="shell-badge shell-badge-truncated">先頭を省略</span>}
             </div>
           </div>
-          <button className="shell-drawer-close" onClick={onClose}>
+          <button className="shell-drawer-close" onClick={onClose} title="閉じる">
             ×
           </button>
         </div>

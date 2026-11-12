@@ -40,8 +40,8 @@
 }
 
 .dialog-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
 }
 
 .dialog-tab:hover:not(.active) {
@@ -96,7 +96,6 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 
 .session-list-empty {
@@ -106,18 +105,23 @@
   font-size: 14px;
 }
 
+/* 行は枠を持たず、区切りは 1px の罫線だけ。hover は中立の下地 */
 .session-list-item {
   padding: 10px 12px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s;
+}
+
+.session-list-item:last-child {
+  border-bottom: none;
 }
 
 .session-list-item:hover {
-  border-color: var(--accent);
-  background: rgba(233, 69, 96, 0.05);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
 /* resume 一覧の行はクリック不可（操作は行内のボタンで明示）。カーソルを通常に戻す */
@@ -156,8 +160,7 @@
 }
 
 .pane-status-busy {
-  background: #f0ad4e;
-  box-shadow: 0 0 4px #f0ad4e;
+  background: var(--warning);
 }
 
 .pane-status-idle {
@@ -165,13 +168,9 @@
 }
 
 .pane-unrenamed {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  font-size: 11px;
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 /* tmux ペイン行のメタ（cwd / pane）。rename していない場合は cwd が識別の主役 */
@@ -196,7 +195,7 @@
 }
 
 .cwd-base {
-  color: var(--accent);
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -235,30 +234,30 @@
   justify-content: flex-end;
 }
 
-/* 再開（claude プロセス起動）— 主アクションとして塗り */
+/* 再開（claude プロセス起動）— 主アクション。.btn-primary と同じ枠だけピンク */
 .session-resume-btn {
   flex-shrink: 0;
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  color: #fff;
-  padding: 3px 10px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.session-resume-btn:hover {
-  filter: brightness(1.1);
-}
-
-/* 閲覧（コメント）起動ボタン — 副アクションとして枠線のみ */
-.session-readonly-btn {
-  flex-shrink: 0;
-  background: var(--bg-secondary);
+  background: transparent;
   border: 1px solid var(--accent);
   border-radius: 6px;
   color: var(--accent);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.session-resume-btn:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* 閲覧（コメント）起動ボタン — 副アクションとして枠なしの文字だけ */
+.session-readonly-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
   padding: 3px 10px;
   font-size: 12px;
   cursor: pointer;
@@ -266,8 +265,8 @@
 }
 
 .session-readonly-btn:hover {
-  background: var(--accent);
-  color: #fff;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 /* ボタン hover で動作説明を表示（data-tooltip をボタン上部に） */
@@ -284,7 +283,7 @@
   right: 0;
   white-space: nowrap;
   background: var(--bg-primary);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 5px 9px;
   font-size: 11px;

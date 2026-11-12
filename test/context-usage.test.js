@@ -71,11 +71,11 @@ describe('formatTokens', () => {
 });
 
 describe('contextColorFor', () => {
-  it('matches the RateLimitMeter thresholds', () => {
-    assert.equal(contextColorFor(0), 'var(--success)');
-    assert.equal(contextColorFor(49), 'var(--success)');
+  it('leaves normal values uncolored and flags 50% / 80%', () => {
+    assert.equal(contextColorFor(0), undefined);
+    assert.equal(contextColorFor(49), undefined);
     assert.equal(contextColorFor(50), 'var(--warning)');
     assert.equal(contextColorFor(79), 'var(--warning)');
-    assert.equal(contextColorFor(80), 'var(--accent)');
+    assert.equal(contextColorFor(80), 'var(--danger)');
   });
 });

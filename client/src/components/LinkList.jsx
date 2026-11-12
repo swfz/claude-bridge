@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { TbArrowBackUp, TbCheck, TbCopy, TbSparkles, TbUser, TbWorld } from 'react-icons/tb';
 import { linksToMarkdown } from '../utils/links.js';
 import './LinkList.css';
 
 // 「コピーしました」を出しておく時間
 const COPIED_RESET_MS = 1500;
 
-// sources の値をバッジの文言にする
+// sources の値を出どころの文言にする（全件に付くので枠は付けず薄い文字で出す）
 function sourceLabel(source) {
   if (source === 'human') return '指示';
   if (source === 'assistant') return '応答';
@@ -16,10 +17,11 @@ function sourceLabel(source) {
   return source;
 }
 
-// 行頭アイコンと絞り込みトグルの文言（origin は collectLinks() が最初の出現から決める）
+// 行頭アイコンと絞り込みトグルの文言（origin は collectLinks() が最初の出現から決める）。
+// 絵文字は環境によって豆腐になるので Tabler のアイコンにする
 const ORIGIN_ICONS = {
-  user: { icon: '👤', title: '自分が渡した' },
-  claude: { icon: '🤖', title: 'Claude が探した' },
+  user: { Icon: TbUser, title: '自分が渡した' },
+  claude: { Icon: TbSparkles, title: 'Claude が探した' },
 };
 const ORIGIN_FILTERS = [
   { value: 'all', label: 'すべて' },
@@ -99,22 +101,30 @@ export default function LinkList({ links, onJumpToMessage }) {
           onChange={(e) => setFilter(e.target.value)}
           placeholder="URL / ラベル / タイトル / 文脈で絞り込み"
         />
-        <button className="link-drawer-copy" onClick={handleCopy} disabled={visibleLinks.length === 0}>
-          {copied ? 'コピーしました' : 'Markdown でコピー'}
+        <button
+          className="link-drawer-copy"
+          onClick={handleCopy}
+          disabled={visibleLinks.length === 0}
+          title={copied ? 'コピーしました' : '表示中のリンクを Markdown でコピー'}
+          aria-label={copied ? 'コピーしました' : 'Markdown でコピー'}
+        >
+          {copied ? <TbCheck /> : <TbCopy />}
         </button>
       </div>
 
       <div className="link-drawer-origin">
-        {ORIGIN_FILTERS.map(({ value, label }) => (
-          <button
-            key={value}
-            className={`link-origin-toggle ${origin === value ? 'active' : ''}`}
-            onClick={() => setOrigin(value)}
-            aria-pressed={origin === value}
-          >
-            {label} {originCounts[value]}
-          </button>
-        ))}
+        <div className="link-origin-segmented">
+          {ORIGIN_FILTERS.map(({ value, label }) => (
+            <button
+              key={value}
+              className={`link-origin-toggle ${origin === value ? 'active' : ''}`}
+              onClick={() => setOrigin(value)}
+              aria-pressed={origin === value}
+            >
+              {label} {originCounts[value]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="link-drawer-body">
@@ -123,50 +133,59 @@ export default function LinkList({ links, onJumpToMessage }) {
         ) : visibleLinks.length === 0 ? (
           <div className="link-drawer-empty">一致するリンクはありません</div>
         ) : (
-          visibleLinks.map((link) => (
-            <div className="link-row" key={link.url}>
-              <span className="link-row-icon" title={(ORIGIN_ICONS[link.origin] || ORIGIN_ICONS.claude).title}>
-                {(ORIGIN_ICONS[link.origin] || ORIGIN_ICONS.claude).icon}
-              </span>
-              <div className="link-row-main">
-                <a
-                  className="link-row-anchor"
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={link.url}
-                >
-                  {link.label || link.title || link.url}
-                </a>
-                {link.context && (
-                  <div className="link-row-context" title={link.context}>
-                    {link.context}
-                  </div>
-                )}
-                <div className="link-row-meta">
-                  {link.host && <span className="link-row-host">{link.host}</span>}
-                  {/* label がアンカーを占めているときだけ、WebFetch で読んだタイトルを別に出す */}
-                  {link.label && link.title && (
-                    <span className="link-row-fetched" title={link.title}>
-                      🌐 {link.title}
-                    </span>
+          visibleLinks.map((link) => {
+            const { Icon, title: originTitle } = ORIGIN_ICONS[link.origin] || ORIGIN_ICONS.claude;
+            return (
+              <div className="link-row" key={link.url}>
+                <span className="link-row-icon" title={originTitle}>
+                  <Icon />
+                </span>
+                <div className="link-row-main">
+                  <a
+                    className="link-row-anchor"
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={link.url}
+                  >
+                    {link.label || link.title || link.url}
+                  </a>
+                  {link.context && (
+                    <div className="link-row-context" title={link.context}>
+                      {link.context}
+                    </div>
                   )}
-                  {isNonOkStatus(link.code) && <span className="link-badge link-badge-http">HTTP {link.code}</span>}
-                  {link.sources.map((source) => (
-                    <span className="link-badge" key={source}>
-                      {sourceLabel(source)}
-                    </span>
-                  ))}
-                  {link.count > 1 && <span className="link-row-count">×{link.count}</span>}
+                  <div className="link-row-meta">
+                    {link.host && <span className="link-row-host">{link.host}</span>}
+                    {/* label がアンカーを占めているときだけ、WebFetch で読んだタイトルを別に出す */}
+                    {link.label && link.title && (
+                      <span className="link-row-fetched" title={link.title}>
+                        <TbWorld className="link-row-fetched-icon" />
+                        {link.title}
+                      </span>
+                    )}
+                    {isNonOkStatus(link.code) && <span className="link-badge link-badge-http">HTTP {link.code}</span>}
+                    {link.sources.map((source) => (
+                      <span className="link-badge" key={source}>
+                        {sourceLabel(source)}
+                      </span>
+                    ))}
+                    {link.count > 1 && <span className="link-row-count">×{link.count}</span>}
+                  </div>
                 </div>
+                {link.lastUuid && (
+                  <button
+                    className="link-row-jump"
+                    onClick={() => onJumpToMessage(link.lastUuid)}
+                    title="会話へ"
+                    aria-label="会話へ"
+                  >
+                    <TbArrowBackUp />
+                  </button>
+                )}
               </div>
-              {link.lastUuid && (
-                <button className="link-row-jump" onClick={() => onJumpToMessage(link.lastUuid)}>
-                  会話へ
-                </button>
-              )}
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </>

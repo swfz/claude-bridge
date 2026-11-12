@@ -19,112 +19,143 @@
 
 .review-draft-resize-handle:hover,
 .review-draft-resize-handle:active {
-  background: var(--accent);
+  background: var(--border);
 }
 
+/* パネル共通の外形: ヘッダ＝タイトル＋件数（数字だけ）＋右端のアイコン */
 .review-draft-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 10px 10px 10px 16px;
   border-bottom: 1px solid var(--border);
 }
 
 .review-draft-header h3 {
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
 
 .review-draft-count {
-  background: var(--accent);
-  color: white;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* 送信先は常に付く情報なので薄い小さな文字で */
+.review-draft-dest {
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 10px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  white-space: nowrap;
 }
 
 .review-draft-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
+  border-radius: 6px;
+  padding: 4px;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 14px;
 }
 
 .review-draft-close:hover {
   color: var(--text-primary);
-}
-
-.review-draft-hint {
-  padding: 8px 16px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-surface);
 }
 
 .review-draft-body {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0 8px;
 }
 
+/* 指摘欄は箱にせず罫線で区切る。書いている欄だけ左の細い線で示す */
 .review-draft-item {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  margin-bottom: 8px;
-  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 8px 8px 10px;
+  box-shadow: inset 2px 0 0 transparent;
+}
+
+.review-draft-item:focus-within {
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .review-draft-item-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  min-height: 18px;
 }
 
 .review-draft-item-number {
   font-size: 11px;
-  font-weight: 600;
   color: var(--text-secondary);
+  opacity: 0.7;
 }
 
 .review-draft-item-remove {
+  display: inline-flex;
+  align-items: center;
   background: none;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 11px;
-  padding: 0 7px;
+  border: none;
   border-radius: 4px;
+  padding: 2px;
+  color: var(--text-secondary);
   cursor: pointer;
+  opacity: 0;
+}
+
+.review-draft-item:hover .review-draft-item-remove,
+.review-draft-item:focus-within .review-draft-item-remove {
+  opacity: 1;
 }
 
 .review-draft-item-remove:hover {
-  border-color: #e06c75;
-  color: #e06c75;
+  color: var(--danger);
+}
+
+@media (hover: none) {
+  .review-draft-item-remove {
+    opacity: 1;
+  }
 }
 
 .review-draft-item-quote {
   font-size: 11px;
   color: var(--text-secondary);
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--border);
   padding-left: 6px;
-  margin-bottom: 4px;
+  margin: 2px 0 4px;
   max-height: 48px;
   overflow: hidden;
+}
+
+.review-draft-item-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: -2px;
 }
 
 .review-draft-item-input {
   width: 100%;
   box-sizing: border-box;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: none;
+  border: none;
   color: var(--text-primary);
-  padding: 6px 10px;
+  padding: 2px 0;
   font-size: 13px;
+  line-height: 1.5;
   font-family: inherit;
   resize: vertical;
   min-height: 40px;
@@ -132,7 +163,11 @@
 
 .review-draft-item-input:focus {
   outline: none;
-  border-color: var(--accent);
+}
+
+.review-draft-item-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 
 .review-draft-footer {
@@ -146,11 +181,25 @@
   border-top: 1px solid var(--border);
 }
 
-.review-draft-add {
+/* 控えめなテキストボタン（.btn-ghost の枠と下地を打ち消す） */
+.review-draft-add.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: none;
+  background: none;
   font-size: 12px;
-  flex: 1;
+  color: var(--text-secondary);
+}
+
+.review-draft-add.btn:hover {
+  background: none;
+  color: var(--text-primary);
 }
 
 .review-draft-submit {
+  margin-left: auto;
   font-size: 13px;
+  padding: 6px 14px;
 }

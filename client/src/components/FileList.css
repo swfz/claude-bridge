@@ -1,5 +1,6 @@
 .file-drawer-toolbar {
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
@@ -21,53 +22,66 @@
   border-color: var(--accent);
 }
 
+/* コピーは枠なしのアイコン。何をコピーするかは title */
 .file-drawer-copy {
   flex-shrink: 0;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: none;
+  border: none;
   border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
-  padding: 4px 10px;
+  font-size: 15px;
 }
 
 .file-drawer-copy:hover:not(:disabled) {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 .file-drawer-copy:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: default;
 }
 
 .file-drawer-ops {
   display: flex;
-  gap: 6px;
   padding: 6px 16px;
   border-bottom: 1px solid var(--border);
 }
 
+/* 変更 / 参照のみ の絞り込みは ActivityPanel と同じセグメント */
+.file-op-segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+}
+
 .file-op-toggle {
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 11px;
-  padding: 1px 10px;
+  padding: 3px 10px;
 }
 
-.file-op-toggle:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+.file-op-toggle:hover:not(.active) {
+  color: var(--text-primary);
 }
 
 .file-op-toggle.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  font-weight: 600;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .file-drawer-body {
@@ -103,14 +117,14 @@
   gap: 2px;
 }
 
-/* ファイル名はプレビューを開くボタン。ブラウザ既定のボタンの見た目を消してリンク風にする */
+/* ファイル名はプレビューを開くボタン。チャット本文のファイル名と同じく本文色の太字にし、hover で下線 */
 .file-row-name {
   align-self: flex-start;
   max-width: 100%;
   padding: 0;
   border: none;
   background: none;
-  color: var(--accent);
+  color: var(--text-primary);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -138,31 +152,52 @@
 .file-row-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   font-size: 11px;
   color: var(--text-secondary);
 }
 
-.file-badge {
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0 6px;
+/* 読んだだけは薄い文字。変更（編集・作成・Artifact）だけ本文色の太字にして拾えるようにする */
+.file-badge-read {
+  opacity: 0.85;
 }
 
+.file-badge-modified {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* 「会話へ」は行ホバー時だけ出す枠なしのアイコン（場所は確保したままにして行がずれないように） */
 .file-row-jump {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   background: none;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
-  padding: 2px 8px;
+  font-size: 15px;
+  opacity: 0;
+}
+
+.file-row:hover .file-row-jump,
+.file-row:focus-within .file-row-jump {
+  opacity: 1;
 }
 
 .file-row-jump:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+@media (hover: none) {
+  .file-row-jump {
+    opacity: 1;
+  }
 }

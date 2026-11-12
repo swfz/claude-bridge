@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { TbFile, TbPlus, TbX } from 'react-icons/tb';
 import { isConfirmShortcut, isDeleteItemShortcut, isSubmitAllShortcut } from '../utils/keys.js';
 import './ReviewDraftPanel.css';
 
@@ -93,6 +94,7 @@ export default function ReviewDraftPanel({ items, incomingAnchor, readonly, onSa
   };
 
   const filled = draft.filter((it) => (it.text || '').trim());
+  const destLabel = readonly ? 'inbox（agent が次の応答で取り込む）' : 'Claude（このセッション）';
 
   const handleSubmit = () => {
     if (filled.length === 0) return;
@@ -162,14 +164,13 @@ export default function ReviewDraftPanel({ items, incomingAnchor, readonly, onSa
         <h3>
           レビュー
           {filled.length > 0 && <span className="review-draft-count">{filled.length}</span>}
+          <span className="review-draft-dest" title={`Submit の送信先: ${destLabel}`}>
+            → {readonly ? 'inbox' : 'Claude'}
+          </span>
         </h3>
-        <button className="review-draft-close" onClick={onClose} title="閉じる">
-          x
+        <button className="review-draft-close" onClick={onClose} title="閉じる" aria-label="閉じる">
+          <TbX size={16} />
         </button>
-      </div>
-
-      <div className="review-draft-hint">
-        指摘を溜めて「Submit」で一括送信。送信先: {readonly ? 'inbox（agent が取り込む）' : 'Claude（このセッション）'}
       </div>
 
       <div className="review-draft-body">
@@ -182,16 +183,20 @@ export default function ReviewDraftPanel({ items, incomingAnchor, readonly, onSa
                   className="review-draft-item-remove"
                   onClick={() => removeItem(item.id)}
                   title="この指摘を削除（Ctrl+Shift+⌫）"
+                  aria-label="この指摘を削除"
                 >
-                  x
+                  <TbX size={14} />
                 </button>
               )}
             </div>
             {item.anchor?.quote && (
               <div className="review-draft-item-quote">
-                {item.anchor.type === 'file' && item.anchor.filePath
-                  ? `📄 ${item.anchor.filePath.split('/').pop()}: `
-                  : ''}
+                {item.anchor.type === 'file' && item.anchor.filePath && (
+                  <span className="review-draft-item-file">
+                    <TbFile size={12} />
+                    {item.anchor.filePath.split('/').pop()}:{' '}
+                  </span>
+                )}
                 “{item.anchor.quote.slice(0, 80)}
                 {item.anchor.quote.length > 80 ? '…' : ''}”
               </div>
@@ -219,14 +224,15 @@ export default function ReviewDraftPanel({ items, incomingAnchor, readonly, onSa
       </div>
 
       <div className="review-draft-footer">
-        <button className="btn btn-ghost review-draft-add" onClick={addItem}>
-          + 指摘を追加
+        <button className="btn btn-ghost review-draft-add" onClick={addItem} title="指摘欄を追加（Ctrl+Enter）">
+          <TbPlus size={14} />
+          指摘を追加
         </button>
         <button
           className="btn btn-primary review-draft-submit"
           onClick={handleSubmit}
           disabled={filled.length === 0}
-          title="溜めた指摘を一括送信（Ctrl+Shift+Enter）"
+          title={`溜めた指摘を一括送信（Ctrl+Shift+Enter）。送信先: ${destLabel}`}
         >
           {filled.length > 1 ? `${filled.length}件をSubmit` : 'Submit'}
         </button>

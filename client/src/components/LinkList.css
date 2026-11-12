@@ -1,5 +1,6 @@
 .link-drawer-toolbar {
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
@@ -21,53 +22,66 @@
   border-color: var(--accent);
 }
 
+/* コピーは枠なしのアイコン。何をコピーするかは title */
 .link-drawer-copy {
   flex-shrink: 0;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: none;
+  border: none;
   border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
-  padding: 4px 10px;
+  font-size: 15px;
 }
 
 .link-drawer-copy:hover:not(:disabled) {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 .link-drawer-copy:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: default;
 }
 
+/* 出どころの絞り込みは ActivityPanel と同じセグメント */
 .link-drawer-origin {
   display: flex;
-  gap: 6px;
   padding: 6px 16px;
   border-bottom: 1px solid var(--border);
 }
 
+.link-origin-segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+}
+
 .link-origin-toggle {
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 11px;
-  padding: 1px 10px;
+  padding: 3px 10px;
 }
 
-.link-origin-toggle:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+.link-origin-toggle:hover:not(.active) {
+  color: var(--text-primary);
 }
 
 .link-origin-toggle.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  font-weight: 600;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .link-drawer-body {
@@ -95,9 +109,13 @@
   background: var(--bg-secondary);
 }
 
+/* 自分が渡した / Claude が探した。形だけで示すので色は付けない */
 .link-row-icon {
   flex-shrink: 0;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .link-row-main {
@@ -109,7 +127,7 @@
 }
 
 .link-row-anchor {
-  color: var(--accent);
+  color: var(--accent-secondary);
   font-size: 13px;
   text-decoration: none;
   overflow: hidden;
@@ -143,41 +161,78 @@
   font-family: 'Cascadia Code', 'Fira Code', monospace;
 }
 
+/* 出どころ（指示・応答・WebFetch 等）は全件に付くので枠を付けず薄い文字で並べる */
 .link-badge {
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0 6px;
+  opacity: 0.85;
+}
+
+.link-badge + .link-badge::before {
+  content: '·';
+  margin-right: 6px;
+  opacity: 0.6;
 }
 
 .link-row-fetched {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.link-badge-http {
+.link-row-fetched-icon {
+  flex-shrink: 0;
+}
+
+/* 例外（HTTP 2xx 以外）だけはバッジで目立たせる */
+.link-badge.link-badge-http {
+  opacity: 1;
   color: var(--warning);
-  border-color: var(--warning);
+  border: 1px solid var(--warning);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+.link-badge-http + .link-badge::before {
+  content: none;
 }
 
 .link-row-count {
   font-weight: 600;
 }
 
+/* 「会話へ」は行ホバー時だけ出す枠なしのアイコン（場所は確保したままにして行がずれないように） */
 .link-row-jump {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   background: none;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 4px;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
-  padding: 2px 8px;
+  font-size: 15px;
+  opacity: 0;
+}
+
+.link-row:hover .link-row-jump,
+.link-row:focus-within .link-row-jump {
+  opacity: 1;
 }
 
 .link-row-jump:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+@media (hover: none) {
+  .link-row-jump {
+    opacity: 1;
+  }
 }

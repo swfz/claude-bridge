@@ -72,8 +72,8 @@
 }
 
 .tab-new:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .tabs-list {

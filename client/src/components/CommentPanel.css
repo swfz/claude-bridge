@@ -19,42 +19,48 @@
 
 .comment-resize-handle:hover,
 .comment-resize-handle:active {
-  background: var(--accent);
+  background: var(--border);
 }
 
+/* パネル共通の外形: ヘッダ＝タイトル＋件数（数字だけ）＋右端のアイコン */
 .comment-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 10px 10px 10px 16px;
   border-bottom: 1px solid var(--border);
 }
 
 .comment-panel-header h3 {
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
 }
 
 .comment-count-badge {
-  background: var(--accent);
-  color: white;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
 }
 
 .comment-panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
+  border-radius: 6px;
+  padding: 4px;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 14px;
 }
 
 .comment-panel-close:hover {
   color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 .comment-panel-input {
@@ -68,7 +74,7 @@
   flex: 1;
   background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--text-primary);
   padding: 6px 10px;
   font-size: 13px;
@@ -82,44 +88,39 @@
   border-color: var(--accent);
 }
 
-.comment-panel-input button {
-  align-self: flex-start;
-  background: var(--accent);
-  border: none;
-  color: white;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
+.comment-panel-input textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 
-.comment-panel-input button:disabled {
-  opacity: 0.4;
-  cursor: default;
+/* 色は .btn-primary（中立の強調）に任せ、大きさだけ合わせる */
+.comment-panel-input button {
+  align-self: flex-start;
+  padding: 6px 12px;
+  font-size: 13px;
 }
 
 .comment-panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0 8px;
 }
 
 .comment-panel-empty {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
+  opacity: 0.8;
   text-align: center;
   padding: 24px 16px;
 }
 
+/* 項目は箱にせず罫線で区切る。削除はホバーで出すアイコン */
 .comment-panel-item {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  margin-bottom: 8px;
-  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 6px;
 }
 
 .comment-panel-item-main {
@@ -131,6 +132,10 @@
   cursor: pointer;
 }
 
+.comment-panel-item:has(.jumpable):hover {
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+
 .comment-panel-snippet {
   font-size: 11px;
   color: var(--text-secondary);
@@ -138,6 +143,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.comment-panel-file {
+  display: flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .comment-panel-text {
@@ -154,17 +165,29 @@
 }
 
 .comment-panel-delete {
+  display: inline-flex;
+  align-items: center;
   background: none;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 11px;
-  padding: 1px 7px;
+  border: none;
   border-radius: 4px;
+  padding: 2px;
+  color: var(--text-secondary);
   cursor: pointer;
   flex-shrink: 0;
+  opacity: 0;
+}
+
+.comment-panel-item:hover .comment-panel-delete,
+.comment-panel-item:focus-within .comment-panel-delete {
+  opacity: 1;
 }
 
 .comment-panel-delete:hover {
-  border-color: #e06c75;
-  color: #e06c75;
+  color: var(--danger);
+}
+
+@media (hover: none) {
+  .comment-panel-delete {
+    opacity: 1;
+  }
 }

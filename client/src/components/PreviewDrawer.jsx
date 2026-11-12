@@ -3,6 +3,20 @@ import { createPortal } from 'react-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
+import {
+  TbAlignLeft,
+  TbArrowBackUp,
+  TbChevronLeft,
+  TbChevronRight,
+  TbExternalLink,
+  TbMessage,
+  TbMoon,
+  TbPictureInPicture,
+  TbPlus,
+  TbSun,
+  TbTable,
+  TbX,
+} from 'react-icons/tb';
 import { FrontmatterTable, PreviewTextBody, markdownComponents } from './PreviewContent.jsx';
 import {
   buildLocationInfo,
@@ -853,42 +867,58 @@ export default function PreviewDrawer({
       >
         {!pipWindow && <div className="drawer-resize-handle" onMouseDown={onDragStart} />}
         <div className="drawer-header">
-          <div className="drawer-title-area">
+          {/* 常設のヒント帯はやめ、選択でコメントできることはファイル名の tooltip に回す
+              （キー操作はサイドバーの ShortcutHints が出している） */}
+          <div className="drawer-title-area" title="本文のテキストを選択するとコメントを追加できます">
             <span className="drawer-filename">
               {fileName}
               {displaySaved.length > 0 && (
                 <span className="drawer-comment-count" title="このファイルに残したコメント数">
-                  💬 {displaySaved.length}
+                  <TbMessage aria-hidden="true" />
+                  {displaySaved.length}
                 </span>
               )}
             </span>
             {filePath && <span className="drawer-path">{filePath}</span>}
           </div>
           <div className="drawer-actions">
+            {unresolvedCount > 0 && (
+              <button
+                className="drawer-btn drawer-btn-submit"
+                onClick={handleSubmitAll}
+                title="溜めた指摘を一括送信（Ctrl+Shift+Enter）"
+              >
+                {unresolvedCount}件送信
+              </button>
+            )}
             <button
               className="drawer-btn"
               onClick={toggleLightMode}
               title={lightMode ? 'ダーク表示に戻す' : 'ライト表示にする'}
+              aria-label={lightMode ? 'ダーク表示に戻す' : 'ライト表示にする'}
             >
-              {lightMode ? '🌙 ダーク' : '☀ ライト'}
+              {lightMode ? <TbMoon aria-hidden="true" /> : <TbSun aria-hidden="true" />}
             </button>
             {isTable && (
               <button
                 className="drawer-btn"
                 onClick={toggleTableMode}
                 title={tableMode ? 'テキストとして表示する' : '表として表示する'}
+                aria-label={tableMode ? 'テキストとして表示する' : '表として表示する'}
               >
-                {tableMode ? '≡ テキスト' : '⊞ 表'}
-              </button>
-            )}
-            {unresolvedCount > 0 && (
-              <button className="drawer-btn drawer-btn-submit" onClick={handleSubmitAll}>
-                {unresolvedCount}件送信
+                {tableMode ? <TbAlignLeft aria-hidden="true" /> : <TbTable aria-hidden="true" />}
               </button>
             )}
             {filePath && (
-              <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="drawer-btn">
-                別タブ
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="drawer-btn"
+                title="別タブで開く"
+                aria-label="別タブで開く"
+              >
+                <TbExternalLink aria-hidden="true" />
               </a>
             )}
             {onOpenPip && (
@@ -897,17 +927,20 @@ export default function PreviewDrawer({
                 onClick={onOpenPip}
                 title="小窓（Picture-in-Picture）に出して、他のセッションを見ながら読む"
               >
-                小窓
+                <TbPictureInPicture aria-hidden="true" />
+                {/* E2E が「小窓」の文字でボタンを探すので、見えない名前として残す */}
+                <span className="drawer-btn-label">小窓</span>
               </button>
             )}
-            <button className="drawer-close" onClick={onClose} title={pipWindow ? '小窓を閉じる' : undefined}>
-              x
+            <button
+              className="drawer-close"
+              onClick={onClose}
+              title={pipWindow ? '小窓を閉じる' : '閉じる（Esc）'}
+              aria-label={pipWindow ? '小窓を閉じる' : '閉じる'}
+            >
+              <TbX aria-hidden="true" />
             </button>
           </div>
-        </div>
-
-        <div className="drawer-hint">
-          テキストを選択してコメントを追加できます（数字キー → Enter で行を指定・Alt+R で開始）
         </div>
 
         <div className="drawer-content">
@@ -963,7 +996,7 @@ export default function PreviewDrawer({
                 </button>
                 {onSaveComment && (
                   <button
-                    className="selection-popup-btn"
+                    className="selection-popup-btn secondary"
                     onClick={() => addComment(selectionPopup.text, selectionPopup.location, 'save')}
                   >
                     コメントに残す（送らない）
@@ -994,7 +1027,8 @@ export default function PreviewDrawer({
                     onClick={() => setActiveMarker((cur) => (cur?.line === m.line ? null : m))}
                     title={`この箇所に ${m.comments.length} 件のコメント`}
                   >
-                    💬{m.comments.length > 1 ? m.comments.length : ''}
+                    <TbMessage aria-hidden="true" />
+                    {m.comments.length > 1 ? m.comments.length : ''}
                   </button>
                 ))}
               </div>
@@ -1004,8 +1038,10 @@ export default function PreviewDrawer({
             {activeMarker && (
               <div className="comment-gutter-popup" style={{ top: activeMarker.top }}>
                 <div className="comment-gutter-popup-head">
-                  <span>💬 残したコメント</span>
-                  <button onClick={() => setActiveMarker(null)}>x</button>
+                  <span>残したコメント</span>
+                  <button onClick={() => setActiveMarker(null)} title="閉じる" aria-label="閉じる">
+                    <TbX aria-hidden="true" />
+                  </button>
                 </div>
                 {activeMarker.comments.map((c) => (
                   <div key={c.id} className="comment-gutter-item">
@@ -1035,7 +1071,9 @@ export default function PreviewDrawer({
                 title={reviewPaneCollapsed ? 'レビュースレッドを開く' : 'レビュースレッドを畳む'}
                 aria-expanded={!reviewPaneCollapsed}
               >
-                <span className="review-pane-toggle">{reviewPaneCollapsed ? '◂' : '▸'}</span>
+                <span className="review-pane-toggle">
+                  {reviewPaneCollapsed ? <TbChevronLeft aria-hidden="true" /> : <TbChevronRight aria-hidden="true" />}
+                </span>
                 <span className="review-pane-title">レビュースレッド</span>
                 {reviewPaneCollapsed && (
                   <span className="review-pane-collapsed-count">
@@ -1058,8 +1096,9 @@ export default function PreviewDrawer({
                             className="review-pane-remove"
                             onClick={() => removeItem(item.id)}
                             title="この指摘を削除（Ctrl+Shift+⌫）"
+                            aria-label="この指摘を削除"
                           >
-                            x
+                            <TbX aria-hidden="true" />
                           </button>
                         </div>
                         {item.selectedText ? (
@@ -1125,7 +1164,8 @@ export default function PreviewDrawer({
                         onClick={addFreeItem}
                         title="選択なしで指摘欄を追加（本文で Enter）"
                       >
-                        + 指摘を追加
+                        <TbPlus aria-hidden="true" />
+                        指摘を追加
                       </button>
                       <button
                         className="btn btn-primary review-pane-submit"
@@ -1140,18 +1180,21 @@ export default function PreviewDrawer({
                   {/* 残したcomment（送信せず保存）。ファイルプレビューは保存済み全件を表示。 */}
                   {displaySaved.length > 0 && (
                     <div className="review-thread-saved">
-                      <div className="review-thread-label">💬 残したコメント（送信なし）</div>
+                      <div className="review-thread-label">残したコメント（送信なし）</div>
                       {displaySaved.map((c) => (
                         <div key={c.id} className="review-pane-item saved">
                           {c.persisted && onDeleteComment && (
                             <div className="review-pane-item-header">
-                              <span className="review-pane-num">💬</span>
+                              <span className="review-pane-num saved">
+                                <TbMessage aria-hidden="true" />
+                              </span>
                               <button
                                 className="review-pane-remove"
                                 onClick={() => onDeleteComment(c.id)}
                                 title="このコメントを削除"
+                                aria-label="このコメントを削除"
                               >
-                                x
+                                <TbX aria-hidden="true" />
                               </button>
                             </div>
                           )}
@@ -1181,8 +1224,9 @@ export default function PreviewDrawer({
                                 className="review-pane-resolve"
                                 onClick={() => toggleResolved(item.id)}
                                 title="未解決に戻す"
+                                aria-label="未解決に戻す"
                               >
-                                ↩
+                                <TbArrowBackUp aria-hidden="true" />
                               </button>
                             </div>
                             <div className="review-pane-selected">{item.selectedText.slice(0, 80)}...</div>
