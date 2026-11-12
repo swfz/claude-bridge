@@ -22,6 +22,7 @@ function filterCommands(commands, query) {
 // onSendEscape は PTY を持つセッションだけに渡される。TUI で開いてしまったモーダルを
 // 閉じるための Escape 送信で、補完ドロップダウンを Escape キーで畳む挙動とは別物。
 // notice は入力欄の直上に出す注意書き（閲覧タブで「tmux 未接続なので届かない」等）
+// onLocalCommand はブリッジが横取りするコマンド（/diff など）の処理。true を返したら送信しない
 export default function InputBar({
   onSubmit,
   disabled,
@@ -30,6 +31,7 @@ export default function InputBar({
   slashCommands = [],
   onSendEscape,
   notice,
+  onLocalCommand,
 }) {
   const [text, setText] = useState(() => (draftKey && drafts.get(draftKey)) || '');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -73,6 +75,11 @@ export default function InputBar({
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
+    if (onLocalCommand?.(trimmed)) {
+      updateText('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      return;
+    }
     // 明示的に false が返ったら送信失敗（WS 切断中など）。書きかけを消さない
     if (onSubmit(trimmed) === false) return;
     setText('');

@@ -61,6 +61,26 @@ test('行をクリックすると readonly セッションが開き、会話が�
   await shellDrawer.locator('.shell-drawer-close').click();
   await expect(shellDrawer).toHaveCount(0);
 
+  // /diff は Claude に送らず、ブリッジの差分ドロワーを開く（補完の先頭にも出る）
+  const humanCount = await page.locator('.chat-message.human').count();
+  const input = page.locator('.input-textarea');
+  await input.fill('/dif');
+  await expect(page.locator('.slash-suggestion', { hasText: '/diff' })).toBeVisible();
+  await input.press('Enter');
+  await expect(input).toHaveValue('/diff ');
+  await input.press('Enter');
+  const diffDrawer = page.locator('.diff-drawer');
+  await expect(diffDrawer).toBeVisible();
+  await expect(input).toHaveValue('');
+  // fixture の cwd は実在しないので、git で読めない旨のエラーになる
+  await expect(diffDrawer.locator('.diff-drawer-error')).toContainText('git リポジトリではない');
+  await diffDrawer.locator('.diff-scope-btn', { hasText: 'このセッション' }).click();
+  await expect(diffDrawer.locator('.diff-scope-btn.active')).toHaveText('このセッション');
+  await expect(diffDrawer.locator('.diff-drawer-error')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(diffDrawer).toHaveCount(0);
+  await expect(page.locator('.chat-message.human')).toHaveCount(humanCount);
+
   // ヘッダの Refs で、会話に出てきたリンクとファイルのドロワーが開く（既定はリンクタブ）
   await page.locator('.panel-tab', { hasText: 'Refs' }).click();
   const linkDrawer = page.locator('.ref-drawer');
