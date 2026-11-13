@@ -486,7 +486,9 @@ export const ChatMessage = memo(function ChatMessage({
     (c) => c.anchor && c.anchor.messageUuid && c.anchor.messageUuid === message.uuid,
   );
 
-  const isLong = (message.content || '').length > COLLAPSE_THRESHOLD;
+  // スキルの展開（SKILL.md の本文）は人が打った指示ではないので、長さに関わらず既定で畳む
+  const isSkillBody = message.sender?.kind === 'skill';
+  const isLong = isSkillBody || (message.content || '').length > COLLAPSE_THRESHOLD;
   // ツールの失敗・新規作成の印（memo を崩さないよう文字列で受け取って、ここで引ける形に戻す）
   const toolFlagMap = parseToolFlagsKey(toolFlags);
   // 行を指しているあいだは折りたたまない（隠れた行のバッジを打っても見えないため）
@@ -651,7 +653,7 @@ export const ChatMessage = memo(function ChatMessage({
       {message.content && (
         <div
           ref={bodyRef}
-          className={`chat-message-body ${shouldCollapse ? 'collapsed' : ''} ${lineMode ? 'msg-line-mode' : ''}`}
+          className={`chat-message-body ${shouldCollapse ? (isSkillBody ? 'collapsed skill-collapsed' : 'collapsed') : ''} ${lineMode ? 'msg-line-mode' : ''}`}
           onMouseUp={!isHuman ? handleTextSelect : undefined}
         >
           {lineMode &&
@@ -660,12 +662,20 @@ export const ChatMessage = memo(function ChatMessage({
                 {b.line}
               </span>
             ))}
-          <MarkdownContent
-            content={message.content}
-            sessionCwd={sessionCwd}
-            onOpenPreview={onOpenPreview}
-            onOpenFileReview={onOpenFileReview}
-          />
+          {message.command ? (
+            // スラッシュコマンド（スキル呼び出し）はタグを外してコマンド名を等幅で見せる
+            <p className="slash-command-line">
+              <code className="slash-command">{message.command.name}</code>
+              {message.command.args && <span className="slash-command-args">{message.command.args}</span>}
+            </p>
+          ) : (
+            <MarkdownContent
+              content={message.content}
+              sessionCwd={sessionCwd}
+              onOpenPreview={onOpenPreview}
+              onOpenFileReview={onOpenFileReview}
+            />
+          )}
         </div>
       )}
 
@@ -729,7 +739,7 @@ export const ChatMessage = memo(function ChatMessage({
         // 折りたたんだ本文の続き。本文の下に埋もれないよう、枠付きの小さなボタンで置く
         <button className="expand-bar" onClick={() => setExpanded(true)}>
           <TbChevronDown aria-hidden="true" />
-          続きを表示
+          {isSkillBody ? 'スキルの手順を表示' : '続きを表示'}
           <span className="expand-bar-count">{message.content.length.toLocaleString()} 文字</span>
         </button>
       )}

@@ -11,6 +11,9 @@ import {
   isInjectedUserRecord,
   injectedSenderOf,
   extractHandbackReport,
+  parseSlashCommand,
+  skillNameOf,
+  humanMessageFields,
 } from '../server/jsonl-utils.js';
 
 describe('extractTextContent', () => {
@@ -483,5 +486,47 @@ describe('extractContextUsage', () => {
     assert.equal(extractContextUsage({ type: 'assistant', message: { role: 'assistant' } }), null);
     assert.equal(extractContextUsage({ type: 'user', message: { usage: { input_tokens: 1 } } }), null);
     assert.equal(extractContextUsage(null), null);
+  });
+});
+
+describe('スラッシュコマンドとスキルの展開', () => {
+  const user = (content, extra = {}) => ({ type: 'user', message: { role: 'user', content }, ...extra });
+  const SLASH = '<command-message>ship</command-message>\n<command-name>/ship</command-name>';
+  const SKILL_BODY = [{ type: 'text', text: 'Base directory for this skill: /home/u/.claude/skills/ship\n\n手順…' }];
+
+  it('parseSlashCommand はタグからコマンド名と引数を取り出す', () => {
+    assert.deepEqual(parseSlashCommand(SLASH), { name: '/ship', args: '' });
+    assert.deepEqual(
+      parseSlashCommand(
+        '<command-name>/review</command-name>\n<command-message>review</command-message>\n<command-args>123 --fix</command-args>',
+      ),
+      { name: '/review', args: '123 --fix' },
+    );
+    assert.equal(parseSlashCommand('<command-message>ship</command-message>'), null);
+    assert.equal(parseSlashCommand('/ship して'), null);
+    assert.equal(parseSlashCommand('<system-reminder><command-name>/x</command-name>'), null);
+  });
+
+  it('skillNameOf は isMeta の SKILL.md 展開だけを拾う', () => {
+    assert.equal(skillNameOf(user(SKILL_BODY, { isMeta: true })), 'ship');
+    assert.equal(skillNameOf(user(SKILL_BODY)), null);
+    assert.equal(skillNameOf(user('<system-reminder>…', { isMeta: true })), null);
+  });
+
+  it('スキルの展開の送り手は skill', () => {
+    assert.deepEqual(injectedSenderOf(user(SKILL_BODY, { isMeta: true })), { kind: 'skill', name: 'ship' });
+  });
+
+  it('humanMessageFields: コマンドは /name args の本文と command、人の発言なので sender なし', () => {
+    const r = user(SLASH, { origin: { kind: 'human' } });
+    assert.deepEqual(humanMessageFields(r, SLASH), { content: '/ship', command: { name: '/ship', args: '' } });
+  });
+
+  it('humanMessageFields: スキルの展開は injected + skill', () => {
+    const r = user(SKILL_BODY, { isMeta: true });
+    const f = humanMessageFields(r, SKILL_BODY[0].text);
+    assert.equal(f.injected, true);
+    assert.deepEqual(f.sender, { kind: 'skill', name: 'ship' });
+    assert.equal(f.command, undefined);
   });
 });

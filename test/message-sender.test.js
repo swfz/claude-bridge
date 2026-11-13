@@ -18,3 +18,10 @@ describe('humanSenderLabel', () => {
     assert.equal(humanSenderLabel({ kind: 'system' }), 'System');
   });
 });
+
+describe('humanSenderLabel（スキル）', () => {
+  it('スキルの展開はスキル名つき', () => {
+    assert.equal(humanSenderLabel({ kind: 'skill', name: 'ship' }), 'Skill · ship');
+    assert.equal(humanSenderLabel({ kind: 'skill' }), 'Skill');
+  });
+});

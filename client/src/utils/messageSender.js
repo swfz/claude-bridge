@@ -9,6 +9,8 @@ export function humanSenderLabel(sender) {
       return sender.name ? `Agent · ${sender.name}` : 'Agent';
     case 'task-notification':
       return 'Task';
+    case 'skill':
+      return sender.name ? `Skill · ${sender.name}` : 'Skill';
     default:
       return 'System';
   }
