@@ -1739,7 +1739,10 @@ export default function App() {
   const sessionUiVisible = !showHome && !!activeSessionId;
   const chatPanelsVisible = sessionUiVisible && effectiveViewMode === 'chat';
   // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
-  const activeChoice = sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
+  // サーバーは待っていないときも {prompt: null, waitingFor: null} を送ってくるので、
+  // カードを出す（prompt があるか、待っているのに読めなかった）ときだけ activeChoice にする
+  const rawChoice = sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
+  const activeChoice = rawChoice?.prompt || rawChoice?.waitingFor ? rawChoice : null;
   // 推論中インジケータの「裏で実行中…」に出す件数（TaskStrip と同じ一覧から数える）
   const runningAgentCount = (subagentTasks[activeSessionId] || EMPTY_TASKS).filter(
     (t) => t.status === 'running',
@@ -2085,23 +2088,26 @@ export default function App() {
             )}
           </div>
 
+          {/* 高さ 0 の置き場からチャット欄の下端に重ねる（出し入れで縦幅が変わってちらつかないように） */}
+          {chatPanelsVisible && !isReadonly && !activeChoice && (
+            <div className="working-indicator-slot">
+              <WorkingIndicator
+                status={activeSession?.status}
+                waitingFor={activeSession?.waitingFor}
+                messages={activeMessages}
+                pendingSince={pendingTurns[activeSessionId]}
+                runningAgents={runningAgentCount}
+                runningShells={runningShellCount}
+              />
+            </div>
+          )}
+
           {sessionUiVisible && (
             <TaskStrip
               tasks={subagentTasks[activeSessionId] || EMPTY_TASKS}
               shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
               onOpenTask={handleOpenSubagentTask}
               onOpenShellTask={handleOpenShellTask}
-            />
-          )}
-
-          {sessionUiVisible && !isReadonly && !activeChoice && (
-            <WorkingIndicator
-              status={activeSession?.status}
-              waitingFor={activeSession?.waitingFor}
-              messages={activeMessages}
-              pendingSince={pendingTurns[activeSessionId]}
-              runningAgents={runningAgentCount}
-              runningShells={runningShellCount}
             />
           )}
 

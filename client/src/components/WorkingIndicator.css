@@ -1,5 +1,17 @@
-/* 入力欄の直上の「推論中」1 行。色は付けず、記号の明滅とラベルの濃淡だけで動きを見せる */
+/* 入力欄の直上の「推論中」1 行。色は付けず、記号の明滅とラベルの濃淡だけで動きを見せる。
+   出し入れで縦幅が変わらないよう、高さ 0 の置き場（.working-indicator-slot）からチャット欄の下端に重ねる。
+   隠れる分は .chat-view の padding-bottom で常に空けてある */
+.working-indicator-slot {
+  position: relative;
+  height: 0;
+  z-index: 5;
+}
+
 .working-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
