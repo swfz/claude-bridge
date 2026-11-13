@@ -248,6 +248,25 @@
   animation: home-status-ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
+/* 入力待ちだが裏でサブエージェント・シェルが動いている（サイドバーの .tab-status-shell と同じ呼吸する輪） */
+.home-status-shell {
+  outline: 1px solid color-mix(in srgb, var(--success) 60%, transparent);
+  outline-offset: 1.5px;
+  animation: home-status-shell-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes home-status-shell-breathe {
+  0%,
+  100% {
+    outline-offset: 1px;
+    outline-color: color-mix(in srgb, var(--success) 70%, transparent);
+  }
+  50% {
+    outline-offset: 3px;
+    outline-color: color-mix(in srgb, var(--success) 15%, transparent);
+  }
+}
+
 .home-status-waiting {
   background: var(--warning);
   animation: home-status-pulse 1.2s ease-in-out infinite;
@@ -273,6 +292,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .home-status-busy::after,
+  .home-status-shell,
   .home-status-waiting {
     animation: none;
   }

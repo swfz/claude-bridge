@@ -315,6 +315,28 @@
   background: var(--success);
 }
 
+/* 入力待ちだが裏でサブエージェント・シェルが動いている（status: 'shell'）。
+   手は空いているので idle と同じ緑のまま、外側の細い輪をゆっくり呼吸させて「まだ何か動いている」を示す
+   （busy の速い波紋・starting の回転とは別の動き。dev サーバーの常駐などで長く続くので控えめにする） */
+.tab-status-shell {
+  background: var(--success);
+  outline: 1px solid color-mix(in srgb, var(--success) 60%, transparent);
+  outline-offset: 1.5px;
+  animation: status-shell-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes status-shell-breathe {
+  0%,
+  100% {
+    outline-offset: 1px;
+    outline-color: color-mix(in srgb, var(--success) 70%, transparent);
+  }
+  50% {
+    outline-offset: 3px;
+    outline-color: color-mix(in srgb, var(--success) 15%, transparent);
+  }
+}
+
 /* 処理中。止まっている緑（idle）と一目で見分けられるよう、ドットから波紋を広げ続ける */
 .tab-status-busy {
   position: relative;
@@ -358,6 +380,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tab-status-busy::after,
+  .tab-status-shell,
   .tab:has(.tab-status-busy) .tab-name {
     animation: none;
   }

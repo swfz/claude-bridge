@@ -41,6 +41,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 裏で実行中（ターンは終わっている）。ターン中より一段控えめにする */
+.working-background .working-label {
+  color: var(--text-secondary);
+}
+
+/* 裏で動いているのがシェルだけ（常駐プロセスなど）。記号も明滅も止めて薄い文字だけにする */
+.working-static .working-glyph,
+.working-static .working-label {
+  color: var(--text-secondary);
+}
+
+.working-static .working-label {
+  animation: none;
+}
+
 @keyframes working-label-pulse {
   0%,
   100% {
