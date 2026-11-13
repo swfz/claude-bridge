@@ -2,6 +2,8 @@
   height: 100%;
   overflow-y: auto;
   padding: 16px;
+  /* 下端に推論中インジケータ（約 25px）が重なるので、出ていなくても常にその分を空けておく */
+  padding-bottom: 44px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -879,7 +881,7 @@
    SubagentDrawer の本文からも同じクラスで使う（あちらは block レイアウトなので margin でも中央寄せ） */
 .scroll-to-latest {
   position: sticky;
-  bottom: 8px;
+  bottom: 36px;
   align-self: center;
   margin: 0 auto;
   width: fit-content;

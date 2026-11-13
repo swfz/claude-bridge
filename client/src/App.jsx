@@ -2088,23 +2088,26 @@ export default function App() {
             )}
           </div>
 
+          {/* 高さ 0 の置き場からチャット欄の下端に重ねる（出し入れで縦幅が変わってちらつかないように） */}
+          {chatPanelsVisible && !isReadonly && !activeChoice && (
+            <div className="working-indicator-slot">
+              <WorkingIndicator
+                status={activeSession?.status}
+                waitingFor={activeSession?.waitingFor}
+                messages={activeMessages}
+                pendingSince={pendingTurns[activeSessionId]}
+                runningAgents={runningAgentCount}
+                runningShells={runningShellCount}
+              />
+            </div>
+          )}
+
           {sessionUiVisible && (
             <TaskStrip
               tasks={subagentTasks[activeSessionId] || EMPTY_TASKS}
               shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
               onOpenTask={handleOpenSubagentTask}
               onOpenShellTask={handleOpenShellTask}
-            />
-          )}
-
-          {sessionUiVisible && !isReadonly && !activeChoice && (
-            <WorkingIndicator
-              status={activeSession?.status}
-              waitingFor={activeSession?.waitingFor}
-              messages={activeMessages}
-              pendingSince={pendingTurns[activeSessionId]}
-              runningAgents={runningAgentCount}
-              runningShells={runningShellCount}
             />
           )}
 
