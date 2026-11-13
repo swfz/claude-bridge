@@ -11,7 +11,7 @@ import InputBar from './components/InputBar.jsx';
 import ChoicePrompt from './components/ChoicePrompt.jsx';
 import TaskStrip from './components/TaskStrip.jsx';
 import WorkingIndicator from './components/WorkingIndicator.jsx';
-import { clearObservedPending } from './utils/working.js';
+import { activeChoiceOf, clearObservedPending } from './utils/working.js';
 import SubagentDrawer from './components/SubagentDrawer.jsx';
 import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
 import DiffDrawer from './components/DiffDrawer.jsx';
@@ -1745,7 +1745,7 @@ export default function App() {
   const sessionUiVisible = !showHome && !!activeSessionId;
   const chatPanelsVisible = sessionUiVisible && effectiveViewMode === 'chat';
   // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
-  const activeChoice = sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
+  const activeChoice = sessionUiVisible && !isReadonly ? activeChoiceOf(choicePrompts[activeSessionId]) : null;
   // 推論中インジケータの「裏で実行中…」に出す件数（TaskStrip と同じ一覧から数える）
   const runningAgentCount = (subagentTasks[activeSessionId] || EMPTY_TASKS).filter(
     (t) => t.status === 'running',
