@@ -2,18 +2,29 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { existsSync, lstatSync, readdirSync } from 'fs';
+import { rm } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { extname, join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { SessionManager, ReadonlySessionManager } from './session.js';
 import { resolveResumeCwd, isValidProjectDir } from './resume-cwd.js';
-import { Storage } from './storage.js';
+import { Storage, DATA_DIR } from './storage.js';
 import { ThreadStore } from './thread-store.js';
-import { listClaudeSessions, listRecentSessions, loadSessionHistory } from './claude-sessions.js';
+import { listClaudeSessions, listRecentDirs, listRecentSessions, loadSessionHistory } from './claude-sessions.js';
 import { JsonlWatcher } from './jsonl-watcher.js';
 import { CLAUDE_PROJECTS_DIR, cwdToProjectDir } from './jsonl-utils.js';
 import { readSessionSummary } from './session-summary.js';
 import { readSessionTurns } from './session-turns.js';
+import {
+  buildNewSessionArgs,
+  isGitRepo,
+  normalizePrompt,
+  ptyArgs,
+  tmuxCommand,
+  waitForSessionCwd,
+  waitForSessionCwdById,
+  writePromptFile,
+} from './new-session.js';
 import { readRecentExchanges } from './session-recent.js';
 import {
   isTmuxServerRunning,
@@ -21,6 +32,7 @@ import {
   listClaudeTmuxPanes,
   resolveTmuxJsonlTarget,
   resumeInTmuxWindow,
+  launchInTmuxWindow,
   TmuxSessionManager,
 } from './tmux-session.js';
 import { listClaudeAgents } from './claude-agents.js';
@@ -522,6 +534,64 @@ function attachTmuxPaneAsSession(ws, { paneId, name, cwd, target, claudePid, cla
   return session;
 }
 
+// 新規セッションを tmux の新しい window で起動する（new_session の launch: 'tmux'）。
+// resume_in_tmux と同じく window ができた時点でタブを開いて「起動中」を見せる。
+// sessionId は --session-id で先に決めるので、JSONL の監視先は起動前から分かる。
+// -w のときだけ claude が worktree へ移るので、ステータスファイルに移り先が出たら監視を張り直す
+async function startNewSessionInTmux(ws, { name, cwd, worktree, worktreeName, model, prompt }) {
+  const claudeSessionId = randomUUID();
+  let tab = null;
+  let promptFile = null;
+  try {
+    const args = buildNewSessionArgs({ worktree, worktreeName, model, sessionId: claudeSessionId });
+    promptFile = prompt ? await writePromptFile(DATA_DIR, claudeSessionId, prompt) : null;
+    await launchInTmuxWindow({
+      command: tmuxCommand(args, promptFile),
+      cwd,
+      windowName: name,
+      onWindowCreated: (pane) => {
+        tab = attachTmuxPaneAsSession(ws, {
+          paneId: pane.paneId,
+          name: name || pane.windowName,
+          cwd,
+          target: pane.target,
+          claudePid: null,
+          claudeSessionId,
+          status: 'starting',
+        });
+      },
+    });
+  } catch (e) {
+    console.error('new_session (tmux) failed:', e.message);
+    // 起動できていればシェルが読んだ直後に消しているが、失敗したときは残るので消す
+    if (promptFile) rm(promptFile, { force: true }).catch(() => {});
+    const message = `tmux で起動できませんでした: ${e.message}`;
+    if (tab) {
+      if (tab.claudePid == null) {
+        tab.status = 'failed';
+        broadcastSessionList();
+      }
+      sendTo(ws, { type: 'error', message });
+    } else {
+      sendTo(ws, { type: 'new_session_error', message });
+    }
+    return;
+  }
+  if (!worktree || !tab) return;
+  const worktreeCwd = await waitForSessionCwdById(claudeSessionId);
+  if (!worktreeCwd || tmuxSessionManager.getSession(tab.id) !== tab) return;
+  tab.cwd = worktreeCwd;
+  jsonlWatcher.stopWatching(tab.id);
+  jsonlWatcher.startWatching({
+    bridgeSessionId: tab.id,
+    cwd: worktreeCwd,
+    sessionId: claudeSessionId,
+    fromStart: true,
+    onMessage: (chatMsg) => broadcast(chatMsg),
+  });
+  broadcastSessionList();
+}
+
 // tmux タブを作って JSONL 監視を始めるところまで（ws には何も送らない）。
 // 起動時の復元と一括再開はこれだけを使う（session_opened でアクティブタブを奪わないため）
 function openTmuxTab({ id, paneId, name, cwd, target, claudePid, claudeSessionId, status, waitingFor }) {
@@ -913,9 +983,35 @@ wss.on('connection', (ws) => {
     switch (msg.type) {
       case 'new_session': {
         const sessionCwd = msg.cwd || process.env.HOME;
-        const session = sessionManager.createSession({
+        const worktree = msg.worktree === true;
+        let args;
+        let prompt;
+        try {
+          args = buildNewSessionArgs({ worktree, worktreeName: msg.worktreeName, model: msg.model });
+          prompt = normalizePrompt(msg.prompt);
+          if (!existsSync(sessionCwd)) throw new Error(`作業ディレクトリがありません: ${sessionCwd}`);
+          if (worktree && !(await isGitRepo(sessionCwd))) {
+            throw new Error('-w（worktree）は git リポジトリのディレクトリでしか使えません');
+          }
+        } catch (err) {
+          ws.send(JSON.stringify({ type: 'new_session_error', message: err.message }));
+          break;
+        }
+        if (msg.launch === 'tmux') {
+          await startNewSessionInTmux(ws, {
+            name: msg.name,
+            cwd: sessionCwd,
+            worktree,
+            worktreeName: msg.worktreeName,
+            model: msg.model,
+            prompt,
+          });
+          break;
+        }
+        const session = sessionManager.createSessionWithArgs({
           name: msg.name || 'New Session',
           cwd: sessionCwd,
+          args: ptyArgs(args, prompt),
         });
 
         session.onOutput((data) => {
@@ -935,12 +1031,24 @@ wss.on('connection', (ws) => {
           });
         });
 
-        // JSONL 監視開始
-        jsonlWatcher.startWatching({
-          bridgeSessionId: session.id,
-          cwd: sessionCwd,
-          onMessage: (chatMsg) => broadcast(chatMsg),
-        });
+        // JSONL 監視開始。-w は worktree へ移るので、移り先の cwd が分かってから監視する
+        const watch = (cwd) =>
+          jsonlWatcher.startWatching({
+            bridgeSessionId: session.id,
+            cwd,
+            onMessage: (chatMsg) => broadcast(chatMsg),
+          });
+        if (worktree) {
+          waitForSessionCwd(session.claudePid).then((worktreeCwd) => {
+            // 待っている間に終了した（自然終了でも sessions からは消えないので pid で見る）
+            if (!sessionManager.getSession(session.id) || session.claudePid == null) return;
+            if (worktreeCwd) session.cwd = worktreeCwd;
+            watch(worktreeCwd || sessionCwd);
+            broadcastSessionList();
+          });
+        } else {
+          watch(sessionCwd);
+        }
 
         ws.send(JSON.stringify({ type: 'session_opened', bridgeSessionId: session.id }));
         broadcastSessionList();
@@ -1353,6 +1461,14 @@ wss.on('connection', (ws) => {
             }),
           );
         });
+        break;
+      }
+
+      case 'list_recent_dirs': {
+        // 新規セッションの作業ディレクトリ候補（直近 90 日のセッションの cwd をユニークに）
+        listRecentDirs({ days: 90 })
+          .then((dirs) => ws.send(JSON.stringify({ type: 'recent_dirs', home: process.env.HOME || '', dirs })))
+          .catch(() => ws.send(JSON.stringify({ type: 'recent_dirs', home: process.env.HOME || '', dirs: [] })));
         break;
       }
 

@@ -15,6 +15,8 @@
   padding: 24px;
   width: 400px;
   max-width: 90vw;
+  max-height: 92vh;
+  overflow-y: auto;
 }
 
 .dialog-wide {
@@ -291,4 +293,141 @@
   z-index: 20;
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* 作業ディレクトリの候補（直近 90 日のセッションの cwd）。入力欄の直下に重ねる */
+.dir-combobox {
+  position: relative;
+}
+
+.dir-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  z-index: 10;
+}
+
+.dir-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* キーボードで今指している候補 = 「今の操作対象」なのでピンクの下地 */
+.dir-suggest-item.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.dir-suggest-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.dir-suggest-path {
+  flex: 1;
+  min-width: 0;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dir-suggest-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 起動オプション（-w） */
+.dialog-option {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dialog-field label.dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.dialog-field .dialog-check input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+}
+
+.dialog-check code {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dialog-field input.invalid {
+  border-color: var(--danger);
+}
+
+.dialog-error {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.dialog-field textarea {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.dialog-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* 起動先の 2 択。ActivityPanel の .activity-segmented と同じ中立のセグメント */
+.dialog-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.dialog-segment {
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  padding: 4px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dialog-segment.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.dialog-segment:hover:not(.active) {
+  color: var(--text-primary);
 }
