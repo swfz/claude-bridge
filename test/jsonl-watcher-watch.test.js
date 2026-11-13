@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, appendFileSync, rmSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { JsonlWatcher } from '../server/jsonl-watcher.js';
@@ -245,5 +245,35 @@ describe('JsonlWatcher startWatching integration', () => {
     assert.equal(humanMsgs[1].content, 'my input');
 
     if (state.fsWatcher) state.fsWatcher.close();
+  });
+  it('sessionId 指定でファイルもプロジェクトディレクトリも無いとき、後から作られたファイルを読む（claude -w の新規 worktree）', async () => {
+    const messages = [];
+    const projectPath = join(tmpDir, 'not-yet');
+    const id = 'aaaaaaaa-0000-0000-0000-000000000000';
+
+    watcher.startWatching({
+      bridgeSessionId: 'test',
+      cwd: join(tmpDir, 'no-such-cwd'),
+      sessionId: id,
+      fromStart: true,
+      onMessage: (msg) => messages.push(msg),
+    });
+    const state = watcher.watchers.get('test');
+    state.projectPath = projectPath;
+    state.targetFile = join(projectPath, `${id}.jsonl`);
+    assert.ok(state.pollTimer, 'ディレクトリが無いのでポーリングで待つ');
+
+    mkdirSync(projectPath);
+    writeFileSync(state.targetFile, makeRecord('user', 'first') + '\n');
+    await wait(2500);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].content, 'first');
+
+    appendFileSync(state.targetFile, makeRecord('user', 'second') + '\n');
+    await wait(500);
+    assert.deepEqual(
+      messages.map((m) => m.content),
+      ['first', 'second'],
+    );
   });
 });
