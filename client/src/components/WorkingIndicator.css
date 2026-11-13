@@ -1,9 +1,16 @@
 /* 入力欄の直上の「推論中」1 行。色は付けず、記号の明滅とラベルの濃淡だけで動きを見せる */
+/* 高さは固定する。出ていないとき（.working-idle）も同じ高さの空の行を置き、出し入れで
+   チャット欄の高さを変えない（変わると本文が上下に動いてちらつく）。記号は字形ごとにフォールバック
+   フォントが変わり得るので、行の高さを中身に任せない */
 .working-indicator {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  padding: 4px 16px;
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 16px;
+  line-height: 18px;
+  overflow: hidden;
   border-top: 1px solid var(--border);
   background: var(--bg-secondary);
   font-size: 12px;
@@ -14,6 +21,7 @@
 .working-glyph {
   flex-shrink: 0;
   width: 1em;
+  height: 18px;
   text-align: center;
   font-size: 14px;
   color: var(--text-primary);
@@ -70,4 +78,10 @@
   .working-label {
     animation: none;
   }
+}
+
+/* 出ていないときは高さだけ確保する（中身の無い帯や、入力欄の罫線との二重線を見せない） */
+.working-idle {
+  border-top-color: transparent;
+  background: transparent;
 }
