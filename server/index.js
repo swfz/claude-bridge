@@ -55,7 +55,12 @@ import { readRateLimits } from './rate-limits.js';
 import { listSlashCommands } from './slash-commands.js';
 import { readSessionDiff } from './session-diff.js';
 import { readSessionEditedFiles } from './session-completion.js';
-import { getActivityCalendar, getActivityHeatmap, listActiveSessionIds } from './activity-heatmap.js';
+import {
+  getActivityCalendar,
+  getActivityHeatmap,
+  listActiveSessionIds,
+  warmActivityCache,
+} from './activity-heatmap.js';
 import { isSensitivePath } from './sensitive-paths.js';
 
 const PORT = process.env.PORT || 3000;
@@ -2100,5 +2105,16 @@ function broadcast(data) {
 restoreOpenTabs().then(() => {
   server.listen(PORT, () => {
     console.log(`Claude Bridge server listening on http://localhost:${PORT}`);
+    // 活動パネル（草・カレンダー）の集計を裏で温める。起動は待たせず、失敗してもログだけ（要求時にまた走査する）
+    setImmediate(() => {
+      const startedAt = Date.now();
+      warmActivityCache()
+        .then(({ fileCount, scannedFiles }) => {
+          console.log(
+            `[activity-heatmap] warmed ${scannedFiles}/${fileCount} files in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
+          );
+        })
+        .catch((err) => console.error('[activity-heatmap] warm-up failed:', err?.message || err));
+    });
   });
 });
