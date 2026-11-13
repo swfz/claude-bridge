@@ -123,6 +123,36 @@
   font-weight: 600;
 }
 
+.cal-day-name {
+  display: block;
+}
+
+/* 日ごとの AI 稼働時間。薄い等幅数字で、値が無くても 1 行分の高さを持つ */
+.cal-day-busy {
+  display: block;
+  height: 14px;
+  line-height: 14px;
+  font-size: 10px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-approvals {
+  color: var(--text-secondary);
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-busy-week {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 24 時間分は縦に長いので、この枠だけ縦スクロールさせる */
 .cal-scroll {
   max-height: min(620px, 65vh);

@@ -5,8 +5,12 @@ import {
   buildCalendarDays,
   buildLegend,
   buildRuns,
+  dailyApprovals,
+  dailyBusyMs,
   densityLevel,
   earliestOffsetMs,
+  formatApprovals,
+  formatBusy,
   formatDayHeader,
   formatHours,
   phaseOf,
@@ -69,6 +73,17 @@ describe('buildRuns', () => {
       { startMs: base * SLOT, prompts: 1, research: 0, edit: 0 },
       { startMs: (base + 2) * SLOT, prompts: 0, research: 1, edit: 0 },
     ]);
+  });
+
+  it('ignores busy-only slots so they never join or extend a run', () => {
+    const base = 1000;
+    const plain = [
+      [base, 1, 1, 0, 0, 0],
+      [base + 5, 0, 1, 0, 0, 0],
+    ];
+    const withBusy = [...plain, [base + 1, 0, 0, 0, 0, SLOT], [base + 2, 0, 0, 0, 0, SLOT], [base + 6, 0, 0, 0, 0, 1]];
+    assert.deepEqual(buildRuns(withBusy, SLOT), buildRuns(plain, SLOT));
+    assert.equal(buildRuns(withBusy, SLOT).length, 2);
   });
 
   it('sorts unsorted slots and handles empty input', () => {
@@ -321,5 +336,62 @@ describe('phaseOf / phaseTotals / formatHours', () => {
     assert.equal(formatHours(0), '0 時間');
     assert.equal(formatHours(30 * 60000), '0.5 時間');
     assert.equal(formatHours(12 * 3600000 + 20 * 60000), '12 時間');
+  });
+});
+
+describe('dailyBusyMs / formatBusy', () => {
+  it('sums busy ms per local day across sessions, including busy-only slots', () => {
+    const weekStartMs = local(2026, 11, 9); // 月曜
+    const sessions = [
+      {
+        sessionId: 'a',
+        slots: [
+          [slotAt(local(2026, 11, 9, 23, 50)), 1, 1, 0, 0, 5 * 60000],
+          [slotAt(local(2026, 11, 10, 0, 0)), 0, 0, 0, 0, 10 * 60000], // 日付をまたいだ続き
+          [slotAt(local(2026, 11, 15, 12, 0)), 1, 0, 0, 0, 0],
+        ],
+      },
+      { sessionId: 'b', slots: [[slotAt(local(2026, 11, 9, 9, 0)), 1, 1, 0, 0, 20 * 60000]] }, // 並行も合算
+      { sessionId: 'c', slots: [[slotAt(local(2026, 11, 16, 0, 0)), 1, 1, 0, 0, 60000]] }, // 週の外
+      { sessionId: 'd', slots: [[slotAt(local(2026, 11, 11, 9, 0)), 1, 1, 0, 0]] }, // 古い形（5 列目なし）
+    ];
+    assert.deepEqual(dailyBusyMs(sessions, { weekStartMs, slotMs: SLOT }), [25 * 60000, 10 * 60000, 0, 0, 0, 0, 0]);
+    assert.deepEqual(dailyBusyMs([], { weekStartMs, slotMs: SLOT }), [0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('formats as 3h 12m / 45m / <1m / —', () => {
+    assert.equal(formatBusy(0), '—');
+    assert.equal(formatBusy(undefined), '—');
+    assert.equal(formatBusy(20000), '<1m');
+    assert.equal(formatBusy(45 * 60000), '45m');
+    assert.equal(formatBusy((3 * 60 + 12) * 60000), '3h 12m');
+    assert.equal(formatBusy((3 * 60 + 5) * 60000), '3h 05m');
+    // 59.6 分は 60 分に丸めてから時・分に分ける（60m にしない）
+    assert.equal(formatBusy(59.6 * 60000), '1h 00m');
+    assert.equal(formatBusy(30 * 3600000), '30h 00m');
+  });
+});
+
+describe('dailyApprovals / formatApprovals', () => {
+  it('sums the human approvals (8th column) per local day', () => {
+    const weekStartMs = local(2026, 11, 9);
+    const sessions = [
+      {
+        sessionId: 'a',
+        slots: [
+          [slotAt(local(2026, 11, 9, 10, 0)), 1, 1, 0, 0, 60000, 0, 2],
+          [slotAt(local(2026, 11, 12, 10, 0)), 1, 1, 0, 0, 60000, 0, 0],
+        ],
+      },
+      { sessionId: 'b', slots: [[slotAt(local(2026, 11, 9, 23, 50)), 0, 0, 0, 0, 1000, 0, 1]] },
+      { sessionId: 'c', slots: [[slotAt(local(2026, 11, 11, 9, 0)), 1, 1, 0, 0, 0]] }, // 古い形
+    ];
+    assert.deepEqual(dailyApprovals(sessions, { weekStartMs, slotMs: SLOT }), [3, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('hides zero and labels positive counts', () => {
+    assert.equal(formatApprovals(0), '');
+    assert.equal(formatApprovals(undefined), '');
+    assert.equal(formatApprovals(2), '許可 2');
   });
 });
