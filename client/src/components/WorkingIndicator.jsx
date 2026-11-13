@@ -5,7 +5,8 @@ import './WorkingIndicator.css';
 
 // 本家 TUI の「✻ Thinking…」に相当する、入力欄の直上の 1 行。
 // 記号の明滅と経過時間で「今まさに推論・実行している」ことを示す。
-// ターンが終わっても裏でサブエージェント・シェルが動いている間（status: 'shell'）は「裏で実行中…」を出す
+// ターンが終わっても裏でサブエージェント・シェルが動いている間（status: 'shell'）は「裏で実行中…」を出す。
+// 行は常に置き、高さは CSS で固定する（記号の字形で行の高さが揺れないようにも）
 const GLYPHS = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
 
 export default function WorkingIndicator({ status, waitingFor, messages, pendingSince, runningAgents, runningShells }) {
@@ -28,7 +29,8 @@ export default function WorkingIndicator({ status, waitingFor, messages, pending
     return () => clearInterval(timer);
   }, [ticking]);
 
-  if (!state) return null;
+  // 出ていないときも同じ高さの空の行を置く（出し入れでチャット欄の高さが変わり、本文が上下に動くのを防ぐ）
+  if (!state) return <div className="working-indicator working-idle" role="status" aria-live="polite" />;
   const glyph = state.animated ? GLYPHS[Math.floor(now / 150) % GLYPHS.length] : GLYPHS[0];
   const toolName = state.tool?.name;
   const isBackground = state.mode === 'background';

@@ -1,6 +1,9 @@
 // 入力欄の直上に出す「推論中」インジケータの状態を決める純粋関数。
 // status はサーバーが 4 秒間隔で読み直すので、送信直後はまだ busy になっていないことがある。
 // その間は送信時刻（pendingSince）から PENDING_GRACE_MS だけ先回りして出す。
+// 先回りは busy を観測した時点で App が消す（clearObservedPending）。最初の応答が届いた時点で
+// 消すと、busy を読むまでの最大 4 秒間インジケータが消えて「出る → 消える → 出る」と点滅するため、
+// 応答の到着では消さない（busy を一度も観測しないまま終わった速いターンは猶予が切れるまで残る）
 
 export const PENDING_GRACE_MS = 8000;
 
@@ -40,37 +43,22 @@ export function turnStartOf(messages) {
   return null;
 }
 
-function hasAssistantAfter(messages, since) {
-  if (!Array.isArray(messages)) return false;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m?.role !== 'assistant') continue;
-    const t = timeOf(m);
-    return t != null && t > since;
-  }
-  return false;
-}
-
 // 表示するなら {mode, animated, tool, since, background}、出さないなら null。
 // animated: 記号を動かすか。裏で動いているのがシェルだけ（dev サーバーの常駐など）なら止める
 // （何が動いているかは TaskStrip のチップで分かるので、ずっと明滅させて画面をうるさくしない）。
 // mode: 'turn'＝ターン中（busy か送信直後）、'background'＝ターンは終わったが裏でタスクが動いている
 // （Claude Code はこの間 status を 'shell' にする。経過時間はターンの開始と合わないので since は null）。
-// shell の間に送信したときは、busy になるまでの先回り（turn）を優先する。
+// shell の間に送信したときは、busy になるまで（または猶予の間）先回り（turn）を優先する。
 // background は {agents, shells}＝実行中のサブエージェント・シェルの件数（TaskStrip と同じ一覧から数える）
 export function workingStateOf({ status, waitingFor, messages, pendingSince, background, now = Date.now() }) {
   if (waitingFor || status === 'waiting') return null;
   const busy = status === 'busy';
-  const pending =
-    !busy &&
-    Number.isFinite(pendingSince) &&
-    now - pendingSince < PENDING_GRACE_MS &&
-    !hasAssistantAfter(messages, pendingSince);
+  const pending = !busy && Number.isFinite(pendingSince) && now - pendingSince < PENDING_GRACE_MS;
   if (busy || pending) {
     return {
       mode: 'turn',
       animated: true,
-      tool: busy ? runningToolOf(messages) : null,
+      tool: runningToolOf(messages),
       since: turnStartOf(messages) ?? (pending ? pendingSince : null),
       background: null,
     };
@@ -103,4 +91,20 @@ export function formatElapsed(ms) {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ${s % 60}s`;
   return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+// 先回り表示（pendingTurns: {[bridgeSessionId]: 送信時刻}）のうち、busy か待ちになったセッションの分を消す。
+// 以後は status が表示を決める（busy → idle に戻ったあとに猶予が残っていて再び出るのを防ぐ）。
+// 変化が無ければ同じ参照を返す（state に入れても再描画させない）
+export function clearObservedPending(pendingTurns, sessions) {
+  if (!pendingTurns || !Array.isArray(sessions)) return pendingTurns;
+  let next = pendingTurns;
+  for (const s of sessions) {
+    if (!s || !(s.id in pendingTurns)) continue;
+    if (s.status === 'busy' || s.status === 'waiting' || s.waitingFor) {
+      if (next === pendingTurns) next = { ...pendingTurns };
+      delete next[s.id];
+    }
+  }
+  return next;
 }

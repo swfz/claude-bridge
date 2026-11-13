@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   backgroundLabel,
+  clearObservedPending,
   runningToolOf,
   turnStartOf,
   workingStateOf,
@@ -90,9 +91,11 @@ describe('workingStateOf', () => {
       null,
     );
   });
-  it('送信後に応答が来ていれば猶予中でも出さない', () => {
-    const replied = [...msgs, { role: 'assistant', timestamp: iso(T0 + 500) }];
-    assert.equal(workingStateOf({ status: 'idle', messages: replied, pendingSince: T0, now: T0 + 1000 }), null);
+  it('送信後に応答が届いても busy を観測するまでは出し続ける（消えて出直す点滅を防ぐ）', () => {
+    const replied = [...msgs, { role: 'assistant', timestamp: iso(T0 + 500), toolUses: [{ id: 't1', name: 'Bash' }] }];
+    const state = workingStateOf({ status: 'idle', messages: replied, pendingSince: T0, now: T0 + 1000 });
+    assert.equal(state?.mode, 'turn');
+    assert.equal(state?.tool?.name, 'Bash');
   });
   it('実行中ツールを返す', () => {
     const m = [...msgs, { role: 'assistant', toolUses: [{ id: 'x', name: 'Bash' }] }];
@@ -116,13 +119,37 @@ describe('workingStateOf（裏で実行中）', () => {
   it('件数が分からなくても shell なら出す', () => {
     assert.deepEqual(workingStateOf({ status: 'shell', messages: msgs })?.background, { agents: 0, shells: 0 });
   });
-  it('shell の間に送信したら先回りの turn を優先し、応答が来たら background に戻る', () => {
+  it('shell の間に送信したら猶予の間は先回りの turn を優先し、切れたら background に戻る', () => {
     assert.equal(workingStateOf({ status: 'shell', messages: msgs, pendingSince: T0, now: T0 + 1000 })?.mode, 'turn');
-    const replied = [...msgs, { role: 'assistant', timestamp: iso(T0 + 500) }];
     assert.equal(
-      workingStateOf({ status: 'shell', messages: replied, pendingSince: T0, now: T0 + 1000 })?.mode,
+      workingStateOf({ status: 'shell', messages: msgs, pendingSince: T0, now: T0 + PENDING_GRACE_MS })?.mode,
       'background',
     );
+  });
+});
+
+describe('clearObservedPending', () => {
+  it('busy・待ちになったセッションの先回りだけ消す', () => {
+    const prev = { a: 1, b: 2, c: 3, d: 4 };
+    const sessions = [
+      { id: 'a', status: 'busy' },
+      { id: 'b', status: 'idle' },
+      { id: 'c', status: 'waiting' },
+      { id: 'd', status: 'idle', waitingFor: 'permission prompt' },
+    ];
+    assert.deepEqual(clearObservedPending(prev, sessions), { b: 2 });
+    assert.deepEqual(prev, { a: 1, b: 2, c: 3, d: 4 });
+  });
+  it('消すものが無ければ同じ参照を返す', () => {
+    const prev = { a: 1 };
+    assert.equal(
+      clearObservedPending(prev, [
+        { id: 'a', status: 'idle' },
+        { id: 'x', status: 'busy' },
+      ]),
+      prev,
+    );
+    assert.equal(clearObservedPending(prev, null), prev);
   });
 });
 

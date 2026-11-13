@@ -11,6 +11,7 @@ import InputBar from './components/InputBar.jsx';
 import ChoicePrompt from './components/ChoicePrompt.jsx';
 import TaskStrip from './components/TaskStrip.jsx';
 import WorkingIndicator from './components/WorkingIndicator.jsx';
+import { clearObservedPending } from './utils/working.js';
 import SubagentDrawer from './components/SubagentDrawer.jsx';
 import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
 import DiffDrawer from './components/DiffDrawer.jsx';
@@ -260,6 +261,8 @@ export default function App() {
     return on('session_list', (msg) => {
       setSessions(msg.sessions);
       sessionsRef.current = msg.sessions;
+      // busy（か待ち）を観測したら先回り表示を消し、以後は status に任せる
+      setPendingTurns((prev) => clearObservedPending(prev, msg.sessions));
       // busy -> 非busy に遷移した alive セッションを「未確認」に追加する（見ている最中のアクティブタブは除く）。
       // setAttentionIds の更新関数は遅延実行されるため、prevStatusRef はローカルに退避してから差し替える
       const prevStatuses = prevStatusRef.current;
@@ -1250,8 +1253,11 @@ export default function App() {
         return false;
       }
       addUserMessage(text);
-      // スラッシュコマンドは応答が来ないもの（/clear・モーダル型）があるので先回り表示しない
-      if (!text.trimStart().startsWith('/')) {
+      // スラッシュコマンドは応答が来ないもの（/clear・モーダル型）があるので先回り表示しない。
+      // 既に busy なら status で出ているので要らない（busy の観測で消す仕組みなので、残すと
+      // ターンが終わったあとも猶予の間だけ出続ける）
+      const currentStatus = sessionsRef.current.find((s) => s.id === activeSessionId)?.status;
+      if (!text.trimStart().startsWith('/') && currentStatus !== 'busy') {
         const sentAt = Date.now();
         setPendingTurns((prev) => ({ ...prev, [activeSessionId]: sentAt }));
       }
