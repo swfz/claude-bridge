@@ -1739,7 +1739,10 @@ export default function App() {
   const sessionUiVisible = !showHome && !!activeSessionId;
   const chatPanelsVisible = sessionUiVisible && effectiveViewMode === 'chat';
   // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
-  const activeChoice = sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
+  // サーバーは待っていないときも {prompt: null, waitingFor: null} を送ってくるので、
+  // カードを出す（prompt があるか、待っているのに読めなかった）ときだけ activeChoice にする
+  const rawChoice = sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
+  const activeChoice = rawChoice?.prompt || rawChoice?.waitingFor ? rawChoice : null;
   // 推論中インジケータの「裏で実行中…」に出す件数（TaskStrip と同じ一覧から数える）
   const runningAgentCount = (subagentTasks[activeSessionId] || EMPTY_TASKS).filter(
     (t) => t.status === 'running',
