@@ -6,12 +6,10 @@ import {
   extractArtifactPublish,
   extractWebFetchResult,
   extractToolResultFlags,
-  isInjectedUserRecord,
   extractContextUsage,
   extractTextContent,
   extractToolUses,
-  injectedSenderOf,
-  extractHandbackReport,
+  humanMessageFields,
 } from './jsonl-utils.js';
 
 export class JsonlWatcher {
@@ -203,12 +201,7 @@ export class JsonlWatcher {
               type: 'chat_message',
               bridgeSessionId: state.bridgeSessionId,
               role: 'human',
-              // サブエージェントの報告は枠と注意書きを外した本文にする
-              content: extractHandbackReport(record) || text,
-              // タグ注入・isMeta（人が打っていない）ときだけ付ける。リンク一覧で「自分が渡した」と数えないため
-              ...(isInjectedUserRecord(record) ? { injected: true } : {}),
-              // 送り手（サブエージェントの報告・タスク通知など）。「You」と区別して見せるため。人の発言には付けない
-              ...(injectedSenderOf(record) ? { sender: injectedSenderOf(record) } : {}),
+              ...humanMessageFields(record, text),
               // JSONL の uuid を安定アンカー（コメント/レビューの位置）として伝播する
               uuid: record.uuid,
               timestamp: record.timestamp || '',

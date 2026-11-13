@@ -126,6 +126,46 @@ export function isInjectedUserRecord(record) {
   return text.startsWith('<') && !/^<(command-name|command-message|bash-input)>/.test(text);
 }
 
+// スラッシュコマンド（スキル呼び出し含む）の user レコード本文から `{name: '/ship', args}` を取り出す。
+// 本文は `<command-message>ship</command-message>\n<command-name>/ship</command-name>\n<command-args>…</command-args>`
+// の形（順序は版で違う）。チャットでタグのまま見せないため。該当しなければ null
+export function parseSlashCommand(text) {
+  if (typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (!/^<command-(name|message)>/.test(trimmed)) return null;
+  const name = trimmed.match(/<command-name>([\s\S]*?)<\/command-name>/)?.[1]?.trim();
+  if (!name) return null;
+  const args = trimmed.match(/<command-args>([\s\S]*?)<\/command-args>/)?.[1]?.trim() || '';
+  return { name: name.startsWith('/') ? name : `/${name}`, args };
+}
+
+// スキル呼び出しで Claude Code が差し込む SKILL.md の展開（isMeta、本文が `Base directory for this skill: <dir>`）の
+// スキル名。人が打った指示ではないので「You」と分けて畳んで見せる。該当しなければ null
+const SKILL_BODY_PREFIX = 'Base directory for this skill:';
+export function skillNameOf(record) {
+  if (!record || record.type !== 'user' || !record.isMeta) return null;
+  const text = extractTextContent(record.message, 0).trimStart();
+  if (!text.startsWith(SKILL_BODY_PREFIX)) return null;
+  const dir = text.slice(SKILL_BODY_PREFIX.length).split('\n')[0].trim().replace(/\/+$/, '');
+  return dir.split('/').pop() || 'skill';
+}
+
+// user レコード（本文あり）をチャットの human メッセージの属性にする。履歴読み込みと JSONL 監視で共用
+export function humanMessageFields(record, text) {
+  const command = parseSlashCommand(text);
+  const sender = injectedSenderOf(record);
+  return {
+    // サブエージェントの報告は枠と注意書きを外した本文、スラッシュコマンドはタグを外した `/ship args`
+    content:
+      extractHandbackReport(record) || (command ? `${command.name}${command.args ? ` ${command.args}` : ''}` : text),
+    ...(command ? { command } : {}),
+    // タグ注入・isMeta（人が打っていない）ときだけ付ける。リンク一覧で「自分が渡した」と数えないため
+    ...(isInjectedUserRecord(record) ? { injected: true } : {}),
+    // 送り手（サブエージェントの報告・タスク通知・スキルの展開など）。「You」と区別して見せるため。人の発言には付けない
+    ...(sender ? { sender } : {}),
+  };
+}
+
 // 人が打っていない user レコードの送り手。チャットで「You」と区別して見せるため。
 // Claude Code は注入元を `origin.kind` に書く（human / peer / task-notification / coordinator 等）。
 // サブエージェントの完了報告は `kind: 'peer'` + `handback: true`（`name` はエージェント種別。無いこともある）、
@@ -137,6 +177,8 @@ export function injectedSenderOf(record) {
   if (origin?.kind === 'peer') return { kind: origin.handback ? 'subagent' : 'peer', ...(name ? { name } : {}) };
   if (origin?.kind === 'human' || !isInjectedUserRecord(record)) return null;
   if (origin?.kind === 'task-notification') return { kind: 'task-notification' };
+  const skill = skillNameOf(record);
+  if (skill) return { kind: 'skill', name: skill };
   return { kind: 'system' };
 }
 

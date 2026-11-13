@@ -343,6 +343,25 @@
   -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
 }
 
+/* スキルの展開（SKILL.md）は人の指示ではないので、畳んでいる間は本文を出さず見出しとボタンだけにする */
+.chat-message-body.skill-collapsed {
+  display: none;
+}
+
+/* スラッシュコマンド（スキル呼び出し）。タグを外したコマンド名を等幅で出す */
+.slash-command-line {
+  margin: 0;
+}
+
+.slash-command {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-weight: 600;
+}
+
+.slash-command-args {
+  margin-left: 6px;
+}
+
 /* 折りたたんだ本文の続き。フェードした本文の直下に枠付きの小さなボタンで置き、
    どこを押せば読めるかが一目で分かるようにする */
 .expand-bar {
