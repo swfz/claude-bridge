@@ -369,7 +369,9 @@ export const ChatMessage = memo(function ChatMessage({
   onTogglePin,
   toolFlags,
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // 長い本文も最初から全文で出す（畳むのはホバーの「折りたたむ」か ← で手動）。
+  // スキルの展開（SKILL.md の本文）だけは人が読むものではないので既定で畳む
+  const [expanded, setExpanded] = useState(() => message.sender?.kind !== 'skill');
   // 範囲選択時に出すアクションメニュー（レビューに追加 / コメントに残す / スレッド）
   const [selMenu, setSelMenu] = useState(null);
   // 選択後に本文（指摘/コメント）を書くノート入力ポップオーバー { mode, quote, top, left, text }
@@ -486,7 +488,7 @@ export const ChatMessage = memo(function ChatMessage({
     (c) => c.anchor && c.anchor.messageUuid && c.anchor.messageUuid === message.uuid,
   );
 
-  // スキルの展開（SKILL.md の本文）は人が打った指示ではないので、長さに関わらず既定で畳む
+  // スキルの展開（SKILL.md の本文）は長さに関わらず畳める対象にする（既定で畳むのは useState の初期値）
   const isSkillBody = message.sender?.kind === 'skill';
   const isLong = isSkillBody || (message.content || '').length > COLLAPSE_THRESHOLD;
   // ツールの失敗・新規作成の印（memo を崩さないよう文字列で受け取って、ここで引ける形に戻す）
