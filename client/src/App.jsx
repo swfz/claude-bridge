@@ -127,6 +127,8 @@ export default function App() {
   const [restorable, setRestorable] = useState(null);
   // 接続先サーバーの起動 ID。再接続時に変わっていたら（＝ブリッジが再起動した）手元の会話を捨てて取り直す
   const bootIdRef = useRef(null);
+  // JSONL から履歴を取りに行ったタブ（ブリッジ ID）。サーバー再起動で取り直す
+  const historyRequestedRef = useRef(new Set());
   // セッションごとの選択肢プロンプト（id -> {prompt, waitingFor}）。
   // JSONL には回答後にしか出ないので、サーバーが画面から読んだものをそのまま持つ。
   const [choicePrompts, setChoicePrompts] = useState({});
@@ -351,7 +353,10 @@ export default function App() {
     return on('server_hello', (msg) => {
       const prev = bootIdRef.current;
       bootIdRef.current = msg.bootId;
-      if (prev && prev !== msg.bootId) setMessagesBySession({});
+      if (prev && prev !== msg.bootId) {
+        historyRequestedRef.current.clear();
+        setMessagesBySession({});
+      }
     });
   }, [on]);
 
@@ -905,7 +910,14 @@ export default function App() {
 
       // active かどうかに関係なく bridgeSessionId のメッセージ列へ格納する。
       // 表示は messagesBySession[activeSessionId] の派生なので、active なら自動反映。
-      if (bridgeId) updateSessionMessages(bridgeId, loaded);
+      // 読み込み中に JSONL 監視で届いた新着が履歴に含まれていなければ後ろに残す
+      if (bridgeId) {
+        updateSessionMessages(bridgeId, (prev) => {
+          const loadedUuids = new Set(loaded.map((m) => m.uuid).filter(Boolean));
+          const pending = prev.filter((m) => !m.isHistory && m.uuid && !loadedUuids.has(m.uuid));
+          return [...loaded, ...pending];
+        });
+      }
     });
   }, [on, updateSessionMessages]);
 
@@ -934,10 +946,12 @@ export default function App() {
   // （リロード後など messagesBySession に無い場合の復旧経路）。
   useEffect(() => {
     if (!activeSessionId) return;
-    const cur = messagesBySession[activeSessionId];
-    if (cur && cur.length > 0) return;
+    // 空かどうかでは判断しない: 開く前のタブにも JSONL 監視の新着が届くので、
+    // 「新着だけ入っている」状態で履歴の読み込みを飛ばしてしまう
+    if (historyRequestedRef.current.has(activeSessionId) && messagesBySession[activeSessionId]) return;
     const session = sessions.find((s) => s.id === activeSessionId);
     if (session?.claudeSessionId) {
+      historyRequestedRef.current.add(activeSessionId);
       send({
         type: 'load_session_history',
         sessionId: activeSessionId,
