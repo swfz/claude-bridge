@@ -386,6 +386,19 @@
   background: var(--bg-surface);
 }
 
+/* 畳んだエージェント間のやり取りの要約（teammate-message の summary）。1 行に収める */
+.expand-bar {
+  max-width: 100%;
+}
+
+.expand-bar-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
 .expand-bar-count {
   color: var(--text-secondary);
   font-size: 11px;

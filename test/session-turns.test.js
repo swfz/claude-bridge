@@ -95,6 +95,15 @@ describe('turnPrompt', () => {
     );
   });
 
+  it('ignores messages from subagents and teammates', () => {
+    assert.equal(
+      turnPrompt(
+        prompt('Another Claude session sent a message:\n<teammate-message teammate_id="a">\n完了\n</teammate-message>'),
+      ),
+      '',
+    );
+  });
+
   it('ignores meta, tool results, interrupts and injected tags', () => {
     assert.equal(turnPrompt({ ...prompt('x'), isMeta: true }), '');
     assert.equal(turnPrompt(result('t1')), '');

@@ -55,13 +55,14 @@ describe('summarizeHead', () => {
     assert.equal(head.firstUserMessage, '本当の依頼');
   });
 
-  it('strips injected tags and collapses whitespace', () => {
+  it('skips messages from subagents and teammates, and collapses whitespace', () => {
     const lines = jsonl([
       userRecord(
         'Another Claude session sent a message:\n<teammate-message teammate_id="abc">\nレビューお願い\n</teammate-message>',
       ),
+      userRecord('本当の\n  依頼'),
     ]).split('\n');
-    assert.equal(summarizeHead(lines).firstUserMessage, 'Another Claude session sent a message: レビューお願い');
+    assert.equal(summarizeHead(lines).firstUserMessage, '本当の 依頼');
   });
 
   it('picks up the cwd written in the JSONL', () => {

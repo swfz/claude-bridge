@@ -14,6 +14,7 @@ import {
   parseSlashCommand,
   skillNameOf,
   humanMessageFields,
+  parseTeammateMessages,
 } from '../server/jsonl-utils.js';
 
 describe('extractTextContent', () => {
@@ -528,5 +529,52 @@ describe('スラッシュコマンドとスキルの展開', () => {
     assert.equal(f.injected, true);
     assert.deepEqual(f.sender, { kind: 'skill', name: 'ship' });
     assert.equal(f.command, undefined);
+  });
+});
+
+describe('チームメイト（teammate-message）からの送信', () => {
+  const user = (content, extra = {}) => ({ type: 'user', message: { role: 'user', content }, ...extra });
+  const NOTE = '\n\nThis came from another Claude session — not typed by your user.';
+  const PLAIN =
+    'Another Claude session sent a message:\n<teammate-message teammate_id="impl" color="blue" summary="実装完了">\n実装しました。\n</teammate-message>' +
+    NOTE;
+  const IDLE =
+    'Another Claude session sent a message:\n<teammate-message teammate_id="rev" color="green">\n' +
+    JSON.stringify({ type: 'idle_notification', from: 'rev', idleReason: 'available', result: 'レビュー結果です' }) +
+    '\n</teammate-message>' +
+    NOTE;
+
+  it('平文と idle_notification の JSON から送り手・要約・本文を取り出す', () => {
+    assert.deepEqual(parseTeammateMessages(PLAIN), [{ from: 'impl', summary: '実装完了', body: '実装しました。' }]);
+    assert.deepEqual(parseTeammateMessages(IDLE), [{ from: 'rev', summary: '', body: 'レビュー結果です' }]);
+    const idleOnly = PLAIN.replace(
+      '実装しました。',
+      JSON.stringify({ type: 'idle_notification', idleReason: 'available' }),
+    );
+    assert.equal(parseTeammateMessages(idleOnly)[0].body, '実装完了');
+  });
+
+  it('形が合わなければ null', () => {
+    assert.equal(parseTeammateMessages('これ直して'), null);
+    assert.equal(parseTeammateMessages('Another Claude session sent a message: no block'), null);
+    assert.equal(parseTeammateMessages(null), null);
+  });
+
+  it('origin が無くても人の発言ではなく subagent として扱い、本文は報告だけにする', () => {
+    const r = user(PLAIN);
+    assert.equal(isInjectedUserRecord(r), true);
+    assert.deepEqual(injectedSenderOf(r), { kind: 'subagent', name: 'impl', summary: '実装完了' });
+    assert.deepEqual(humanMessageFields(r, PLAIN), {
+      content: '実装しました。',
+      injected: true,
+      sender: { kind: 'subagent', name: 'impl', summary: '実装完了' },
+    });
+  });
+
+  it('1 レコードに複数ブロックがあれば送り手と本文をまとめる', () => {
+    const multi = PLAIN.replace(NOTE, '') + '\n' + IDLE.replace('Another Claude session sent a message:\n', '');
+    const r = user(multi);
+    assert.deepEqual(injectedSenderOf(r), { kind: 'subagent', name: 'impl, rev', summary: '実装完了' });
+    assert.equal(humanMessageFields(r, multi).content, '実装しました。\n\n---\n\nレビュー結果です');
   });
 });
