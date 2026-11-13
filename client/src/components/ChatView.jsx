@@ -1,4 +1,15 @@
-import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
@@ -15,12 +26,14 @@ import CodeBlock from './CodeBlock.jsx';
 import ArtifactStrip from './ArtifactStrip.jsx';
 import { humanSenderLabel } from '../utils/messageSender.js';
 import { pinnedUuidSet } from '../utils/pins.js';
+import { dragTo } from '../utils/dragPosition.js';
 import {
   TbChecklist,
   TbChevronDown,
   TbChevronRight,
   TbFile,
   TbFilePlus,
+  TbGripHorizontal,
   TbLink,
   TbMessage,
   TbPencil,
@@ -378,6 +391,7 @@ export const ChatMessage = memo(function ChatMessage({
   const [selMenu, setSelMenu] = useState(null);
   // 選択後に本文（指摘/コメント）を書くノート入力ポップオーバー { mode, quote, top, left, text }
   const [noteDraft, setNoteDraft] = useState(null);
+  const noteRef = useRef(null);
   // 💬 マーカーのインラインコメント一覧の開閉
   const [showInlineComments, setShowInlineComments] = useState(false);
   // 行ピックの 2 段目（#N.M）で出す、本文左のソース行番号バッジ [{line, top}]
@@ -421,6 +435,17 @@ export const ChatMessage = memo(function ChatMessage({
     el.scrollIntoView({ block: 'nearest' });
     return () => el.classList.remove('msg-line-target');
   }, [lineMode, pickLine, message.content]);
+
+  // ノート入力欄は選択箇所の上に出すので、上端近くを選ぶと見出し（掴む所）が画面外に出る。開いた直後に画面内へ寄せる
+  const noteOpen = noteDraft != null;
+  useLayoutEffect(() => {
+    const el = noteRef.current;
+    if (!noteOpen || !el) return;
+    const r = el.getBoundingClientRect();
+    const { x, y } = dragTo(r, 0, 0, { width: window.innerWidth, height: window.innerHeight });
+    if (x === r.left && y === r.top) return;
+    setNoteDraft((d) => (d ? { ...d, left: d.left + (x - r.left), top: d.top + (y - r.top) } : d));
+  }, [noteOpen]);
 
   // メニュー表示中は外側クリック・スクロールで閉じる
   useEffect(() => {
@@ -528,6 +553,36 @@ export const ChatMessage = memo(function ChatMessage({
     setNoteDraft({ mode, quote: selMenu.text, top: selMenu.top, left: selMenu.left, text: '' });
     setSelMenu(null);
     window.getSelection()?.removeAllRanges();
+  };
+
+  // ノート入力欄は見出しを掴んで動かせる（選択箇所の真上に出ると本文が隠れるため）。
+  // 位置は noteDraft の top/left（transform で中央上に寄せた基準点）を、箱の左上の移動量から計算し直す
+  const handleNoteDragStart = (e) => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    const el = noteRef.current;
+    if (!el) return;
+    e.preventDefault();
+    const start = el.getBoundingClientRect();
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const handle = e.currentTarget;
+    handle.setPointerCapture?.(e.pointerId);
+    const onMove = (ev) => {
+      const { x, y } = dragTo(start, ev.clientX - sx, ev.clientY - sy, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+      // translate(-50%, calc(-100% - 8px)) の逆算で基準点に戻す
+      setNoteDraft((d) => (d ? { ...d, left: x + start.width / 2, top: y + start.height + 8 } : d));
+    };
+    const onUp = () => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
   };
 
   const saveNote = () => {
@@ -698,47 +753,52 @@ export const ChatMessage = memo(function ChatMessage({
         </div>
       )}
 
-      {noteDraft && (
-        <div
-          className="selection-note"
-          style={{ top: noteDraft.top, left: noteDraft.left }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <div className="selection-note-head">
-            {noteDraft.mode === 'review' ? 'レビュー（送る）' : 'コメント（残す）'}
-          </div>
-          <div className="selection-note-quote">
-            “{noteDraft.quote.slice(0, 80)}
-            {noteDraft.quote.length > 80 ? '…' : ''}”
-          </div>
-          <textarea
-            className="selection-note-input"
-            autoFocus
-            value={noteDraft.text}
-            onChange={(e) => setNoteDraft((d) => ({ ...d, text: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                saveNote();
-              } else if (e.key === 'Escape') {
-                setNoteDraft(null);
+      {/* 動かすと後続のメッセージの下に潜るので body に出す（.chat-message の重なり順に縛られないように） */}
+      {noteDraft &&
+        createPortal(
+          <div
+            ref={noteRef}
+            className="selection-note"
+            style={{ top: noteDraft.top, left: noteDraft.left }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="selection-note-head" onPointerDown={handleNoteDragStart} title="ドラッグで移動">
+              <TbGripHorizontal className="selection-note-grip" aria-hidden="true" />
+              {noteDraft.mode === 'review' ? 'レビュー（送る）' : 'コメント（残す）'}
+            </div>
+            <div className="selection-note-quote">
+              “{noteDraft.quote.slice(0, 80)}
+              {noteDraft.quote.length > 80 ? '…' : ''}”
+            </div>
+            <textarea
+              className="selection-note-input"
+              autoFocus
+              value={noteDraft.text}
+              onChange={(e) => setNoteDraft((d) => ({ ...d, text: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  saveNote();
+                } else if (e.key === 'Escape') {
+                  setNoteDraft(null);
+                }
+              }}
+              placeholder={
+                noteDraft.mode === 'review'
+                  ? 'この箇所への指摘を書く（Cmd+Enterで追加）...'
+                  : 'この箇所へのコメントを書く（送信されません / Cmd+Enter）...'
               }
-            }}
-            placeholder={
-              noteDraft.mode === 'review'
-                ? 'この箇所への指摘を書く（Cmd+Enterで追加）...'
-                : 'この箇所へのコメントを書く（送信されません / Cmd+Enter）...'
-            }
-            rows={3}
-          />
-          <div className="selection-note-actions">
-            <button onClick={() => setNoteDraft(null)}>キャンセル</button>
-            <button className="primary" onClick={saveNote} disabled={!noteDraft.text.trim()}>
-              {noteDraft.mode === 'review' ? 'レビューに追加' : 'コメントを残す'}
-            </button>
-          </div>
-        </div>
-      )}
+              rows={3}
+            />
+            <div className="selection-note-actions">
+              <button onClick={() => setNoteDraft(null)}>キャンセル</button>
+              <button className="primary" onClick={saveNote} disabled={!noteDraft.text.trim()}>
+                {noteDraft.mode === 'review' ? 'レビューに追加' : 'コメントを残す'}
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {shouldCollapse && (
         // 折りたたんだ本文の続き。本文の下に埋もれないよう、枠付きの小さなボタンで置く
