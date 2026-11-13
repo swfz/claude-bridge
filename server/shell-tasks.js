@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'fs';
+import { lstatSync, readdirSync, statSync } from 'fs';
 import { open } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -261,10 +261,14 @@ export async function listShellTasks({
 
     let st;
     try {
-      st = statSync(join(dir, file));
+      st = lstatSync(join(dir, file));
     } catch {
       continue;
     }
+    // バックグラウンド起動のサブエージェントは tasks/<agentId>.output に自分の JSONL への
+    // シンボリックリンクを置く。Bash の出力ではなく exit フッターも付かないので、拾うと
+    // 永久に running のチップになる（サブエージェントは subagent-tasks.js 側で一覧に出る）
+    if (!st.isFile()) continue;
 
     const { status, exitCode, preview } = await readTailInfo(join(dir, file), st.size);
     // birthtime は取れないファイルシステムがあるので、その場合は mtime で代用する
@@ -340,10 +344,12 @@ export async function readShellTaskOutput({
   const filePath = join(shellTasksDir({ projectDir, claudeSessionId, rootDir }), `${taskId}.output`);
   let st;
   try {
-    st = statSync(filePath);
+    st = lstatSync(filePath);
   } catch {
     return null;
   }
+  // リンクは辿らない（サブエージェントの JSONL へのリンクを生のまま見せないため。一覧と同じ判定）
+  if (!st.isFile()) return null;
 
   let raw;
   let truncated;
