@@ -108,3 +108,10 @@ export function clearObservedPending(pendingTurns, sessions) {
   }
   return next;
 }
+
+// 選択肢カードとして扱う状態。待ちが終わるとサーバーは {prompt: null, waitingFor: null} を送るので、
+// そのときは null（カードを出さず、推論中インジケータを隠さない）
+export function activeChoiceOf(choice) {
+  if (!choice || (!choice.prompt && !choice.waitingFor)) return null;
+  return choice;
+}
