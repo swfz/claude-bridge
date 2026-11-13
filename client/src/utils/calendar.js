@@ -1,5 +1,6 @@
 // 週間カレンダー（ホームの活動パネル）の組み立て。表示に依存しない計算はここに寄せる。
-// サーバーから来るのはセッションごとの 10 分枠の集計（[枠番号, 発言, 応答, 調査, 編集]）で、
+// サーバーから来るのはセッションごとの 10 分枠の集計
+// （[枠番号, 発言, 応答, 調査, 編集, AI 稼働 ms, 自動ツール ms, 人の許可回数, 未検証ツール ms]）で、
 // それを「帯（連続して活動していた区間）」に束ね、日ごとに切り、重なりをレーンに割る。
 
 import { parseCwd } from './cwdLabel.js';
@@ -38,8 +39,9 @@ export function shiftWeek(weekStartMs, weeks) {
 
 // セッションの枠を「空きが MAX_GAP_SLOTS 以下なら同じ帯」で束ねる。
 // 各帯は [startMs, endMs) と合計値、帯の中の枠（発言量の濃淡用）を持つ。
+// 発言・応答の無い枠（長いツール実行の途中に按分された AI 稼働だけの枠）は帯に含めない
 export function buildRuns(slots, slotMs, maxGapSlots = MAX_GAP_SLOTS) {
-  const sorted = [...(slots || [])].sort((a, b) => a[0] - b[0]);
+  const sorted = [...(slots || [])].filter((slot) => slot[1] + slot[2] > 0).sort((a, b) => a[0] - b[0]);
   const runs = [];
   let current = null;
   for (const [index, prompts, replies, research, edit] of sorted) {
@@ -208,6 +210,68 @@ export function formatHours(ms) {
   if (hours === 0) return '0 時間';
   return hours < 10 ? `${hours.toFixed(1)} 時間` : `${Math.round(hours)} 時間`;
 }
+
+// 表示中の週の日ごとの AI 稼働時間（ms、週の 7 日分）。日の区切りはローカル時刻。
+// 帯と同じ母集団（渡された sessions。共有モードで外したセッションは含まない）で、
+// 並行セッションも足し合わせる（1 日 24 時間を超え得る）
+export function dailyBusyMs(sessions, { weekStartMs, slotMs } = {}) {
+  return dailyColumn(sessions, { weekStartMs, slotMs }, 5);
+}
+
+// 表示中の週の日ごとの「人がツールの実行を許可した回数」。母集団と日の区切りは dailyBusyMs と同じ
+export function dailyApprovals(sessions, { weekStartMs, slotMs } = {}) {
+  return dailyColumn(sessions, { weekStartMs, slotMs }, 7);
+}
+
+function dailyColumn(sessions, { weekStartMs, slotMs }, column) {
+  const starts = weekDayStarts(weekStartMs);
+  const totals = starts.slice(0, -1).map(() => 0);
+  for (const session of sessions || []) {
+    for (const slot of session.slots || []) {
+      const value = slot[column] || 0;
+      if (value <= 0) continue;
+      const ms = slot[0] * slotMs;
+      for (let d = 0; d < totals.length; d++) {
+        if (ms >= starts[d] && ms < starts[d + 1]) {
+          totals[d] += value;
+          break;
+        }
+      }
+    }
+  }
+  return totals;
+}
+
+// 人の許可回数の表記。既定値（0）は出さない
+export const formatApprovals = (count) => (count > 0 ? `許可 ${count}` : '');
+
+export const APPROVALS_TITLE =
+  '人が許可したツールの回数（Claude Code v2.1.293・2026-10-08 以降の記録のみ）。' +
+  'この回数の分の実行時間は、終了したセッションの実測（cost-state）から配分して AI 稼働に入れている' +
+  '（自動で数えたツールの推定が実測より大きいと配分が 0 になることがある）';
+
+// AI 稼働時間の短い表記。分に丸めてから時・分に分ける（60m を出さない）。
+// 0 は「—」、0 より大きく 1 分未満は「<1m」
+export function formatBusy(ms) {
+  if (!ms || ms <= 0) return '—';
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return '<1m';
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return `${rest}m`;
+  return `${hours}h ${String(rest).padStart(2, '0')}m`;
+}
+
+export const BUSY_TITLE =
+  'AI 稼働時間: 推論（API 応答）＋ツール実行の合計。Datadog の AI 稼働時間と同じく呼び出しごとに合算' +
+  '（並列のツール・並行セッション・サブエージェント込みなので 1 日 24 時間を超え得る。claude -p も含む）。' +
+  'ローカル JSONL のタイムスタンプからの推定。推論は 1 回 10 分まで。ツールは応答の生成が終わってから実行されたものは' +
+  '生成の終わりから、Edit などの順に実行されるものは直前の結果から数え、推論との重なりと順番待ちは除く。' +
+  '自動で実行されたツールのタイムスタンプ差には auto モードの判定待ちや許可待ちが入るので、終了したセッションでは' +
+  '実測（cost-state）より大きければ実測に合わせて縮める（動作中のセッションは縮める前の値で、終わると少し下がる）。' +
+  '許可の記録が無い 10/8 より前のツールで実測の無いもの（強制終了など）は 1 回 10 分まで。' +
+  '人が許可したものは待ちと実行を分けられないので、実測から自動ツールで説明できない残りを配分する' +
+  '（残りが無ければ 0。動作中のセッションは 0）。人が拒否したものと AskUserQuestion の回答待ちは除く';
 
 // 発言量の濃淡（0〜3）。1 枠の発言は多くても数件なので固定のしきい値で足りる
 export function densityLevel(prompts) {

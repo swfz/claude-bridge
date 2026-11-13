@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  APPROVALS_TITLE,
+  BUSY_TITLE,
   COLOR_MODES,
   DAY_MS,
   PHASES,
   buildCalendarDays,
   buildLegend,
+  dailyApprovals,
+  dailyBusyMs,
   densityLevel,
   earliestOffsetMs,
+  formatApprovals,
+  formatBusy,
   formatDayHeader,
   formatHours,
   formatWeekRange,
@@ -69,6 +75,13 @@ export default function CalendarView({
   );
   const legend = useMemo(() => buildLegend(sessions, dirColorOf), [sessions, dirColorOf]);
   const totals = useMemo(() => phaseTotals(days, slotMs), [days, slotMs]);
+  const busyByDay = useMemo(() => dailyBusyMs(sessions, { weekStartMs, slotMs }), [sessions, weekStartMs, slotMs]);
+  const busyWeek = busyByDay.reduce((sum, ms) => sum + ms, 0);
+  const approvalsByDay = useMemo(
+    () => dailyApprovals(sessions, { weekStartMs, slotMs }),
+    [sessions, weekStartMs, slotMs],
+  );
+  const approvalsWeek = approvalsByDay.reduce((sum, n) => sum + n, 0);
 
   // 週を開いたら一番早い活動の少し上までスクロールする（更新では動かさない）
   useEffect(() => {
@@ -101,6 +114,15 @@ export default function CalendarView({
         </button>
         <span className="cal-range">{formatWeekRange(weekStartMs)}</span>
         <span className="cal-count">{loading && !current ? '集計中…' : `${sessions.length} セッション`}</span>
+        {/* 未取得の間も同じ幅・高さで場所を取っておく（取得後に周りを押し動かさない） */}
+        <span className="cal-busy-week" title={BUSY_TITLE}>
+          AI 稼働 {current ? formatBusy(busyWeek) : '—'}
+        </span>
+        {current && approvalsWeek > 0 && (
+          <span className="cal-approvals" title={APPROVALS_TITLE}>
+            · {formatApprovals(approvalsWeek)}
+          </span>
+        )}
         <div className="cal-color-modes">
           {COLOR_MODES.map((mode) => (
             <button
@@ -142,12 +164,23 @@ export default function CalendarView({
 
       <div className="cal-head">
         <span />
-        {days.map((day) => (
+        {days.map((day, d) => (
           <span
             key={day.dayStartMs}
             className={`cal-day-label ${now >= day.dayStartMs && now < day.dayEndMs ? 'today' : ''}`}
           >
-            {formatDayHeader(day.dayStartMs)}
+            <span className="cal-day-name">{formatDayHeader(day.dayStartMs)}</span>
+            {/* AI 稼働時間。値が無い（未取得・0）ときも同じ高さの行を確保する */}
+            {/* 人の許可回数は 0 なら出さず、同じ行に並べる（行の高さは変えない） */}
+            <span className="cal-day-busy">
+              <span title={BUSY_TITLE}>{current ? formatBusy(busyByDay[d]) : '\u00a0'}</span>
+              {current && approvalsByDay[d] > 0 && (
+                <span className="cal-approvals" title={APPROVALS_TITLE}>
+                  {' '}
+                  · {formatApprovals(approvalsByDay[d])}
+                </span>
+              )}
+            </span>
           </span>
         ))}
       </div>
