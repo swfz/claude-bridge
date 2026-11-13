@@ -1,4 +1,4 @@
-import { watch, readFileSync, readdirSync, statSync } from 'fs';
+import { watch, existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, basename } from 'path';
 import {
   CLAUDE_PROJECTS_DIR,
@@ -121,6 +121,17 @@ export class JsonlWatcher {
 
   // プロジェクトディレクトリ内の最新 JSONL を検出
   _detectNewFile(state) {
+    // sessionId 指定で監視先のファイルが決まっていて、ファイルもプロジェクトディレクトリもまだ無かった場合。
+    // 「最新ファイル」探しに回すと見つけたファイルが targetFile と同じで素通りし、永久に読まない
+    // （claude -w の新規 worktree は最初の書き込みまで projectDir が無い）
+    if (state.targetFile) {
+      if (!existsSync(state.targetFile)) return;
+      clearInterval(state.pollTimer);
+      state.pollTimer = null;
+      this._startFileWatch(state);
+      this._readNewLines(state);
+      return;
+    }
     const newestPath = this._findLatestJsonl(state.projectPath);
     if (!newestPath || state.targetFile === newestPath) return;
 
