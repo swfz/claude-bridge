@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  backgroundLabel,
   runningToolOf,
   turnStartOf,
   workingStateOf,
@@ -33,6 +34,15 @@ describe('runningToolOf', () => {
     ];
     assert.equal(runningToolOf(msgs), null);
   });
+  it('並列に呼んだツールは先に終わった方を見て実行中を見失わない', () => {
+    const msgs = [
+      { role: 'human', content: 'x' },
+      { role: 'assistant', toolUses: [{ id: 'a', name: 'Agent' }] },
+      { role: 'assistant', toolUses: [{ id: 'b', name: 'Bash' }] },
+      { role: 'toolresult', results: [{ id: 'b' }] },
+    ];
+    assert.equal(runningToolOf(msgs)?.id, 'a');
+  });
   it('human より前は見ない', () => {
     const msgs = [
       { role: 'assistant', toolUses: [{ id: 'a', name: 'Read' }] },
@@ -58,7 +68,13 @@ describe('turnStartOf', () => {
 describe('workingStateOf', () => {
   const msgs = [{ role: 'human', timestamp: iso(T0) }];
   it('busy なら出す', () => {
-    assert.deepEqual(workingStateOf({ status: 'busy', messages: msgs, now: T0 + 5000 }), { tool: null, since: T0 });
+    assert.deepEqual(workingStateOf({ status: 'busy', messages: msgs, now: T0 + 5000 }), {
+      mode: 'turn',
+      animated: true,
+      tool: null,
+      since: T0,
+      background: null,
+    });
   });
   it('idle で送信もしていなければ出さない', () => {
     assert.equal(workingStateOf({ status: 'idle', messages: msgs, now: T0 }), null);
@@ -81,6 +97,41 @@ describe('workingStateOf', () => {
   it('実行中ツールを返す', () => {
     const m = [...msgs, { role: 'assistant', toolUses: [{ id: 'x', name: 'Bash' }] }];
     assert.equal(workingStateOf({ status: 'busy', messages: m, now: T0 })?.tool?.name, 'Bash');
+  });
+});
+
+describe('workingStateOf（裏で実行中）', () => {
+  const msgs = [{ role: 'human', timestamp: iso(T0) }];
+  it('status が shell なら background で件数を返す', () => {
+    assert.deepEqual(
+      workingStateOf({ status: 'shell', messages: msgs, background: { agents: 2, shells: 1 }, now: T0 }),
+      { mode: 'background', animated: true, tool: null, since: null, background: { agents: 2, shells: 1 } },
+    );
+  });
+  it('シェルだけなら記号を動かさない', () => {
+    const state = workingStateOf({ status: 'shell', messages: msgs, background: { agents: 0, shells: 1 } });
+    assert.equal(state?.mode, 'background');
+    assert.equal(state?.animated, false);
+  });
+  it('件数が分からなくても shell なら出す', () => {
+    assert.deepEqual(workingStateOf({ status: 'shell', messages: msgs })?.background, { agents: 0, shells: 0 });
+  });
+  it('shell の間に送信したら先回りの turn を優先し、応答が来たら background に戻る', () => {
+    assert.equal(workingStateOf({ status: 'shell', messages: msgs, pendingSince: T0, now: T0 + 1000 })?.mode, 'turn');
+    const replied = [...msgs, { role: 'assistant', timestamp: iso(T0 + 500) }];
+    assert.equal(
+      workingStateOf({ status: 'shell', messages: replied, pendingSince: T0, now: T0 + 1000 })?.mode,
+      'background',
+    );
+  });
+});
+
+describe('backgroundLabel', () => {
+  it('内訳を並べる', () => {
+    assert.equal(backgroundLabel({ agents: 2, shells: 1 }), 'サブエージェント 2 · シェル 1');
+    assert.equal(backgroundLabel({ agents: 0, shells: 3 }), 'シェル 3');
+    assert.equal(backgroundLabel({ agents: 0, shells: 0 }), '');
+    assert.equal(backgroundLabel(null), '');
   });
 });
 

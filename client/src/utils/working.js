@@ -9,24 +9,24 @@ function timeOf(m) {
   return Number.isFinite(t) ? t : null;
 }
 
-// 末尾から見て、まだ tool_result の返っていないツール呼び出し（実行中のもの）を返す
+// 今のターン（最後の human 以降）で、まだ tool_result の返っていないツール呼び出し（実行中のもの）を返す。
+// JSONL ではツール呼び出しが 1 件ずつ別の assistant レコードになるので、並列に呼んだときは
+// 最後のレコードだけでなくターン内の assistant を全部見る（先に終わった方を見て「考え中」に戻さない）
 export function runningToolOf(messages) {
   if (!Array.isArray(messages)) return null;
   const resolved = new Set();
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
+    if (m?.role === 'human') return null;
     if (m?.role === 'toolresult') {
       for (const r of m.results || []) if (r?.id) resolved.add(r.id);
       continue;
     }
-    if (m?.role === 'assistant') {
-      const tools = m.toolUses || [];
-      for (let j = tools.length - 1; j >= 0; j--) {
-        if (tools[j]?.id && !resolved.has(tools[j].id)) return tools[j];
-      }
-      return null;
+    if (m?.role !== 'assistant') continue;
+    const tools = m.toolUses || [];
+    for (let j = tools.length - 1; j >= 0; j--) {
+      if (tools[j]?.id && !resolved.has(tools[j].id)) return tools[j];
     }
-    if (m?.role === 'human') return null;
   }
   return null;
 }
@@ -51,8 +51,14 @@ function hasAssistantAfter(messages, since) {
   return false;
 }
 
-// 表示するなら {tool, since}（since はターン開始の ms。分からなければ null）、出さないなら null
-export function workingStateOf({ status, waitingFor, messages, pendingSince, now = Date.now() }) {
+// 表示するなら {mode, animated, tool, since, background}、出さないなら null。
+// animated: 記号を動かすか。裏で動いているのがシェルだけ（dev サーバーの常駐など）なら止める
+// （何が動いているかは TaskStrip のチップで分かるので、ずっと明滅させて画面をうるさくしない）。
+// mode: 'turn'＝ターン中（busy か送信直後）、'background'＝ターンは終わったが裏でタスクが動いている
+// （Claude Code はこの間 status を 'shell' にする。経過時間はターンの開始と合わないので since は null）。
+// shell の間に送信したときは、busy になるまでの先回り（turn）を優先する。
+// background は {agents, shells}＝実行中のサブエージェント・シェルの件数（TaskStrip と同じ一覧から数える）
+export function workingStateOf({ status, waitingFor, messages, pendingSince, background, now = Date.now() }) {
   if (waitingFor || status === 'waiting') return null;
   const busy = status === 'busy';
   const pending =
@@ -60,11 +66,34 @@ export function workingStateOf({ status, waitingFor, messages, pendingSince, now
     Number.isFinite(pendingSince) &&
     now - pendingSince < PENDING_GRACE_MS &&
     !hasAssistantAfter(messages, pendingSince);
-  if (!busy && !pending) return null;
-  return {
-    tool: busy ? runningToolOf(messages) : null,
-    since: turnStartOf(messages) ?? (pending ? pendingSince : null),
-  };
+  if (busy || pending) {
+    return {
+      mode: 'turn',
+      animated: true,
+      tool: busy ? runningToolOf(messages) : null,
+      since: turnStartOf(messages) ?? (pending ? pendingSince : null),
+      background: null,
+    };
+  }
+  if (status === 'shell') {
+    const agents = background?.agents || 0;
+    return {
+      mode: 'background',
+      animated: agents > 0,
+      tool: null,
+      since: null,
+      background: { agents, shells: background?.shells || 0 },
+    };
+  }
+  return null;
+}
+
+// 裏で動いているタスクの内訳（「サブエージェント 2 · シェル 1」）。どちらも 0 なら空文字
+export function backgroundLabel(background) {
+  const parts = [];
+  if (background?.agents) parts.push(`サブエージェント ${background.agents}`);
+  if (background?.shells) parts.push(`シェル ${background.shells}`);
+  return parts.join(' · ');
 }
 
 export function formatElapsed(ms) {

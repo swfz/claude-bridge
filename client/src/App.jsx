@@ -1715,6 +1715,11 @@ export default function App() {
   const chatPanelsVisible = sessionUiVisible && effectiveViewMode === 'chat';
   // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
   const activeChoice = sessionUiVisible && !isReadonly ? choicePrompts[activeSessionId] : null;
+  // 推論中インジケータの「裏で実行中…」に出す件数（TaskStrip と同じ一覧から数える）
+  const runningAgentCount = (subagentTasks[activeSessionId] || EMPTY_TASKS).filter(
+    (t) => t.status === 'running',
+  ).length;
+  const runningShellCount = (shellTasks[activeSessionId] || EMPTY_TASKS).filter((t) => t.status === 'running').length;
 
   // 閲覧タブは inbox 経由（Stop hook が次の応答終了時に注入）なので、tmux ペインに繋がっていないと
   // 送っても届かない／いつ届くか分からない。送信前に気づけるよう入力欄の直上に出す
@@ -2070,6 +2075,8 @@ export default function App() {
               waitingFor={activeSession?.waitingFor}
               messages={activeMessages}
               pendingSince={pendingTurns[activeSessionId]}
+              runningAgents={runningAgentCount}
+              runningShells={runningShellCount}
             />
           )}
 
