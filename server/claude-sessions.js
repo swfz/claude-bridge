@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'fs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import {
@@ -11,7 +11,7 @@ import {
   extractToolUses,
   humanMessageFields,
 } from './jsonl-utils.js';
-import { readFirstLines, readSessionSummary } from './session-summary.js';
+import { readFirstLines, readSessionSummary, summarizeHead } from './session-summary.js';
 import { readSessionCompletion } from './session-completion.js';
 
 // セッション JSONL から最初のユーザーメッセージを抽出
@@ -169,6 +169,64 @@ export async function listRecentSessions({
 }
 
 // ~/.claude/projects/ 以下のセッションを非同期で一覧
+// 新規セッションの作業ディレクトリ候補にするディレクトリへ寄せる。
+// `claude -w` / EnterWorktree の worktree（<repo>/.claude/worktrees/<name>）は使い捨てなのでリポジトリのルートに、
+// サブエージェント・スキルが使うスクラッチパッド（<tmpdir>/claude-<uid>/...）は候補にしない。
+export function projectRootOf(cwd) {
+  if (typeof cwd !== 'string' || !cwd.startsWith('/')) return null;
+  if (/^\/tmp\/claude-\d+(\/|$)/.test(cwd)) return null;
+  const i = cwd.indexOf('/.claude/worktrees/');
+  return i > 0 ? cwd.slice(0, i) : cwd;
+}
+
+// セッション開始時の cwd（先頭 40 行の cwd。途中で worktree に入ったものは worktree-state の元の cwd）。
+// 開始時の値は変わらないのでファイル単位で永続キャッシュする
+const startCwdCache = new Map();
+async function readStartCwd(filePath) {
+  if (startCwdCache.has(filePath)) return startCwdCache.get(filePath);
+  let cwd = '';
+  try {
+    const lines = await readFirstLines(filePath, 40);
+    for (const line of lines) {
+      if (!line.includes('"originalCwd"')) continue;
+      try {
+        const o = JSON.parse(line);
+        if (typeof o.worktreeSession?.originalCwd === 'string') cwd = o.worktreeSession.originalCwd;
+      } catch {
+        // 書きかけの行は飛ばす
+      }
+      if (cwd) break;
+    }
+    if (!cwd) cwd = summarizeHead(lines).cwd;
+  } catch {
+    return '';
+  }
+  if (cwd) startCwdCache.set(filePath, cwd);
+  return cwd;
+}
+
+// 新規セッションの作業ディレクトリ候補: 直近 days 日に動いたセッションの開始ディレクトリをユニークにして返す
+// （最近使った順・セッション数つき）。projectDir 名からの復元はハイフンを区別できないので JSONL の cwd を使い、
+// Artifact の全文走査を伴う readSessionSummary は使わない。消えたディレクトリは候補にしない。
+export async function listRecentDirs({ days = 90, dir = CLAUDE_PROJECTS_DIR, now = Date.now(), limit = 300 } = {}) {
+  const since = now - days * 24 * 60 * 60 * 1000;
+  const files = [];
+  for (const c of collectSessionFiles(dir)) {
+    if (c.mtimeMs < since) break; // 更新日時の降順なので以降は全部期間外
+    files.push(c);
+  }
+  const cwds = await Promise.all(files.map((c) => readStartCwd(c.filePath)));
+  const merged = new Map();
+  files.forEach((c, i) => {
+    const root = projectRootOf(cwds[i] || c.cwd);
+    if (!root) return;
+    const prev = merged.get(root);
+    if (prev) prev.count += 1;
+    else merged.set(root, { cwd: root, lastUsedAt: c.updatedAt, count: 1 }); // files は新しい順
+  });
+  return [...merged.values()].filter((e) => existsSync(e.cwd)).slice(0, limit);
+}
+
 export async function listClaudeSessions({ limit = 30 } = {}) {
   const top = collectSessionFiles(CLAUDE_PROJECTS_DIR).slice(0, limit);
 

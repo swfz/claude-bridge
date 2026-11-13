@@ -228,6 +228,11 @@ export default function App() {
   const [showFileExplorer, setShowFileExplorer] = useState(false);
   const [claudeSessions, setClaudeSessions] = useState(null);
   const [tmuxPanes, setTmuxPanes] = useState(null);
+  // 新規作成ダイアログの作業ディレクトリ候補（直近 90 日のセッションの cwd）
+  const [recentDirs, setRecentDirs] = useState(null);
+  const [newSessionError, setNewSessionError] = useState(null);
+  // 検証で弾かれて開き直すときに入力を戻すため、最後に送った値を持つ
+  const [newSessionDraft, setNewSessionDraft] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [drawerOpenedAt, setDrawerOpenedAt] = useState(null);
   // Document Picture-in-Picture に出したプレビュー { pipWindow, filePath, markdown, title }。
@@ -540,6 +545,20 @@ export default function App() {
   useEffect(() => {
     return on('tmux_panes', (msg) => {
       setTmuxPanes(msg.panes);
+    });
+  }, [on]);
+
+  useEffect(() => {
+    return on('recent_dirs', (msg) => {
+      setRecentDirs({ home: msg.home || '', dirs: msg.dirs || [] });
+    });
+  }, [on]);
+
+  useEffect(() => {
+    return on('new_session_error', (msg) => {
+      // 起動前の検証で弾かれた。ダイアログを開き直して理由を見せる
+      setNewSessionError(msg.message);
+      setShowNewSession(true);
     });
   }, [on]);
 
@@ -965,8 +984,10 @@ export default function App() {
   }, [activeSessionId, sessions, send, messagesBySession]);
 
   const handleCreateSession = useCallback(
-    ({ name, cwd }) => {
-      send({ type: 'new_session', name, cwd });
+    (options) => {
+      send({ type: 'new_session', ...options });
+      setNewSessionDraft(options);
+      setNewSessionError(null);
       setShowNewSession(false);
     },
     [send],
@@ -1092,6 +1113,10 @@ export default function App() {
 
   const handleRequestClaudeSessions = useCallback(() => {
     send({ type: 'list_claude_sessions' });
+  }, [send]);
+
+  const handleRequestRecentDirs = useCallback(() => {
+    send({ type: 'list_recent_dirs' });
   }, [send]);
 
   const handleAttachTmux = useCallback(
@@ -2121,6 +2146,8 @@ export default function App() {
             setShowNewSession(false);
             setClaudeSessions(null);
             setTmuxPanes(null);
+            setNewSessionError(null);
+            setNewSessionDraft(null);
           }}
           onCreate={handleCreateSession}
           onResume={handleResumeSession}
@@ -2130,6 +2157,10 @@ export default function App() {
           onRequestTmuxPanes={handleRequestTmuxPanes}
           claudeSessions={claudeSessions}
           tmuxPanes={tmuxPanes}
+          recentDirs={recentDirs}
+          onRequestRecentDirs={handleRequestRecentDirs}
+          error={newSessionError}
+          initialValues={newSessionError ? newSessionDraft : null}
         />
       )}
 

@@ -133,7 +133,7 @@ export async function capturePane(paneId, { scrollback = 0 } = {}) {
   return stdout;
 }
 
-function escapeForShell(str) {
+export function escapeForShell(str) {
   return "'" + str.replace(/'/g, "'\\''") + "'";
 }
 
@@ -301,12 +301,29 @@ export function escapeTmuxFormat(text) {
 // （呼び出し側はそこでタブを開いて「起動中」を見せられる）。
 // tmuxSession / windowName は再起動後の一括再開（open-tabs.js）で「元の tmux セッションの元の window 名」で
 // 作り直すときだけ渡す。tmuxSession が無ければ作り、tmux サーバーごと無ければそれで立ち上げる。
-export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated, tmuxSession, windowName: wanted }) {
+export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated, tmuxSession, windowName }) {
   if (!/^[\w-]+$/.test(claudeSessionId || '')) {
     throw new Error(`Invalid claudeSessionId: ${claudeSessionId}`);
   }
+  return launchInTmuxWindow({
+    command: `claude --resume ${claudeSessionId}`,
+    cwd,
+    onWindowCreated,
+    tmuxSession,
+    windowName: sanitizeWindowName(windowName) || buildResumeWindowName(claudeSessionId),
+  });
+}
 
-  const windowName = sanitizeWindowName(wanted) || buildResumeWindowName(claudeSessionId);
+// tmux に新しい window を作り、シェルが整ったら command（シェルに打つ 1 行。引数のエスケープは呼び出し側の責任）を流す。
+// resume と新規作成（new_session の launch: 'tmux'）で共用する。
+export async function launchInTmuxWindow({
+  command: shellCommand,
+  cwd,
+  onWindowCreated,
+  tmuxSession,
+  windowName: wanted,
+}) {
+  const windowName = sanitizeWindowName(wanted) || 'claude';
   const nameArg = escapeForShell(escapeTmuxFormat(windowName));
   const cwdArg = cwd ? ` -c ${escapeForShell(cwd)}` : '';
   const format = "-P -F '#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}'";
@@ -358,7 +375,7 @@ export async function resumeInTmuxWindow({ claudeSessionId, cwd, onWindowCreated
   onWindowCreated?.(pane);
 
   // シェル経由で流すので rc（mise/nvm 等）を通る。claude を抜けてもペインは残る
-  await sendCommandWhenShellReady(paneId, `claude --resume ${claudeSessionId}`);
+  await sendCommandWhenShellReady(paneId, shellCommand);
 
   return pane;
 }

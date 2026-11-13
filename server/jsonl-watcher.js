@@ -21,7 +21,7 @@ export class JsonlWatcher {
   // セッション開始時に呼ぶ
   // resumeSessionId / sessionId がある場合はそのファイルを直接監視
   // ない場合は cwd のプロジェクトディレクトリ内の最新ファイルを検出
-  startWatching({ bridgeSessionId, cwd, resumeSessionId, sessionId, attachExisting, onMessage }) {
+  startWatching({ bridgeSessionId, cwd, resumeSessionId, sessionId, attachExisting, fromStart, onMessage }) {
     const projectDir = cwdToProjectDir(cwd);
     const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
 
@@ -33,8 +33,10 @@ export class JsonlWatcher {
     const explicitId = resumeSessionId || sessionId;
     if (explicitId) {
       targetFile = join(projectPath, `${explicitId}.jsonl`);
-      // 既存の行数をカウントしてスキップ（新規メッセージのみ配信）
+      // 既存の行数をカウントしてスキップ（新規メッセージのみ配信）。
+      // fromStart は「起動したばかりで既存行もまだ配っていない」とき（-w で監視先を移し直す場合）
       try {
+        if (fromStart) throw new Error('fromStart');
         const existing = readFileSync(targetFile, 'utf-8');
         linesRead = existing.split('\n').filter((l) => l.trim()).length;
       } catch {
