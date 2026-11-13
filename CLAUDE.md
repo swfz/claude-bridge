@@ -171,6 +171,7 @@ Claude Code の TUI で Bash 実行中に見えるライブ出力（バックグ
 
 - **データ源は `<os.tmpdir()>/claude-<uid>/<projectDir>/<claudeSessionId>/tasks/<taskId>.output`**（`server/shell-tasks.js`）。JSONL ではなくファイルを読むだけなので **readonly セッションでも動く**（PTY 不要）
 - 前景の Bash は終了するとファイルごと消えるため、チップから消えるのが正常。バックグラウンドは `[exited with code N]` のフッター付きで残る
+- **`tasks/` にはバックグラウンド起動のサブエージェントも `<agentId>.output` を置く**（中身は `subagents/agent-<id>.jsonl` へのシンボリックリンク）。フッターが付かず永久に running に見えるので、一覧・本文とも `lstat` で通常ファイル以外を飛ばす（サブエージェントは `subagent-tasks.js` 側で出る）
 - WS メッセージ: `list_shell_tasks {sessionId}` → `shell_tasks {sessionId, tasks}` / `get_shell_task_output {sessionId, taskId}` → `shell_task_output {sessionId, taskId, status, exitCode, text, truncated, size}`。読み先は subagent と同じ `resolveClaudeTarget()`。読めなければ `text: ''` + `error`
 - 一覧は作業中タブを見ている間だけ 3 秒間隔でポーリング（ホーム表示中は止める）。ドロワーは開いている taskId が `running` の間だけ 2 秒間隔で本文を取り直し、タブ切替・ホーム表示で閉じる
 - 本文は末尾 256KB までで、超えたら `truncated`（先頭の壊れた行は捨てる）。ANSI エスケープ（CSI / OSC）は落とし、フッター行は `text` から外して状態バッジに回す

@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, appendFile } from 'fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, symlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { listShellTasks, readShellTaskOutput, clearShellTasksCache, shellTasksDir } from '../server/shell-tasks.js';
@@ -105,6 +105,20 @@ describe('listShellTasks', () => {
     assert.deepEqual(
       tasks.map((t) => t.taskId),
       ['real'],
+    );
+  });
+
+  it('skips symlinks (background subagents link tasks/<agentId>.output to their JSONL)', async () => {
+    const { tasksDir, projectsDir, target } = await setupProject();
+    await writeOutput(tasksDir, 'bash1', 'ok\n[exited with code 0]\n');
+    const agentJsonl = join(projectsDir, 'agent-abc.jsonl');
+    await writeFile(agentJsonl, jsonl([{ type: 'assistant', isSidechain: true }]));
+    await symlink(agentJsonl, join(tasksDir, 'abc.output'));
+
+    const tasks = await listShellTasks(target);
+    assert.deepEqual(
+      tasks.map((t) => t.taskId),
+      ['bash1'],
     );
   });
 
@@ -277,6 +291,15 @@ describe('readShellTaskOutput', () => {
     for (const taskId of ['../../etc/passwd', 'a/b', 'a.b', '']) {
       assert.equal(await readShellTaskOutput({ ...target, taskId }), null);
     }
+  });
+
+  it('returns null for a symlinked output file', async () => {
+    const { tasksDir, projectsDir, target } = await setupProject();
+    const agentJsonl = join(projectsDir, 'agent-abc.jsonl');
+    await writeFile(agentJsonl, jsonl([{ type: 'assistant', isSidechain: true }]));
+    await symlink(agentJsonl, join(tasksDir, 'abc.output'));
+
+    assert.equal(await readShellTaskOutput({ ...target, taskId: 'abc' }), null);
   });
 
   it('returns null when the output file does not exist', async () => {
