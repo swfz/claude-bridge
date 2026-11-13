@@ -56,9 +56,9 @@ export function extractArtifactPublish(record) {
   return { url, title, path };
 }
 
-// tool_result だけの user レコードから、チャットのツール行に要る結果だけを取り出す（失敗・新規作成）。
+// tool_result だけの user レコードから、ツールの結果の印を取り出す（失敗・新規作成）。
 // 失敗は tool_result の is_error、新規作成は Write の toolUseResult.type === 'create'。
-// どちらでもない結果は返さない（チャットに流す量を増やさないため）
+// どちらでもない普通の成功も {id} だけで返す（入力欄の直上の「<ツール> 実行中…」が終わったことを知るため）
 export function extractToolResultFlags(record) {
   if (!record || record.type !== 'user') return [];
   const content = record.message?.content;
@@ -70,6 +70,7 @@ export function extractToolResultFlags(record) {
     if (!block || block.type !== 'tool_result' || typeof block.tool_use_id !== 'string') continue;
     if (block.is_error) flags.push({ id: block.tool_use_id, error: true });
     else if (created) flags.push({ id: block.tool_use_id, created: true });
+    else flags.push({ id: block.tool_use_id });
   }
   return flags;
 }

@@ -19,7 +19,8 @@ const publishRecord = (overrides = {}) => ({
 describe('parseHistoryLines と Artifact の公開リンク', () => {
   it('publish 成功の user レコードから artifact メッセージを作る', () => {
     const content = [JSON.stringify(publishRecord())].join('\n');
-    const messages = parseHistoryLines(content);
+    // 成功した tool_result の印（toolresult）も流れるが、ここでは artifact だけを見る
+    const messages = parseHistoryLines(content).filter((m) => m.role !== 'toolresult');
 
     assert.equal(messages.length, 1);
     assert.deepEqual(messages[0], {
@@ -46,7 +47,7 @@ describe('parseHistoryLines と Artifact の公開リンク', () => {
 
     assert.deepEqual(
       parseHistoryLines(content).map((m) => m.role),
-      ['human', 'assistant', 'artifact'],
+      ['human', 'assistant', 'artifact', 'toolresult'],
     );
   });
 
@@ -92,17 +93,20 @@ describe('parseHistoryLines と WebFetch の結果', () => {
       },
     });
 
-    assert.deepEqual(parseHistoryLines(content), [
-      {
-        role: 'webfetch',
-        content: '取得したページ',
-        url: 'https://example.com/a',
-        title: '取得したページ',
-        code: 200,
-        uuid: 'u-fetch',
-        timestamp: '2026-10-07T00:00:00.000Z',
-      },
-    ]);
+    assert.deepEqual(
+      parseHistoryLines(content).filter((m) => m.role !== 'toolresult'),
+      [
+        {
+          role: 'webfetch',
+          content: '取得したページ',
+          url: 'https://example.com/a',
+          title: '取得したページ',
+          code: 200,
+          uuid: 'u-fetch',
+          timestamp: '2026-10-07T00:00:00.000Z',
+        },
+      ],
+    );
   });
 });
 

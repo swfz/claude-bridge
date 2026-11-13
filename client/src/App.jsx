@@ -10,6 +10,7 @@ import ReviewDraftPanel from './components/ReviewDraftPanel.jsx';
 import InputBar from './components/InputBar.jsx';
 import ChoicePrompt from './components/ChoicePrompt.jsx';
 import TaskStrip from './components/TaskStrip.jsx';
+import WorkingIndicator from './components/WorkingIndicator.jsx';
 import SubagentDrawer from './components/SubagentDrawer.jsx';
 import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
 import DiffDrawer from './components/DiffDrawer.jsx';
@@ -132,6 +133,8 @@ export default function App() {
   // セッションごとの選択肢プロンプト（id -> {prompt, waitingFor}）。
   // JSONL には回答後にしか出ないので、サーバーが画面から読んだものをそのまま持つ。
   const [choicePrompts, setChoicePrompts] = useState({});
+  // 送信した時刻（sessionId -> ms）。status が busy になるまでの数秒、推論中表示を先回りで出すため
+  const [pendingTurns, setPendingTurns] = useState({});
   const [choiceError, setChoiceError] = useState(null);
   // セッションが起動したサブエージェントのタスク一覧（bridgeSessionId -> tasks）
   const [subagentTasks, setSubagentTasks] = useState({});
@@ -1222,6 +1225,11 @@ export default function App() {
         return false;
       }
       addUserMessage(text);
+      // スラッシュコマンドは応答が来ないもの（/clear・モーダル型）があるので先回り表示しない
+      if (!text.trimStart().startsWith('/')) {
+        const sentAt = Date.now();
+        setPendingTurns((prev) => ({ ...prev, [activeSessionId]: sentAt }));
+      }
       return true;
     },
     [send, activeSessionId, addUserMessage, notifySendFailure],
@@ -2053,6 +2061,15 @@ export default function App() {
               shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
               onOpenTask={handleOpenSubagentTask}
               onOpenShellTask={handleOpenShellTask}
+            />
+          )}
+
+          {sessionUiVisible && !isReadonly && !activeChoice && (
+            <WorkingIndicator
+              status={activeSession?.status}
+              waitingFor={activeSession?.waitingFor}
+              messages={activeMessages}
+              pendingSince={pendingTurns[activeSessionId]}
             />
           )}
 

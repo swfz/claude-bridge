@@ -207,7 +207,7 @@ describe('extractToolResultFlags', () => {
         { type: 'tool_result', tool_use_id: 't2' },
       ]),
     );
-    assert.deepEqual(flags, [{ id: 't1', error: true }]);
+    assert.deepEqual(flags, [{ id: 't1', error: true }, { id: 't2' }]);
   });
 
   it('Write の新規作成（toolUseResult.type === create）は created', () => {
@@ -217,16 +217,21 @@ describe('extractToolResultFlags', () => {
     assert.deepEqual(flags, [{ id: 'w1', created: true }]);
   });
 
-  it('上書き・普通の成功・tool_result 以外・user 以外は何も返さない', () => {
+  it('上書き・普通の成功は id だけ返す', () => {
     assert.deepEqual(
       extractToolResultFlags(userRecord([{ type: 'tool_result', tool_use_id: 'w' }], { type: 'update' })),
-      [],
+      [{ id: 'w' }],
     );
+    assert.deepEqual(extractToolResultFlags(userRecord([{ type: 'tool_result', tool_use_id: 'x' }], ['arr'])), [
+      { id: 'x' },
+    ]);
+  });
+
+  it('tool_result 以外・user 以外は何も返さない', () => {
     assert.deepEqual(extractToolResultFlags(userRecord([{ type: 'text', text: 'hi' }])), []);
     assert.deepEqual(extractToolResultFlags(userRecord('plain')), []);
     assert.deepEqual(extractToolResultFlags(userRecord([{ type: 'tool_result' }])), []);
     assert.deepEqual(extractToolResultFlags({ type: 'assistant', message: { content: [] } }), []);
     assert.deepEqual(extractToolResultFlags(null), []);
-    assert.deepEqual(extractToolResultFlags(userRecord([{ type: 'tool_result', tool_use_id: 'x' }], ['arr'])), []);
   });
 });

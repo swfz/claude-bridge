@@ -121,7 +121,8 @@ describe('JsonlWatcher', () => {
       watcher._readNewLines(state);
 
       // 失敗した publish はツール失敗の印（toolresult）としてだけ流れる
-      const failed = messages.filter((m) => m.role === 'toolresult');
+      // 成功した publish の結果も {id} だけの印として流れるので、失敗の印だけを見る
+      const failed = messages.filter((m) => m.role === 'toolresult' && m.results.some((r) => r.error));
       assert.deepEqual(
         failed.map((m) => m.results),
         [[{ id: 'toolu_2', error: true }]],
@@ -188,20 +189,23 @@ describe('JsonlWatcher', () => {
 
       watcher._readNewLines(state);
 
-      assert.deepEqual(messages, [
-        {
-          type: 'chat_message',
-          bridgeSessionId: 'test-session',
-          role: 'webfetch',
-          // タイトルが取れない（リダイレクト）ときは URL を content にする
-          content: 'https://example.com/a',
-          url: 'https://example.com/a',
-          title: null,
-          code: 301,
-          uuid: 'u-fetch',
-          timestamp: '2026-10-07T00:00:00.000Z',
-        },
-      ]);
+      assert.deepEqual(
+        messages.filter((m) => m.role !== 'toolresult'),
+        [
+          {
+            type: 'chat_message',
+            bridgeSessionId: 'test-session',
+            role: 'webfetch',
+            // タイトルが取れない（リダイレクト）ときは URL を content にする
+            content: 'https://example.com/a',
+            url: 'https://example.com/a',
+            title: null,
+            code: 301,
+            uuid: 'u-fetch',
+            timestamp: '2026-10-07T00:00:00.000Z',
+          },
+        ],
+      );
     });
 
     it('skips already-read lines', () => {
