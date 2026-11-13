@@ -2,7 +2,13 @@ import { createReadStream } from 'fs';
 import { stat } from 'fs/promises';
 import { createInterface } from 'readline';
 import { join } from 'path';
-import { CLAUDE_PROJECTS_DIR, cwdToProjectDir, extractContextUsage, extractTextContent } from './jsonl-utils.js';
+import {
+  CLAUDE_PROJECTS_DIR,
+  PEER_MESSAGE_PREFIX,
+  cwdToProjectDir,
+  extractContextUsage,
+  extractTextContent,
+} from './jsonl-utils.js';
 import { readSessionArtifacts, readSessionCustomTitle } from './session-artifacts.js';
 
 // カードに出す「どんなセッションか」の情報を JSONL から取り出す。
@@ -75,7 +81,8 @@ export function snippetText(text) {
 export function userPrompt(record) {
   if (record.type !== 'user' || record.isMeta) return '';
   const raw = extractTextContent(record.message, 0).trim();
-  if (!raw || raw.startsWith('<')) return '';
+  // `<` 始まりはタグ注入、`Another Claude session sent a message:` はサブエージェント・チームメイトからの送信（人の指示ではない）
+  if (!raw || raw.startsWith('<') || raw.startsWith(PEER_MESSAGE_PREFIX)) return '';
   return snippetText(raw);
 }
 

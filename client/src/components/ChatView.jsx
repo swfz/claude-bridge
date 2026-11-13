@@ -49,6 +49,8 @@ import {
 import './ChatView.css';
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
+// 本文を既定で畳んで隠す送り手（server/jsonl-utils.js の injectedSenderOf() の kind）
+const HIDDEN_BODY_SENDERS = new Set(['skill', 'subagent', 'peer']);
 
 // ツールの種類はアイコンの形で表す（文字バッジは使わない）。名前は title で出す
 const TOOL_ICONS = {
@@ -370,8 +372,8 @@ export const ChatMessage = memo(function ChatMessage({
   toolFlags,
 }) {
   // 長い本文も最初から全文で出す（畳むのはホバーの「折りたたむ」か ← で手動）。
-  // スキルの展開（SKILL.md の本文）だけは人が読むものではないので既定で畳む
-  const [expanded, setExpanded] = useState(() => message.sender?.kind !== 'skill');
+  // スキルの展開（SKILL.md の本文）とサブエージェント・他エージェントとのやり取りは人宛てではないので既定で畳む
+  const [expanded, setExpanded] = useState(() => !HIDDEN_BODY_SENDERS.has(message.sender?.kind));
   // 範囲選択時に出すアクションメニュー（レビューに追加 / コメントに残す / スレッド）
   const [selMenu, setSelMenu] = useState(null);
   // 選択後に本文（指摘/コメント）を書くノート入力ポップオーバー { mode, quote, top, left, text }
@@ -488,9 +490,10 @@ export const ChatMessage = memo(function ChatMessage({
     (c) => c.anchor && c.anchor.messageUuid && c.anchor.messageUuid === message.uuid,
   );
 
-  // スキルの展開（SKILL.md の本文）は長さに関わらず畳める対象にする（既定で畳むのは useState の初期値）
-  const isSkillBody = message.sender?.kind === 'skill';
-  const isLong = isSkillBody || (message.content || '').length > COLLAPSE_THRESHOLD;
+  // スキルの展開・エージェント間のやり取りは長さに関わらず畳める対象にし、畳んでいる間は本文を隠す（既定で畳むのは useState の初期値）
+  const senderKind = message.sender?.kind;
+  const isHiddenBody = HIDDEN_BODY_SENDERS.has(senderKind);
+  const isLong = isHiddenBody || (message.content || '').length > COLLAPSE_THRESHOLD;
   // ツールの失敗・新規作成の印（memo を崩さないよう文字列で受け取って、ここで引ける形に戻す）
   const toolFlagMap = parseToolFlagsKey(toolFlags);
   // 行を指しているあいだは折りたたまない（隠れた行のバッジを打っても見えないため）
@@ -655,7 +658,7 @@ export const ChatMessage = memo(function ChatMessage({
       {message.content && (
         <div
           ref={bodyRef}
-          className={`chat-message-body ${shouldCollapse ? (isSkillBody ? 'collapsed skill-collapsed' : 'collapsed') : ''} ${lineMode ? 'msg-line-mode' : ''}`}
+          className={`chat-message-body ${shouldCollapse ? (isHiddenBody ? 'collapsed skill-collapsed' : 'collapsed') : ''} ${lineMode ? 'msg-line-mode' : ''}`}
           onMouseUp={!isHuman ? handleTextSelect : undefined}
         >
           {lineMode &&
@@ -741,7 +744,10 @@ export const ChatMessage = memo(function ChatMessage({
         // 折りたたんだ本文の続き。本文の下に埋もれないよう、枠付きの小さなボタンで置く
         <button className="expand-bar" onClick={() => setExpanded(true)}>
           <TbChevronDown aria-hidden="true" />
-          {isSkillBody ? 'スキルの手順を表示' : '続きを表示'}
+          {senderKind === 'skill' ? 'スキルの手順を表示' : isHiddenBody ? '内容を表示' : '続きを表示'}
+          {isHiddenBody && message.sender?.summary && (
+            <span className="expand-bar-summary">{message.sender.summary}</span>
+          )}
           <span className="expand-bar-count">{message.content.length.toLocaleString()} 文字</span>
         </button>
       )}

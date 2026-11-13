@@ -21,7 +21,8 @@ import { turnPrompt } from './session-turns.js';
 // 2: 週間カレンダー用に 10 分枠の集計（slots）を追加
 // 3: カレンダーの点（指示した時刻）用に、人の指示の時刻を分単位で持つ（prompts）
 // 4: 同じ API 応答の行を 1 回だけ数えるため、最後に加算した応答のキー（lastUsageKey）を持つ
-const CACHE_VERSION = 4;
+// 5: サブエージェント・チームメイトからの送信（`Another Claude session sent a message:`）を指示（prompts）から外す
+const CACHE_VERSION = 5;
 const MINUTE_MS = 60 * 1000;
 const CACHE_FILE = join(DATA_DIR, 'activity-heatmap.json');
 const DAY_MS = 24 * 60 * 60 * 1000;

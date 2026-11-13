@@ -123,8 +123,42 @@ export function isInjectedUserRecord(record) {
   if (!record || record.type !== 'user') return false;
   if (record.isMeta) return true;
   const text = extractTextContent(record.message, 0).trim();
+  if (parseTeammateMessages(text)) return true;
   // スラッシュコマンドは `<command-message>` か `<command-name>` で、`!cmd` は `<bash-input>` で始まる（どれも人の操作）
   return text.startsWith('<') && !/^<(command-name|command-message|bash-input)>/.test(text);
+}
+
+// チームメイト（agent team のメンバー）からの送信。origin を持たず、本文が
+// `Another Claude session sent a message:\n<teammate-message teammate_id="x" summary="…">本文</teammate-message>\n注意書き`
+// の形で記録される（1 レコードに複数ブロックのこともある）。本文は平文か、`{"type":"idle_notification", result?, summary?, idleReason?}` の JSON。
+// 該当すれば [{from, summary, body}]、しなければ null
+export const PEER_MESSAGE_PREFIX = 'Another Claude session sent a message:';
+export function parseTeammateMessages(text) {
+  if (typeof text !== 'string') return null;
+  const trimmed = text.trimStart();
+  if (!trimmed.startsWith(PEER_MESSAGE_PREFIX)) return null;
+  const blocks = [...trimmed.matchAll(/<teammate-message\b([^>]*)>([\s\S]*?)<\/teammate-message>/g)];
+  if (blocks.length === 0) return null;
+  return blocks.map(([, attrs, inner]) => {
+    const attr = (name) => attrs.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] || '';
+    const raw = inner.trim();
+    let body = raw;
+    let summary = attr('summary');
+    if (raw.startsWith('{')) {
+      try {
+        const json = JSON.parse(raw);
+        summary = summary || (typeof json.summary === 'string' ? json.summary : '');
+        body =
+          (typeof json.result === 'string' && json.result.trim()) ||
+          (typeof json.failureReason === 'string' && json.failureReason.trim()) ||
+          summary ||
+          (json.type === 'idle_notification' ? '（待機中）' : raw);
+      } catch {
+        // 平文として扱う
+      }
+    }
+    return { from: attr('teammate_id'), summary, body };
+  });
 }
 
 // スラッシュコマンド（スキル呼び出し含む）の user レコード本文から `{name: '/ship', args}` を取り出す。
@@ -155,10 +189,13 @@ export function skillNameOf(record) {
 export function humanMessageFields(record, text) {
   const command = parseSlashCommand(text);
   const sender = injectedSenderOf(record);
+  const teammate = parseTeammateMessages(text);
   return {
     // サブエージェントの報告は枠と注意書きを外した本文、スラッシュコマンドはタグを外した `/ship args`
     content:
-      extractHandbackReport(record) || (command ? `${command.name}${command.args ? ` ${command.args}` : ''}` : text),
+      extractHandbackReport(record) ||
+      (teammate ? teammate.map((m) => m.body).join('\n\n---\n\n') : null) ||
+      (command ? `${command.name}${command.args ? ` ${command.args}` : ''}` : text),
     ...(command ? { command } : {}),
     // タグ注入・isMeta（人が打っていない）ときだけ付ける。リンク一覧で「自分が渡した」と数えないため
     ...(isInjectedUserRecord(record) ? { injected: true } : {}),
@@ -176,6 +213,14 @@ export function injectedSenderOf(record) {
   const origin = record.origin && typeof record.origin === 'object' ? record.origin : null;
   const name = typeof origin?.name === 'string' && origin.name ? origin.name : undefined;
   if (origin?.kind === 'peer') return { kind: origin.handback ? 'subagent' : 'peer', ...(name ? { name } : {}) };
+  if (!origin) {
+    const teammate = parseTeammateMessages(extractTextContent(record.message, 0));
+    if (teammate) {
+      const from = [...new Set(teammate.map((m) => m.from).filter(Boolean))].join(', ');
+      const summary = teammate.find((m) => m.summary)?.summary;
+      return { kind: 'subagent', ...(from ? { name: from } : {}), ...(summary ? { summary } : {}) };
+    }
+  }
   if (origin?.kind === 'human' || !isInjectedUserRecord(record)) return null;
   if (origin?.kind === 'task-notification') return { kind: 'task-notification' };
   const skill = skillNameOf(record);
