@@ -620,6 +620,8 @@ function statusDotOf(session, { isWaiting, hasAttention }) {
   }
   if (session.status === 'busy') return { className: 'tab-status-busy', title: '処理中' };
   if (hasAttention) return { className: 'tab-status-attention', title: '応答が完了しました（未確認）' };
+  // ターンは終わって入力を受け付けるが、裏でサブエージェント・シェルが動いている（Claude Code の status: 'shell'）
+  if (session.status === 'shell') return { className: 'tab-status-shell', title: '入力待ち（裏で実行中）' };
   if (session.status === 'idle') return { className: 'tab-status-idle', title: '入力待ち' };
   return { className: 'tab-status-none', title: session.status || '状態不明' };
 }

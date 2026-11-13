@@ -57,6 +57,12 @@ export function statusClass(status) {
   return status === 'busy' || status === 'working' ? 'busy' : 'idle';
 }
 
+// ホームのカードの状態ドット用。statusClass の 2 値に、入力待ちだが裏で実行中の 'shell' を足した 3 値
+export function statusDotClass(status) {
+  if (status === 'shell') return 'shell';
+  return statusClass(status);
+}
+
 // tmux 上の claude を終了してペインを閉じる前の確認文言（window.confirm 用）。
 // 作業中なら途中で止まることをはっきり書く
 export function terminateConfirmMessage({ name, status, target } = {}) {

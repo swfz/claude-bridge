@@ -17,7 +17,7 @@ import {
   annotateRunningSessions,
   annotateRecentSessions,
   findUnmatchedTabs,
-  statusClass,
+  statusDotClass,
   formatElapsed,
 } from '../utils/runningSessions.js';
 import { isStarred, sortStarredFirst } from '../utils/starredSessions.js';
@@ -505,8 +505,14 @@ export default function HomeView({
             // Bridge 未接続（タブとして開いていない）は大半が接続済みなので、未接続の側だけ見た目を変える
             const linked = !!r.openTab;
             const waiting = !!r.waitingFor;
-            const dotClass = waiting ? 'waiting' : statusClass(r.status);
-            const dotTitle = waiting ? (r.waitingFor === 'permission prompt' ? '許可待ち' : '回答待ち') : r.status;
+            const dotClass = waiting ? 'waiting' : statusDotClass(r.status);
+            const dotTitle = waiting
+              ? r.waitingFor === 'permission prompt'
+                ? '許可待ち'
+                : '回答待ち'
+              : r.status === 'shell'
+                ? '入力待ち（裏で実行中）'
+                : r.status;
             return (
               <div
                 key={r.sessionId}

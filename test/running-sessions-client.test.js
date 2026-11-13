@@ -6,6 +6,7 @@ import {
   annotateRecentSessions,
   findUnmatchedTabs,
   statusClass,
+  statusDotClass,
   terminateConfirmMessage,
   formatElapsed,
   readonlyDeliveryState,
@@ -147,6 +148,15 @@ describe('statusClass', () => {
   it('maps everything else to idle', () => {
     assert.equal(statusClass('shell'), 'idle');
     assert.equal(statusClass(null), 'idle');
+  });
+});
+
+describe('statusDotClass', () => {
+  it('shell（入力待ちだが裏で実行中）だけを区別し、他は statusClass と同じ', () => {
+    assert.equal(statusDotClass('shell'), 'shell');
+    assert.equal(statusDotClass('busy'), 'busy');
+    assert.equal(statusDotClass('idle'), 'idle');
+    assert.equal(statusDotClass(null), 'idle');
   });
 });
 
