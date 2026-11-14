@@ -18,6 +18,7 @@ import {
   settleStaleBusy,
   warmActivityCache,
 } from '../server/activity-heatmap.js';
+import { dailyBusyMs, shiftWeek, startOfWeek } from '../client/src/utils/calendar.js';
 
 const jsonl = (records) => records.map((r) => JSON.stringify(r)).join('\n') + '\n';
 
@@ -1258,6 +1259,108 @@ describe('tool start time correction (overlap with inference and queueing)', () 
       const { sessions } = await getActivityCalendar(range(dir, cacheFile));
       assert.deepEqual(sessions[0].slots, once, `cut at ${cut}`);
     }
+  });
+});
+
+describe('getActivityHeatmap activeMs (AI busy time per day)', () => {
+  beforeEach(() => resetActivityHeatmapState());
+
+  // ローカルの 2026-10-21（水）0:00。0:00 をまたぐ呼び出しが日ごとに分かれることも確かめる
+  const MIDNIGHT = new Date(2026, 9, 21, 0, 0, 0, 0).getTime();
+  const NOW = new Date(2026, 9, 25, 12, 0, 0, 0).getTime();
+  const ms = (minutes) => MIDNIGHT + minutes * 60000;
+  const iso = (minutes) => new Date(ms(minutes)).toISOString();
+  const human = (m) => ({ type: 'user', timestamp: iso(m), message: { content: [{ type: 'text', text: 'やって' }] } });
+  const block = (m, requestId, content = [{ type: 'text', text: 'はい' }]) => ({
+    type: 'assistant',
+    timestamp: iso(m),
+    requestId,
+    message: { id: `msg-${requestId}`, content },
+  });
+  const use = (id) => ({ type: 'tool_use', id, name: 'Bash', input: {} });
+  const result = (m, id, decision) => ({
+    type: 'user',
+    timestamp: iso(m),
+    message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] },
+    ...(decision ? { permissionDecision: decision } : {}),
+  });
+  const costState = (startMin, toolMs, durationMin) => ({
+    type: 'cost-state',
+    startTime: ms(startMin),
+    totalToolDuration: toolMs,
+    totalDuration: durationMin * 60000,
+  });
+  const ACCEPT = { decision: 'accept', source: 'user_temporary', grantScope: 'once' };
+
+  async function writeSessions() {
+    const { dir, cacheFile } = await makeEnv();
+    const project = join(dir, '-home-me-a');
+    await mkdir(join(project, 's1', 'subagents'), { recursive: true });
+    // s1: 23:30 から 0:20 まで未検証の Bash（50 分）。cost-state の実測 10 分に縮む
+    await writeFile(
+      join(project, 's1.jsonl'),
+      jsonl([
+        human(-30),
+        block(-29, 'r1', [use('a')]),
+        result(20, 'a'),
+        block(21, 'r2'),
+        human(40),
+        costState(-31, 600000, 120),
+      ]),
+    );
+    // s1 のサブエージェント: 推論 3 分（親に足す。縮めない）
+    await writeFile(join(project, 's1', 'subagents', 'agent-x.jsonl'), jsonl([human(5), block(8, 'x1')]));
+    // s2: 人が許可した Bash。実測 30 秒を結果の直前に配る
+    await writeFile(
+      join(project, 's2.jsonl'),
+      jsonl([
+        human(60),
+        block(60, 'y1', [use('b')]),
+        result(61, 'b', ACCEPT),
+        block(62, 'y2'),
+        costState(59, 30000, 60),
+      ]),
+    );
+    return { dir, cacheFile };
+  }
+
+  it('matches the daily busy time the calendar shows for the same week', async () => {
+    const { dir, cacheFile } = await writeSessions();
+    const heatmap = await getActivityHeatmap({ days: 30, dir, cacheFile, now: NOW });
+    const weekStartMs = startOfWeek(MIDNIGHT);
+    const calendar = await getActivityCalendar({
+      fromMs: weekStartMs,
+      toMs: shiftWeek(weekStartMs, 1),
+      dir,
+      cacheFile,
+    });
+    const calendarDaily = dailyBusyMs(calendar.sessions, { weekStartMs, slotMs: calendar.slotMs });
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(weekStartMs);
+      date.setDate(date.getDate() + i);
+      assert.equal(findDay(heatmap, dateKey(date))?.activeMs, calendarDaily[i], dateKey(date));
+    }
+    const tuesday = findDay(heatmap, dateKey(new Date(ms(-60))));
+    const wednesday = findDay(heatmap, dateKey(new Date(ms(60))));
+    // 0:00 をまたぐ呼び出しは両日に分かれ、どちらの日も稼働がある
+    assert.ok(tuesday.activeMs > 0 && wednesday.activeMs > 0);
+    assert.equal(heatmap.total.activeMs, tuesday.activeMs + wednesday.activeMs);
+  });
+
+  it('applies the cost-state shrink, the approved-tool allocation and subagents', async () => {
+    const { dir, cacheFile } = await writeSessions();
+    const { total } = await getActivityHeatmap({ days: 30, dir, cacheFile, now: NOW });
+    // 推論: s1 r1 1 分 + r2 1 分、サブエージェント 3 分、s2 y1 0 秒 + y2 1 分
+    // ツール: s1 の Bash 50 分 → 実測 10 分、s2 の許可ツール → 実測 30 秒
+    const expected = (1 + 1 + 3 + 1) * 60000 + 600000 + 30000;
+    assert.ok(Math.abs(total.activeMs - expected) <= 2, `${total.activeMs} vs ${expected}`);
+  });
+
+  it('is 0 on days without activity and when there are no sessions', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    const { days, total } = await getActivityHeatmap({ days: 7, dir, cacheFile, now: NOW });
+    assert.ok(days.every((day) => day.activeMs === 0));
+    assert.equal(total.activeMs, 0);
   });
 });
 

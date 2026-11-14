@@ -681,7 +681,8 @@ function buildDateRange(days, now) {
   return dates;
 }
 
-function toDay(date, cell) {
+// activeMs は AI 稼働時間（推論＋ツール実行の ms。dailyActiveMs）。キャッシュの日別セルとは別に集計時に出す
+function toDay(date, cell, activeMs = 0) {
   const [prompts, replies, input, output, cacheCreation, cacheRead] = cell;
   return {
     date,
@@ -693,6 +694,7 @@ function toDay(date, cell) {
     cacheCreationTokens: cacheCreation,
     cacheReadTokens: cacheRead,
     tokens: input + output + cacheCreation + cacheRead,
+    activeMs,
   };
 }
 
@@ -789,17 +791,19 @@ function sharedRefresh({ dir, cacheFile }) {
   return inflight;
 }
 
-// ホーム画面のヒートマップ用。直近 days 日の日別集計を返す。
+// ホーム画面のヒートマップ用。直近 days 日の日別集計を返す。activeMs（AI 稼働時間）は週間カレンダーと同じ
+// セッション単位の縮小・配分（sessionBusyCorrections）を通した値で、カレンダーの日別合計と一致する。
 export async function getActivityHeatmap({
   days = 365,
   dir = CLAUDE_PROJECTS_DIR,
   cacheFile = CACHE_FILE,
   now = Date.now(),
 } = {}) {
-  const { totals, scannedFiles, fileCount } = await sharedRefresh({ dir, cacheFile });
+  const { totals, files, scannedFiles, fileCount } = await sharedRefresh({ dir, cacheFile });
+  const active = dailyActiveMs(dir, files);
 
   const range = buildDateRange(days, now);
-  const cells = range.map((date) => toDay(date, totals[date] || emptyCell()));
+  const cells = range.map((date) => toDay(date, totals[date] || emptyCell(), active[date] || 0));
   const total = cells.reduce(
     (acc, day) => {
       acc.prompts += day.prompts;
@@ -810,6 +814,7 @@ export async function getActivityHeatmap({
       acc.outputTokens += day.outputTokens;
       acc.cacheCreationTokens += day.cacheCreationTokens;
       acc.cacheReadTokens += day.cacheReadTokens;
+      acc.activeMs += day.activeMs;
       if (day.messages > 0) acc.activeDays += 1;
       return acc;
     },
@@ -822,6 +827,7 @@ export async function getActivityHeatmap({
       outputTokens: 0,
       cacheCreationTokens: 0,
       cacheReadTokens: 0,
+      activeMs: 0,
       activeDays: 0,
     },
   );
@@ -862,6 +868,98 @@ export async function listActiveSessionIds({ from, to, dir = CLAUDE_PROJECTS_DIR
   return ids;
 }
 
+// キャッシュのファイル単位の集計をセッションごとにまとめる（サブエージェントの JSONL は親セッションへ）。
+// 自動ツールの縮小と人の許可ツールへの配分は、同じセッションの本体・サブエージェントと cost-state を
+// 合わせて見る必要があるため、この単位で行う（sessionBusyCorrections）
+function groupFilesBySession(dir, files) {
+  const groups = new Map();
+  for (const [path, entry] of Object.entries(files)) {
+    const sessionId = sessionIdFromPath(dir, path);
+    if (!sessionId) continue;
+    const parts = relative(dir, path).split(sep);
+    let group = groups.get(sessionId);
+    if (!group) {
+      group = {
+        sessionId,
+        projectDir: parts[0],
+        entries: [],
+        mainEntries: [],
+        approved: [],
+        autoMain: [],
+        autoSub: [],
+        costStates: {},
+      };
+      groups.set(sessionId, group);
+    }
+    group.entries.push(entry);
+    if (parts.length === 2) group.mainEntries.push(entry);
+    group.approved.push(...(entry.busy?.approved || []));
+    (parts.length === 2 ? group.autoMain : group.autoSub).push(...(entry.busy?.autoTools || []));
+    Object.assign(group.costStates, entry.costStates || {});
+  }
+  return groups;
+}
+
+// セッション 1 つ分の AI 稼働の補正。走査時の枠（entries の slots）に足す差分を返す。
+// delta: 自動ツールを cost-state の実測に合わせて縮める差分（adjustAutoTools。稼働・自動ツール・縮める対象の列が負）
+// allocated: 人の許可ツールに実測から配った時間（allocateApprovedTools。稼働の列だけ）
+// 週間カレンダーとヒートマップの日別稼働時間の両方がこれを使うので、2 つの数字は一致する。
+export function sessionBusyCorrections(group) {
+  const hasAuto = group.autoMain.length + group.autoSub.length > 0;
+  const delta = hasAuto
+    ? adjustAutoTools({ main: group.autoMain, sub: group.autoSub, costStates: group.costStates })
+    : {};
+  if (group.approved.length === 0 || Object.keys(group.costStates).length === 0) return { delta, allocated: {} };
+  // 人の許可ツールの差し引き（A）には縮めた後の自動ツール時間を使う。縮める前の値は判定待ち・許可待ちを含む
+  // 推定で、実測（totalToolDuration）と比べる相手としては縮めた後の方が実測に近いため
+  const autoToolBySlot = new Map();
+  const addAuto = (key, ms) => {
+    if (ms) autoToolBySlot.set(Number(key), (autoToolBySlot.get(Number(key)) || 0) + ms);
+  };
+  for (const entry of group.entries) {
+    for (const [key, cell] of Object.entries(entry.slots || {})) addAuto(key, cell[SLOT_AUTO_TOOL] || 0);
+  }
+  for (const [key, cell] of Object.entries(delta)) addAuto(key, cell[SLOT_AUTO_TOOL]);
+  const allocated = allocateApprovedTools({ approved: group.approved, costStates: group.costStates, autoToolBySlot });
+  return { delta, allocated };
+}
+
+// セッションごとの最終的な AI 稼働（枠番号 → ms）。走査時の枠＋縮小＋配分を足し、カレンダーと同じく
+// セッション × 枠の単位で ms に丸めて負を 0 にする（日別に足す前に丸めるのでカレンダーの日別合計と一致する）
+function sessionBusyBySlot(group) {
+  const busy = new Map();
+  const add = (key, ms) => {
+    if (ms) busy.set(Number(key), (busy.get(Number(key)) || 0) + ms);
+  };
+  for (const entry of group.entries) {
+    for (const [key, cell] of Object.entries(entry.slots || {})) add(key, cell[SLOT_BUSY]);
+  }
+  const { delta, allocated } = sessionBusyCorrections(group);
+  for (const [key, cell] of Object.entries(delta)) add(key, cell[SLOT_BUSY]);
+  for (const [key, cell] of Object.entries(allocated)) add(key, cell[SLOT_BUSY]);
+  for (const [index, ms] of busy) busy.set(index, Math.max(0, Math.round(ms)));
+  return busy;
+}
+
+// 日別（ローカル日付）の AI 稼働 ms。枠はその開始時刻の日に入れる（カレンダーの dailyBusyMs と同じ切り方）
+export function dailyActiveMs(dir, files) {
+  // 枠番号 → 日付。複数のセッションが同じ枠を持つので使い回す（30 分ずれのタイムゾーンもあるので枠単位で引く）
+  const dateKeyOfSlot = new Map();
+  const totals = {};
+  for (const group of groupFilesBySession(dir, files).values()) {
+    for (const [index, ms] of sessionBusyBySlot(group)) {
+      if (ms <= 0) continue;
+      let date = dateKeyOfSlot.get(index);
+      if (date === undefined) {
+        date = localDateKey(new Date(index * SLOT_MS));
+        dateKeyOfSlot.set(index, date);
+      }
+      totals[date] = (totals[date] || 0) + ms;
+    }
+  }
+  return totals;
+}
+
 // 週間カレンダー用。[fromMs, toMs) に活動があったセッションごとに、10 分枠の集計を返す。
 // slots は [枠番号, 発言, 応答, 調査系ツール, 編集系ツール, AI 稼働 ms, 自動ツール ms, 人の許可回数,
 // 縮める対象のツール ms] の配列（枠番号の昇順）。AI 稼働・自動ツール・縮める対象のツールは cost-state の実測に
@@ -879,82 +977,50 @@ export async function getActivityCalendar({ fromMs, toMs, dir = CLAUDE_PROJECTS_
   const fromSlot = Math.floor(fromMs / SLOT_MS);
   const toSlot = Math.ceil(toMs / SLOT_MS);
   const bySession = new Map();
-  const approvals = new Map();
+  const groups = groupFilesBySession(dir, files);
 
-  for (const [path, entry] of Object.entries(files)) {
-    const sessionId = sessionIdFromPath(dir, path);
-    if (!sessionId) continue;
-    const parts = relative(dir, path).split(sep);
+  for (const group of groups.values()) {
     const sessionOf = () => {
-      let session = bySession.get(sessionId);
+      let session = bySession.get(group.sessionId);
       if (!session) {
-        session = { sessionId, projectDir: parts[0], slots: new Map(), prompts: new Map() };
-        bySession.set(sessionId, session);
+        session = { sessionId: group.sessionId, projectDir: group.projectDir, slots: new Map(), prompts: new Map() };
+        bySession.set(group.sessionId, session);
       }
       return session;
     };
-    // 人の許可ツールの配分用に、期間に関係なくセッションのファイルを覚えておく
-    let group = approvals.get(sessionId);
-    if (!group) {
-      group = {
-        sessionId,
-        sessionOf,
-        entries: [],
-        approved: [],
-        autoMain: [],
-        autoSub: [],
-        costStates: {},
-      };
-      approvals.set(sessionId, group);
+    group.sessionOf = sessionOf;
+    for (const entry of group.entries) {
+      for (const [key, cell] of Object.entries(entry.slots || {})) {
+        const index = Number(key);
+        if (index < fromSlot || index >= toSlot) continue;
+        const session = sessionOf();
+        const target = session.slots.get(index);
+        if (target) for (let i = 0; i < SLOT_SIZE; i++) target[i] += cell[i];
+        else session.slots.set(index, [...cell]);
+      }
     }
-    group.entries.push(entry);
-    group.approved.push(...(entry.busy?.approved || []));
-    (parts.length === 2 ? group.autoMain : group.autoSub).push(...(entry.busy?.autoTools || []));
-    Object.assign(group.costStates, entry.costStates || {});
-    for (const [key, cell] of Object.entries(entry.slots || {})) {
-      const index = Number(key);
-      if (index < fromSlot || index >= toSlot) continue;
-      const session = sessionOf();
-      const target = session.slots.get(index);
-      if (target) for (let i = 0; i < SLOT_SIZE; i++) target[i] += cell[i];
-      else session.slots.set(index, [...cell]);
-    }
-    if (parts.length !== 2) continue; // サブエージェント
-    for (const minute of entry.prompts || []) {
-      const ms = minute * MINUTE_MS;
-      if (ms < fromMs || ms >= toMs) continue;
-      const session = sessionOf();
-      session.prompts.set(minute, (session.prompts.get(minute) || 0) + 1);
+    for (const entry of group.mainEntries) {
+      for (const minute of entry.prompts || []) {
+        const ms = minute * MINUTE_MS;
+        if (ms < fromMs || ms >= toMs) continue;
+        const session = sessionOf();
+        session.prompts.set(minute, (session.prompts.get(minute) || 0) + 1);
+      }
     }
   }
 
   // 自動ツールの縮小と、人の許可ツールへの実測の配分。期間の外の呼び出し・自動ツールも同じプロセスの
-  // ウィンドウ内なら計算に入れ（週の境目で値が変わらないように）、返すのは期間内の枠だけ
-  for (const group of approvals.values()) {
-    // 縮小の差分は既にある枠を減らすだけなので、期間内に活動のあるセッションだけ計算する
-    const hasAuto = group.autoMain.length + group.autoSub.length > 0;
-    const delta =
-      hasAuto && bySession.has(group.sessionId)
-        ? adjustAutoTools({ main: group.autoMain, sub: group.autoSub, costStates: group.costStates })
-        : {};
+  // ウィンドウ内なら計算に入れ（週の境目で値が変わらないように）、返すのは期間内の枠だけ。
+  // 期間内に活動の無いセッションも縮小は計算する（配分の差し引きに縮めた後の自動ツール時間を使うので、
+  // 省くと期間の端に掛かる配分がヒートマップの日別稼働時間とずれる）
+  for (const group of groups.values()) {
+    const { delta, allocated } = sessionBusyCorrections(group);
     for (const [key, cell] of Object.entries(delta)) {
       const index = Number(key);
       if (index < fromSlot || index >= toSlot) continue;
       const target = group.sessionOf().slots.get(index);
       if (target) for (let i = 0; i < SLOT_SIZE; i++) target[i] += cell[i];
     }
-    if (group.approved.length === 0 || Object.keys(group.costStates).length === 0) continue;
-    // 人の許可ツールの差し引き（A）には縮めた後の自動ツール時間を使う。縮める前の値は判定待ち・許可待ちを含む
-    // 推定で、実測（totalToolDuration）と比べる相手としては縮めた後の方が実測に近いため
-    const autoToolBySlot = new Map();
-    const addAuto = (key, ms) => {
-      if (ms) autoToolBySlot.set(Number(key), (autoToolBySlot.get(Number(key)) || 0) + ms);
-    };
-    for (const entry of group.entries) {
-      for (const [key, cell] of Object.entries(entry.slots || {})) addAuto(key, cell[SLOT_AUTO_TOOL] || 0);
-    }
-    for (const [key, cell] of Object.entries(delta)) addAuto(key, cell[SLOT_AUTO_TOOL]);
-    const allocated = allocateApprovedTools({ approved: group.approved, costStates: group.costStates, autoToolBySlot });
     for (const [key, cell] of Object.entries(allocated)) {
       const index = Number(key);
       if (index < fromSlot || index >= toSlot) continue;
