@@ -15,6 +15,11 @@ import {
   skillNameOf,
   humanMessageFields,
   parseTeammateMessages,
+  extractThinkingText,
+  hookErrorMessage,
+  parseTaskNotifications,
+  taskNotificationMessage,
+  createTaskNotificationState,
 } from '../server/jsonl-utils.js';
 
 describe('extractTextContent', () => {
@@ -365,6 +370,22 @@ describe('injectedSenderOf', () => {
     assert.deepEqual(injectedSenderOf(user('<system-reminder>...')), { kind: 'system' });
   });
 
+  it('古いツール結果の要約の注記は summary（ツール名の配列）', () => {
+    const r = user(
+      '<system-reminder>\n<tools-used-before-summary>Read, mcp__x__y</tools-used-before-summary>\n</system-reminder>',
+      {
+        isMeta: true,
+      },
+    );
+    assert.deepEqual(injectedSenderOf(r), { kind: 'summary', tools: ['Read', 'mcp__x__y'] });
+    const fields = humanMessageFields(r, extractTextContent(r.message, 0));
+    assert.equal(fields.content, 'Read, mcp__x__y');
+    assert.equal(fields.injected, true);
+    // 他の system-reminder が混ざっていれば従来どおり system
+    const mixed = user('<system-reminder>\nother\n</system-reminder>', { isMeta: true });
+    assert.deepEqual(injectedSenderOf(mixed), { kind: 'system' });
+  });
+
   it('スラッシュコマンド（<command-message> 始まり）と !cmd は人の操作なので null', () => {
     const slash = user('<command-message>ship</command-message>\n<command-name>/ship</command-name>', {
       origin: { kind: 'human' },
@@ -576,5 +597,131 @@ describe('チームメイト（teammate-message）からの送信', () => {
     const r = user(multi);
     assert.deepEqual(injectedSenderOf(r), { kind: 'subagent', name: 'impl, rev', summary: '実装完了' });
     assert.equal(humanMessageFields(r, multi).content, '実装しました。\n\n---\n\nレビュー結果です');
+  });
+});
+
+describe('extractThinkingText', () => {
+  it('中身のある thinking だけを返す（署名だけのものは空）', () => {
+    const msg = {
+      content: [
+        { type: 'thinking', thinking: '', signature: 's' },
+        { type: 'thinking', thinking: '  今これを調べています。\n\n' },
+        { type: 'text', text: '本文' },
+      ],
+    };
+    assert.equal(extractThinkingText(msg), '今これを調べています。');
+    assert.equal(extractThinkingText({ content: [{ type: 'thinking', thinking: '' }] }), '');
+    assert.equal(extractThinkingText(null), '');
+  });
+});
+
+describe('hookErrorMessage', () => {
+  const rec = (attachment) => ({ type: 'attachment', uuid: 'u1', timestamp: 't', attachment });
+
+  it('ツールのフックはそのツールの toolresult に印を付ける', () => {
+    const m = hookErrorMessage(
+      rec({
+        type: 'hook_non_blocking_error',
+        hookName: 'PostToolUse:Edit',
+        toolUseID: 'toolu_01',
+        stderr: 'Failed with non-blocking status code: No stderr output',
+        exitCode: '1',
+        command: 'a.sh',
+      }),
+    );
+    assert.deepEqual(m, {
+      uuid: 'u1',
+      timestamp: 't',
+      role: 'toolresult',
+      content: '',
+      results: [
+        { id: 'toolu_01', hookError: { name: 'PostToolUse:Edit', exitCode: '1', command: 'a.sh', detail: '' } },
+      ],
+    });
+  });
+
+  it('ツールに紐づかないフックは hookerror の 1 行', () => {
+    const m = hookErrorMessage(
+      rec({
+        type: 'hook_non_blocking_error',
+        hookName: 'Stop',
+        toolUseID: '013ff673-1f91',
+        stderr: 'Failed with non-blocking status code: /bin/sh: 1: node: not found',
+        exitCode: 127,
+      }),
+    );
+    assert.equal(m.role, 'hookerror');
+    assert.equal(m.content, '/bin/sh: 1: node: not found');
+    assert.deepEqual(m.hook, { name: 'Stop', exitCode: '127', command: '', detail: '/bin/sh: 1: node: not found' });
+  });
+
+  it('他の attachment は null', () => {
+    assert.equal(hookErrorMessage(rec({ type: 'hook_success' })), null);
+    assert.equal(hookErrorMessage({ type: 'user' }), null);
+  });
+});
+
+const AGENT_NOTIFICATION = `<task-notification>
+<task-id>ae47</task-id>
+<tool-use-id>toolu_018</tool-use-id>
+<status>completed</status>
+<summary>Agent "調査" finished</summary>
+<result>This agent's report was delivered to you.</result>
+<usage><subagent_tokens>84060</subagent_tokens><tool_uses>12</tool_uses><duration_ms>108907</duration_ms></usage>
+</task-notification>`;
+
+describe('parseTaskNotifications', () => {
+  it('タグを読んで 1 件ずつ返す', () => {
+    assert.deepEqual(parseTaskNotifications(AGENT_NOTIFICATION), [
+      {
+        taskId: 'ae47',
+        toolUseId: 'toolu_018',
+        status: 'completed',
+        summary: 'Agent "調査" finished',
+        event: '',
+        result: "This agent's report was delivered to you.",
+        tokens: 84060,
+        toolUses: 12,
+        durationMs: 108907,
+      },
+    ]);
+  });
+
+  it('Monitor のイベントは status が event、複数並んでも拾う', () => {
+    const text =
+      '<task-notification>\n<task-id>bt5</task-id>\n<summary>Monitor event: "CI"</summary>\n<event>line1\nline2</event>\n</task-notification>\n' +
+      '<task-notification>\n<task-id>bg4</task-id>\n<status>failed</status>\n<summary>Background command "x" failed with exit code 144</summary>\n</task-notification>';
+    const tasks = parseTaskNotifications(text);
+    assert.equal(tasks.length, 2);
+    assert.equal(tasks[0].status, 'event');
+    assert.equal(tasks[0].event, 'line1\nline2');
+    assert.equal(tasks[1].status, 'failed');
+    assert.equal(tasks[1].tokens, null);
+  });
+
+  it('タスク通知でなければ null', () => {
+    assert.equal(parseTaskNotifications('ふつうの指示'), null);
+    assert.equal(parseTaskNotifications(null), null);
+  });
+});
+
+describe('taskNotificationMessage', () => {
+  it('enqueue を出し、後から来た同じ本文の user レコードは捨てる', () => {
+    const state = createTaskNotificationState();
+    const queued = taskNotificationMessage({ timestamp: 't1' }, AGENT_NOTIFICATION, state, { queued: true });
+    assert.equal(queued.message.role, 'task');
+    assert.equal(queued.message.content, 'Agent "調査" finished');
+    assert.equal(queued.message.tasks.length, 1);
+    assert.deepEqual(taskNotificationMessage({ uuid: 'u' }, `${AGENT_NOTIFICATION}\n`, state), { message: null });
+  });
+
+  it('enqueue の無い user レコードは出し、同じ本文の積み直しは二度出さない', () => {
+    const state = createTaskNotificationState();
+    assert.equal(taskNotificationMessage({ uuid: 'u' }, AGENT_NOTIFICATION, state).message.uuid, 'u');
+    assert.deepEqual(taskNotificationMessage({}, AGENT_NOTIFICATION, state, { queued: true }), { message: null });
+  });
+
+  it('タスク通知でなければ null', () => {
+    assert.equal(taskNotificationMessage({}, 'こんにちは', createTaskNotificationState()), null);
   });
 });

@@ -55,6 +55,68 @@
   padding-left: 14px;
 }
 
+.chat-message.context-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding-left: 14px;
+  min-width: 0;
+}
+
+/* ツールに紐づかないフックの失敗とタスク通知。中身はツール行（.tool-line）なので、本文中のツール行と左端を揃える */
+.chat-message.hook-error,
+.chat-message.task {
+  padding-left: 14px;
+}
+
+.task-notice-status,
+.task-notice-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.task-notice-meta {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.chat-message.thinking {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  padding-left: 14px;
+}
+
+.chat-message.thinking .artifact-message-icon {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.thinking-message-text {
+  color: var(--text-secondary);
+  font-style: italic;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.chat-message.thinking .chat-time {
+  flex-shrink: 0;
+}
+
+.context-summary-tools {
+  color: var(--text-secondary);
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 .artifact-message-icon {
   flex-shrink: 0;
   font-size: 14px;

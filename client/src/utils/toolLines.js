@@ -91,6 +91,8 @@ export function toolFlagsKey(toolUses, index) {
     if (!f) continue;
     if (f.error) parts.push(`e:${tool.id}`);
     else if (f.created) parts.push(`c:${tool.id}`);
+    // フックの失敗はツール自体の成否とは別に付く。中身（フック名・exit code・stderr）も文字列に含める
+    if (f.hookError) parts.push(`h:${tool.id}:${encodeURIComponent(JSON.stringify(f.hookError))}`);
   }
   return parts.join('|');
 }
@@ -100,11 +102,33 @@ export function parseToolFlagsKey(key) {
   if (!key) return flags;
   for (const part of key.split('|')) {
     const kind = part.slice(0, 1);
-    const id = part.slice(2);
-    if (!id) continue;
-    flags.set(id, kind === 'e' ? { error: true } : { created: true });
+    const rest = part.slice(2);
+    if (kind === 'h') {
+      const at = rest.indexOf(':');
+      if (at <= 0) continue;
+      const id = rest.slice(0, at);
+      let hookError;
+      try {
+        hookError = JSON.parse(decodeURIComponent(rest.slice(at + 1)));
+      } catch {
+        continue;
+      }
+      flags.set(id, { ...flags.get(id), hookError });
+      continue;
+    }
+    if (!rest) continue;
+    flags.set(rest, { ...flags.get(rest), ...(kind === 'e' ? { error: true } : { created: true }) });
   }
   return flags;
+}
+
+// フックの失敗の説明（ツール行の印・単独行の title 用）。例: `PostToolUse:Edit が失敗（exit 1）: node: not found`
+export function hookErrorText(hook) {
+  if (!hook) return '';
+  const head = `${hook.name || 'hook'} が失敗${hook.exitCode ? `（exit ${hook.exitCode}）` : ''}`;
+  const lines = [hook.detail ? `${head}: ${hook.detail}` : head];
+  if (hook.command) lines.push(hook.command);
+  return lines.join('\n');
 }
 
 // 本文が無くツール呼び出しだけの assistant メッセージ（JSONL では content ブロックごとに 1 レコードになるので多い）
@@ -149,11 +173,12 @@ export function toolDescription(tool) {
 
 // 束の見出しに出す集計（件数・失敗件数・差分の合計）。畳んでも失敗と差分が隠れないようにするため
 export function summarizeToolRun(tools, index) {
-  const summary = { count: 0, failed: 0, added: 0, removed: 0 };
+  const summary = { count: 0, failed: 0, hookFailed: 0, added: 0, removed: 0 };
   for (const tool of tools || []) {
     summary.count += 1;
     const flags = index?.get(tool?.id);
     if (flags?.error) summary.failed += 1;
+    if (flags?.hookError) summary.hookFailed += 1;
     const stats = toolDiffStats(tool, flags);
     if (stats) {
       summary.added += stats.added;

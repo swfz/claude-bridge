@@ -15,6 +15,7 @@ import {
   toolDiffStats,
   toolFilePath,
   toolFlagsKey,
+  hookErrorText,
 } from '../client/src/utils/toolLines.js';
 import { extractToolResultFlags } from '../server/jsonl-utils.js';
 
@@ -118,6 +119,19 @@ describe('buildToolResultIndex / toolFlagsKey / parseToolFlagsKey', () => {
     assert.equal(flags.size, 2);
     assert.equal(parseToolFlagsKey('').size, 0);
   });
+
+  it('フックの失敗はツールの成否と別に付き、中身ごと文字列を往復する', () => {
+    const hookError = { name: 'PostToolUse:Edit', exitCode: '1', command: 'a.sh', detail: 'x|y:z' };
+    const index = buildToolResultIndex([
+      { role: 'toolresult', results: [{ id: 't1', created: true }] },
+      { role: 'toolresult', results: [{ id: 't1', hookError }] },
+    ]);
+    const key = toolFlagsKey([{ id: 't1' }], index);
+    assert.deepEqual(parseToolFlagsKey(key).get('t1'), { created: true, hookError });
+    assert.equal(summarizeToolRun([{ id: 't1', name: 'Read' }], index).hookFailed, 1);
+    assert.equal(hookErrorText(hookError), 'PostToolUse:Edit が失敗（exit 1）: x|y:z\na.sh');
+    assert.equal(hookErrorText({ name: 'Stop' }), 'Stop が失敗');
+  });
 });
 
 describe('groupChatItems', () => {
@@ -192,8 +206,8 @@ describe('summarizeToolRun', () => {
       ],
       index,
     );
-    assert.deepEqual(summary, { count: 3, failed: 1, added: 4, removed: 1 });
-    assert.deepEqual(summarizeToolRun(null), { count: 0, failed: 0, added: 0, removed: 0 });
+    assert.deepEqual(summary, { count: 3, failed: 1, hookFailed: 0, added: 4, removed: 1 });
+    assert.deepEqual(summarizeToolRun(null), { count: 0, failed: 0, hookFailed: 0, added: 0, removed: 0 });
   });
 });
 

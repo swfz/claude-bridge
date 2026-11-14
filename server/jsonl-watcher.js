@@ -8,6 +8,10 @@ import {
   extractToolResultFlags,
   extractContextUsage,
   extractTextContent,
+  extractThinkingText,
+  hookErrorMessage,
+  taskNotificationMessage,
+  createTaskNotificationState,
   extractToolUses,
   humanMessageFields,
 } from './jsonl-utils.js';
@@ -64,6 +68,8 @@ export class JsonlWatcher {
       linesRead,
       attachExisting: !!attachExisting,
       onMessage,
+      // enqueue 済みのタスク通知の本文（後から来る同じ本文の user レコードを捨てるため）
+      pendingTasks: createTaskNotificationState(),
       fsWatcher: null,
       pollTimer: null,
     };
@@ -209,7 +215,11 @@ export class JsonlWatcher {
         const record = JSON.parse(line);
         if (record.type === 'user') {
           const text = extractTextContent(record.message);
-          if (text) {
+          const task = text ? taskNotificationMessage(record, text, state.pendingTasks) : null;
+          if (task) {
+            if (task.message)
+              state.onMessage({ type: 'chat_message', bridgeSessionId: state.bridgeSessionId, ...task.message });
+          } else if (text) {
             state.onMessage({
               type: 'chat_message',
               bridgeSessionId: state.bridgeSessionId,
@@ -264,16 +274,38 @@ export class JsonlWatcher {
               timestamp: record.timestamp || '',
             });
           }
+        } else if (record.type === 'attachment') {
+          const hookError = hookErrorMessage(record);
+          if (hookError)
+            state.onMessage({ type: 'chat_message', bridgeSessionId: state.bridgeSessionId, ...hookError });
         } else if (record.type === 'queue-operation' && record.operation === 'enqueue' && record.content) {
-          state.onMessage({
-            type: 'chat_message',
-            bridgeSessionId: state.bridgeSessionId,
-            role: 'human',
-            content: record.content,
-            uuid: record.uuid,
-            timestamp: record.timestamp || '',
-          });
+          const task = taskNotificationMessage(record, record.content, state.pendingTasks, { queued: true });
+          if (task) {
+            if (task.message)
+              state.onMessage({ type: 'chat_message', bridgeSessionId: state.bridgeSessionId, ...task.message });
+          } else {
+            state.onMessage({
+              type: 'chat_message',
+              bridgeSessionId: state.bridgeSessionId,
+              role: 'human',
+              content: record.content,
+              uuid: record.uuid,
+              timestamp: record.timestamp || '',
+            });
+          }
         } else if (record.type === 'assistant') {
+          // 途中経過（thinking の中身）。チャットでは本文と分けて薄い 1 行で出す
+          const thinking = extractThinkingText(record.message);
+          if (thinking) {
+            state.onMessage({
+              type: 'chat_message',
+              bridgeSessionId: state.bridgeSessionId,
+              role: 'thinking',
+              content: thinking,
+              uuid: record.uuid,
+              timestamp: record.timestamp || '',
+            });
+          }
           const text = extractTextContent(record.message);
           const toolUses = extractToolUses(record.message);
           if (text || toolUses.length > 0) {
