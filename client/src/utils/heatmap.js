@@ -1,9 +1,21 @@
 // 活動ヒートマップ（草）の組み立て。表示に依存しない計算はここに寄せる。
 
+// activeMs は AI 稼働時間（推論＋ツール実行の ms。サーバーが週間カレンダーと同じ数え方で日別に出す）
 export const HEAT_METRICS = [
   { key: 'messages', label: 'メッセージ' },
   { key: 'tokens', label: 'トークン' },
+  { key: 'activeMs', label: '稼働時間' },
 ];
+
+// localStorage の指標を検証する（知らない値は既定のメッセージ）
+export function normalizeMetric(stored) {
+  return HEAT_METRICS.some((m) => m.key === stored) ? stored : 'messages';
+}
+
+// AI 稼働時間の説明。見出しの合計と、指標が稼働時間のときの凡例に添える
+export const ACTIVE_TIME_TITLE =
+  'AI 稼働時間: 推論とツール実行の時間を呼び出しごとに足したもの。' +
+  '並行セッション・サブエージェントも合算するので 1 日 24h を超えることがある。1 回の呼び出しは 600 秒で打ち切り';
 
 export const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -104,8 +116,19 @@ export function formatTokens(n) {
   return String(v);
 }
 
+// AI 稼働時間（ms）を 3.2h / 45m に。並行分を合算するので 24h を超えてもそのまま出す
+export function formatDuration(ms) {
+  const v = ms || 0;
+  const hours = v / 3600000;
+  if (hours >= 100) return `${Math.round(hours).toLocaleString('ja-JP')}h`;
+  if (hours >= 1) return `${hours.toFixed(1)}h`;
+  return `${Math.round(v / 60000)}m`;
+}
+
 export function formatMetric(metric, value) {
-  return metric === 'tokens' ? formatTokens(value) : formatCount(value);
+  if (metric === 'tokens') return formatTokens(value);
+  if (metric === 'activeMs') return formatDuration(value);
+  return formatCount(value);
 }
 
 export function formatDateLabel(date) {
@@ -120,14 +143,18 @@ function breakdownLines(stats) {
     `トークン ${formatTokens(stats.tokens)}`,
     `  入力 ${formatTokens(stats.inputTokens)} / 出力 ${formatTokens(stats.outputTokens)}`,
     `  キャッシュ作成 ${formatTokens(stats.cacheCreationTokens)} / 読み ${formatTokens(stats.cacheReadTokens)}`,
+    `AI 稼働 ${formatDuration(stats.activeMs)}`,
   ];
 }
+
+// メッセージも稼働も無い期間。0:00 をまたいだ呼び出しの続きだけの日は稼働だけがある
+const isIdle = (stats) => stats.messages === 0 && !stats.activeMs;
 
 // セルのツールチップ。メトリックを切り替えても内訳は両方見せる
 export function cellTooltip(day) {
   if (!day) return '';
   const lines = [formatDateLabel(day.date)];
-  if (day.messages === 0) {
+  if (isIdle(day)) {
     lines.push('活動なし');
     return lines.join('\n');
   }
@@ -167,6 +194,7 @@ const SUM_FIELDS = [
   'outputTokens',
   'cacheCreationTokens',
   'cacheReadTokens',
+  'activeMs',
 ];
 
 // 'YYYY-MM-DD' に日数を足す。曜日と同じく UTC で組み立ててローカル TZ に依存させない
@@ -232,7 +260,7 @@ export function bucketTooltip(bucket, granularity = 'day') {
   if (!bucket) return '';
   if (granularity === 'day') return cellTooltip({ ...bucket, date: bucket.from });
   const lines = [`${bucket.label}（${bucket.days} 日）`];
-  if (bucket.messages === 0) {
+  if (isIdle(bucket)) {
     lines.push('活動なし');
     return lines.join('\n');
   }
@@ -300,12 +328,14 @@ export function monthLabels(weeks) {
 // --- ヘッダーの要約・ツールチップ ---
 
 // 見出しの数字。何の合計かが読めるよう期間を先頭に付ける
+// 「稼働 N 日」（活動のあった日数）と紛れないよう、稼働時間は「AI 稼働」と書く
 export function summaryText(total, dayCount) {
   if (!total) return '';
   return [
     `直近 ${dayCount} 日`,
     `${formatCount(total.messages)} メッセージ`,
     `${formatTokens(total.tokens)} トークン`,
+    ...(typeof total.activeMs === 'number' ? [`AI 稼働 ${formatDuration(total.activeMs)}`] : []),
     `稼働 ${total.activeDays} 日`,
   ].join(' · ');
 }
@@ -313,10 +343,18 @@ export function summaryText(total, dayCount) {
 const UNIT_LABEL = { day: '日', week: '週', month: '月' };
 
 // 常時は出さない凡例（濃淡の意味・最大値）。情報アイコンのツールチップに回す
-export function legendTooltip({ view, metric, granularity = 'day', days }) {
+export function legendTooltip({ view, metric, granularity = 'day', days, stacked = false }) {
   const metricLabel = HEAT_METRICS.find((m) => m.key === metric)?.label || metric;
   const lines = [];
-  if (view === 'heatmap') {
+  if (view === 'bars' && stacked) {
+    const buckets = granularity === 'day' ? days : bucketDays(days, granularity);
+    lines.push('高さ: 段ごとに、その指標の最大値に対する線形（同じ列は同じ期間）');
+    for (const m of HEAT_METRICS) {
+      const max = Math.max(0, ...buckets.map((b) => b[m.key] || 0));
+      lines.push(`${m.label}: 最大 ${formatMetric(m.key, max)} / ${UNIT_LABEL[granularity]}`);
+    }
+    lines.push(ACTIVE_TIME_TITLE);
+  } else if (view === 'heatmap') {
     lines.push(`濃淡: 少 ░▒▓█ 多（${metricLabel}。活動があった日の 25/50/75% 点で 4 段階）`);
     const max = Math.max(0, ...days.map((d) => d[metric] || 0));
     lines.push(`最大 ${formatMetric(metric, max)} / 日`);
@@ -328,6 +366,7 @@ export function legendTooltip({ view, metric, granularity = 'day', days }) {
   } else if (view === 'weekday') {
     lines.push(`直近 ${days.length} 日の${metricLabel}を曜日ごとに合計`);
   }
+  if (metric === 'activeMs' && !(view === 'bars' && stacked)) lines.push(ACTIVE_TIME_TITLE);
   lines.push('棒・升目のクリックでその期間に一覧を絞り込む');
   return lines.join('\n');
 }

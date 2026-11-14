@@ -29,6 +29,11 @@ import {
   sparklinePoints,
   summaryText,
   weeklyOutlier,
+  formatDuration,
+  formatMetric,
+  normalizeMetric,
+  HEAT_METRICS,
+  ACTIVE_TIME_TITLE,
 } from '../client/src/utils/heatmap.js';
 
 const day = (date, extra = {}) => ({
@@ -41,8 +46,11 @@ const day = (date, extra = {}) => ({
   cacheCreationTokens: 0,
   cacheReadTokens: 0,
   tokens: 0,
+  activeMs: 0,
   ...extra,
 });
+
+const HOUR = 3600000;
 
 // 連続した日付を作る（YYYY-MM-DD、UTC で組み立てるのでローカル TZ に依存しない）
 const range = (start, count) => {
@@ -386,6 +394,90 @@ describe('summaryText', () => {
 
   it('is empty without totals', () => {
     assert.equal(summaryText(null, 365), '');
+  });
+});
+
+describe('summaryText with AI busy time', () => {
+  it('adds the AI busy time without clashing with the active-day count', () => {
+    assert.equal(
+      summaryText({ messages: 10, tokens: 1000, activeMs: 412.4 * HOUR, activeDays: 3 }, 30),
+      '直近 30 日 · 10 メッセージ · 1.0K トークン · AI 稼働 412h · 稼働 3 日',
+    );
+  });
+});
+
+describe('AI busy time metric (activeMs)', () => {
+  it('is the third metric', () => {
+    assert.deepEqual(
+      HEAT_METRICS.map((m) => m.key),
+      ['messages', 'tokens', 'activeMs'],
+    );
+  });
+
+  it('restores only known metrics from storage', () => {
+    assert.equal(normalizeMetric('activeMs'), 'activeMs');
+    assert.equal(normalizeMetric('tokens'), 'tokens');
+    assert.equal(normalizeMetric('all'), 'messages');
+    assert.equal(normalizeMetric(null), 'messages');
+  });
+
+  it('formats hours with one decimal, minutes under an hour, and keeps more than 24h as is', () => {
+    assert.equal(formatDuration(3.24 * HOUR), '3.2h');
+    assert.equal(formatDuration(45 * 60000), '45m');
+    assert.equal(formatDuration(0), '0m');
+    assert.equal(formatDuration(undefined), '0m');
+    assert.equal(formatDuration(30.5 * HOUR), '30.5h');
+    assert.equal(formatDuration(1234.4 * HOUR), '1,234h');
+    assert.equal(formatMetric('activeMs', 2 * HOUR), '2.0h');
+    assert.equal(formatMetric('messages', 1234), '1,234');
+  });
+
+  it('sums activeMs into week and month buckets', () => {
+    const days = [day('2026-01-05', { activeMs: HOUR }), day('2026-01-06', { activeMs: 2 * HOUR })];
+    assert.equal(bucketDays(days, 'week')[0].activeMs, 3 * HOUR);
+    assert.equal(bucketDays(days, 'month')[0].activeMs, 3 * HOUR);
+  });
+
+  it('shows the busy time in tooltips, also for a day that only has busy time', () => {
+    assert.match(cellTooltip(day('2026-01-05', { messages: 2, activeMs: HOUR })), /AI 稼働 1\.0h/);
+    // 0:00 をまたいだ呼び出しの続きだけの日（メッセージ 0）も「活動なし」にしない
+    const carried = cellTooltip(day('2026-01-06', { activeMs: 20 * 60000 }));
+    assert.doesNotMatch(carried, /活動なし/);
+    assert.match(carried, /AI 稼働 20m/);
+    const bucket = bucketDays([day('2026-01-06', { activeMs: 20 * 60000 })], 'week')[0];
+    assert.match(bucketTooltip(bucket, 'week'), /AI 稼働 20m/);
+  });
+
+  it('works with the weekday totals, the outlier and the sparkline', () => {
+    const days = [];
+    for (let i = 0; i < 21; i++) {
+      const date = new Date(Date.UTC(2026, 0, 5 + i)).toISOString().slice(0, 10);
+      days.push(day(date, { messages: 1, activeMs: i >= 14 ? 5 * HOUR : HOUR }));
+    }
+    const outlier = weeklyOutlier(days, 'activeMs');
+    assert.equal(outlier.ratio, 5);
+    assert.match(outlierTooltip(outlier, 'activeMs'), /35\.0h.*7\.0h/);
+    assert.equal(weekdayTotals(days, 'activeMs').find((r) => r.label === '月').value, 7 * HOUR);
+    assert.deepEqual(recentValues(days, 'activeMs', 2), [5 * HOUR, 5 * HOUR]);
+  });
+
+  it('explains the busy time in the legend', () => {
+    const days = [day('2026-01-05', { messages: 3, activeMs: 2 * HOUR })];
+    const text = legendTooltip({ view: 'heatmap', metric: 'activeMs', days });
+    assert.match(text, /最大 2\.0h \/ 日/);
+    assert.ok(text.includes(ACTIVE_TIME_TITLE));
+    assert.match(ACTIVE_TIME_TITLE, /24h を超える/);
+    assert.match(ACTIVE_TIME_TITLE, /600 秒/);
+  });
+
+  it('lists the max of every metric when the bars are stacked', () => {
+    const days = [day('2026-01-05', { messages: 3, tokens: 1000, activeMs: 2 * HOUR })];
+    const text = legendTooltip({ view: 'bars', metric: 'messages', granularity: 'day', days, stacked: true });
+    assert.match(text, /メッセージ: 最大 3 \/ 日/);
+    assert.match(text, /トークン: 最大 1\.0K \/ 日/);
+    assert.match(text, /稼働時間: 最大 2\.0h \/ 日/);
+    // 並べるは棒ビューだけ。他のビューでは単一指標のまま
+    assert.doesNotMatch(legendTooltip({ view: 'heatmap', metric: 'messages', days, stacked: true }), /段ごと/);
   });
 });
 

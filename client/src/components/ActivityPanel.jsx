@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { TbInfoCircle, TbRefresh } from 'react-icons/tb';
 import {
+  ACTIVE_TIME_TITLE,
   ACTIVITY_VIEWS,
   BAR_GRANULARITIES,
   HEAT_METRICS,
@@ -21,6 +22,7 @@ import {
   monthLabels,
   normalizeActivityView,
   normalizeGranularity,
+  normalizeMetric,
   outlierText,
   outlierTooltip,
   periodEquals,
@@ -38,6 +40,8 @@ const METRIC_KEY = 'homeHeatmapMetric';
 const OPEN_KEY = 'homeHeatmapOpen';
 const VIEW_KEY = 'homeActivityView';
 const GRANULARITY_KEY = 'homeActivityBarGranularity';
+// 棒ビューで 3 指標を縦に並べるか。metric とは別に持つ（day[metric] を引く箇所に 'all' のような値を入れない）
+const STACKED_KEY = 'homeActivityBarsStacked';
 
 const SPARK_WIDTH = 80;
 const SPARK_HEIGHT = 16;
@@ -124,16 +128,90 @@ function HeatmapView({ days, metric, selectedPeriod, onSelectPeriod }) {
   );
 }
 
+// 棒 1 段。buckets を受け取り、最大値に対する線形の高さで描く。
+// outlierKey は今週が突出しているときの週バケットの key（その棒を警告色にする）
+function BarRow({ buckets, metric, granularity, selectedPeriod, onSelectPeriod, outlierKey }) {
+  const max = useMemo(() => Math.max(0, ...buckets.map((b) => b[metric] || 0)), [buckets, metric]);
+  return (
+    <div className="activity-bars">
+      {buckets.map((bucket) => {
+        const value = bucket[metric] || 0;
+        const period = { from: bucket.from, to: bucket.to, label: bucket.label };
+        const selected = periodEquals(selectedPeriod, period);
+        return (
+          <button
+            key={bucket.key}
+            type="button"
+            className={`activity-bar-slot ${selected ? 'selected' : ''} ${
+              granularity === 'week' && bucket.key === outlierKey ? 'outlier' : ''
+            }`}
+            title={bucketTooltip(bucket, granularity)}
+            tabIndex={-1}
+            onClick={() => togglePeriod(selectedPeriod, period, onSelectPeriod)}
+          >
+            <div
+              className={`activity-bar ${value > 0 ? '' : 'zero'}`}
+              style={{ height: `${barRatio(value, max) * 100}%` }}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MonthTicks({ ticks }) {
+  return (
+    <div className="activity-daily-months">
+      {ticks.map((tick) => (
+        <span key={tick.index} className="activity-month" style={{ gridColumn: tick.index + 1 }}>
+          {tick.label}
+          {tick.year && <span className="activity-month-year">{tick.year}</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // 日・週・月の棒。濃淡では潰れる「量の差」を高さで見るためのビューなので、
 // しきい値の分位ではなく最大値に対する線形の高さにする。
-// outlierKey は今週が突出しているときの週バケットの key（週別のときだけその棒を警告色にする）
-function BarsView({ days, metric, granularity, selectedPeriod, onSelectPeriod, outlierKey }) {
+// stacked のときはメッセージ / トークン / 稼働時間の 3 段を同じ列グリッド・同じスクロール領域で縦に重ね、
+// 同じ期間が縦に揃うようにする（各段は自分の最大値に対する線形）。外れ値の色は単一指標（metric）の段だけ
+function BarsView({ days, metric, granularity, stacked, selectedPeriod, onSelectPeriod, outlierKey }) {
   const buckets = useMemo(() => bucketDays(days, granularity), [days, granularity]);
-  const max = useMemo(() => Math.max(0, ...buckets.map((b) => b[metric] || 0)), [buckets, metric]);
   const ticks = useMemo(() => bucketTicks(buckets, granularity), [buckets, granularity]);
   // 棒と月ラベルは同じ列グリッドを共有する。本数と幅は子に継承させる
   const columns = { '--count': buckets.length, '--bar': barWidthFor(granularity) };
+  const rowProps = { buckets, granularity, selectedPeriod, onSelectPeriod };
 
+  if (stacked) {
+    // 段ラベル・目盛りの列は grid の 1 列目（auto）で共有するので、ラベルの幅が違っても棒の列が揃う
+    return (
+      <div className="activity-stack" style={columns}>
+        {HEAT_METRICS.map((m) => {
+          const max = Math.max(0, ...buckets.map((b) => b[m.key] || 0));
+          return (
+            <div key={m.key} className="activity-stack-row" data-metric={m.key}>
+              <div
+                className="activity-stack-axis"
+                title={m.key === 'activeMs' ? ACTIVE_TIME_TITLE : `${m.label}（最大 ${formatMetric(m.key, max)}）`}
+              >
+                <span className="activity-stack-label">{m.label}</span>
+                <span>{formatMetric(m.key, max)}</span>
+              </div>
+              <BarRow {...rowProps} metric={m.key} outlierKey={m.key === metric ? outlierKey : undefined} />
+            </div>
+          );
+        })}
+        <div className="activity-stack-row">
+          <div className="activity-stack-axis spacer" />
+          <MonthTicks ticks={ticks} />
+        </div>
+      </div>
+    );
+  }
+
+  const max = Math.max(0, ...buckets.map((b) => b[metric] || 0));
   return (
     <div className="activity-daily" style={columns}>
       <div className="activity-daily-axis">
@@ -142,38 +220,8 @@ function BarsView({ days, metric, granularity, selectedPeriod, onSelectPeriod, o
         <span>0</span>
       </div>
       <div className="activity-daily-plot">
-        <div className="activity-bars">
-          {buckets.map((bucket) => {
-            const value = bucket[metric] || 0;
-            const period = { from: bucket.from, to: bucket.to, label: bucket.label };
-            const selected = periodEquals(selectedPeriod, period);
-            return (
-              <button
-                key={bucket.key}
-                type="button"
-                className={`activity-bar-slot ${selected ? 'selected' : ''} ${
-                  granularity === 'week' && bucket.key === outlierKey ? 'outlier' : ''
-                }`}
-                title={bucketTooltip(bucket, granularity)}
-                tabIndex={-1}
-                onClick={() => togglePeriod(selectedPeriod, period, onSelectPeriod)}
-              >
-                <div
-                  className={`activity-bar ${value > 0 ? '' : 'zero'}`}
-                  style={{ height: `${barRatio(value, max) * 100}%` }}
-                />
-              </button>
-            );
-          })}
-        </div>
-        <div className="activity-daily-months">
-          {ticks.map((tick) => (
-            <span key={tick.index} className="activity-month" style={{ gridColumn: tick.index + 1 }}>
-              {tick.label}
-              {tick.year && <span className="activity-month-year">{tick.year}</span>}
-            </span>
-          ))}
-        </div>
+        <BarRow {...rowProps} metric={metric} outlierKey={outlierKey} />
+        <MonthTicks ticks={ticks} />
       </div>
     </div>
   );
@@ -221,7 +269,7 @@ function Sparkline({ values }) {
   );
 }
 
-// ホーム画面の活動パネル。日別の活動量（メッセージ数 / トークン数）を
+// ホーム画面の活動パネル。日別の活動量（メッセージ数 / トークン数 / AI 稼働時間）を
 // 草・棒（日別 / 週別 / 月別）・曜日別で見せる。集計はサーバー側で、ここは描くだけ。
 // 棒・升目のクリックは「その期間」を選ぶ操作で、選んだ期間は下の一覧の絞り込みに使う。
 // 「カレンダー」だけは別データ（10 分枠の集計）で、表示する週はこのパネルが持ち、
@@ -240,7 +288,8 @@ export default function ActivityPanel({
   onOpenSession,
   dirColorOf,
 }) {
-  const [metric, setMetric] = useState(() => (readStorage(METRIC_KEY) === 'tokens' ? 'tokens' : 'messages'));
+  const [metric, setMetric] = useState(() => normalizeMetric(readStorage(METRIC_KEY)));
+  const [stacked, setStacked] = useState(() => readStorage(STACKED_KEY) === 'true');
   const [initial] = useState(loadInitialView);
   const [view, setView] = useState(initial.view);
   const [granularity, setGranularity] = useState(initial.granularity);
@@ -263,6 +312,7 @@ export default function ActivityPanel({
   useEffect(() => writeStorage(METRIC_KEY, metric), [metric]);
   useEffect(() => writeStorage(VIEW_KEY, view), [view]);
   useEffect(() => writeStorage(GRANULARITY_KEY, granularity), [granularity]);
+  useEffect(() => writeStorage(STACKED_KEY, String(stacked)), [stacked]);
   useEffect(() => writeStorage(OPEN_KEY, String(open)), [open]);
 
   // 各ビューの useMemo が効くよう、参照を毎レンダー作り直さない
@@ -274,11 +324,18 @@ export default function ActivityPanel({
   useEffect(() => {
     const el = scrollRef.current;
     if (el && scrolls) el.scrollLeft = el.scrollWidth;
-  }, [open, view, granularity, scrolls, days.length]);
+  }, [open, view, granularity, stacked, scrolls, days.length]);
 
   const outlier = useMemo(() => weeklyOutlier(days, metric), [days, metric]);
   const sparkValues = useMemo(() => recentValues(days, metric), [days, metric]);
   const busy = isCalendar ? calendarLoading : loading;
+  // 「並べる」は棒ビューでだけ効く。他のビューでは最後に選んだ単一指標のまま
+  const showStacked = view === 'bars' && stacked;
+  const selectMetric = (key) => {
+    setMetric(key);
+    // 他のビューで指標を選んでも、棒に戻ったときの「並べる」は残す
+    if (view === 'bars') setStacked(false);
+  };
 
   return (
     <section className={`activity ${open ? '' : 'collapsed'}`}>
@@ -305,7 +362,11 @@ export default function ActivityPanel({
             </button>
           </span>
         ) : (
-          total && <span className="activity-summary">{summaryText(total, days.length)}</span>
+          total && (
+            <span className="activity-summary" title={ACTIVE_TIME_TITLE}>
+              {summaryText(total, days.length)}
+            </span>
+          )
         )}
         {outlier && !isCalendar && (
           <span className="activity-outlier" title={outlierTooltip(outlier, metric)}>
@@ -313,7 +374,11 @@ export default function ActivityPanel({
           </span>
         )}
         {open && !isCalendar && days.length > 0 && (
-          <span className="activity-info" title={legendTooltip({ view, metric, granularity, days })} aria-label="凡例">
+          <span
+            className="activity-info"
+            title={legendTooltip({ view, metric, granularity, days, stacked })}
+            aria-label="凡例"
+          >
             <TbInfoCircle />
           </span>
         )}
@@ -333,14 +398,29 @@ export default function ActivityPanel({
                 ))}
               </div>
             )}
-            {/* カレンダーはメッセージ / トークンの切り替えを使わない */}
+            {/* 「並べる」は棒ビューでだけ効くので、粒度と同じく棒ビューのときだけ出す。
+                右寄せの並びの左端に足すだけなので、指標・表示・更新の位置は動かない */}
+            {view === 'bars' && (
+              <div className="activity-segmented small" role="group" aria-label="並べる">
+                <button
+                  className={`activity-segment activity-segment-stack ${showStacked ? 'active' : ''}`}
+                  aria-pressed={showStacked}
+                  onClick={() => setStacked((v) => !v)}
+                  title="メッセージ / トークン / 稼働時間の棒を、同じ期間が縦に揃うよう 3 段に並べる"
+                >
+                  並べる
+                </button>
+              </div>
+            )}
+            {/* カレンダーは指標の切り替えを使わない。「並べる」中は単一指標を選ぶと解除する */}
             {!isCalendar && (
               <div className="activity-segmented small" role="group" aria-label="指標">
                 {HEAT_METRICS.map((m) => (
                   <button
                     key={m.key}
-                    className={`activity-segment ${metric === m.key ? 'active' : ''}`}
-                    onClick={() => setMetric(m.key)}
+                    className={`activity-segment ${!showStacked && metric === m.key ? 'active' : ''}`}
+                    onClick={() => selectMetric(m.key)}
+                    title={m.key === 'activeMs' ? ACTIVE_TIME_TITLE : undefined}
                   >
                     {m.label}
                   </button>
@@ -400,6 +480,7 @@ export default function ActivityPanel({
                   days={days}
                   metric={metric}
                   granularity={granularity}
+                  stacked={stacked}
                   selectedPeriod={selectedPeriod}
                   onSelectPeriod={onSelectPeriod}
                   outlierKey={outlier?.key}
