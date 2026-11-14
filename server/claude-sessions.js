@@ -8,6 +8,10 @@ import {
   extractToolResultFlags,
   extractContextUsage,
   extractTextContent,
+  extractThinkingText,
+  hookErrorMessage,
+  taskNotificationMessage,
+  createTaskNotificationState,
   extractToolUses,
   humanMessageFields,
 } from './jsonl-utils.js';
@@ -252,13 +256,18 @@ export async function listClaudeSessions({ limit = 30 } = {}) {
 // セッション本体とサブエージェントのトランスクリプトは同じ形式なので両方から使う。
 export function parseHistoryLines(content) {
   const messages = [];
+  // enqueue 済みのタスク通知の本文（後から来る同じ本文の user レコードを捨てるため）
+  const pendingTasks = createTaskNotificationState();
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
       const record = JSON.parse(line);
       if (record.type === 'user') {
         const text = extractTextContent(record.message, 0);
-        if (text) {
+        const task = text ? taskNotificationMessage(record, text, pendingTasks) : null;
+        if (task) {
+          if (task.message) messages.push(task.message);
+        } else if (text) {
           messages.push({
             role: 'human',
             ...humanMessageFields(record, text),
@@ -305,7 +314,15 @@ export function parseHistoryLines(content) {
             timestamp: record.timestamp || record.updatedAt || '',
           });
         }
+      } else if (record.type === 'attachment') {
+        const hookError = hookErrorMessage(record);
+        if (hookError) messages.push(hookError);
       } else if (record.type === 'queue-operation' && record.operation === 'enqueue' && record.content) {
+        const task = taskNotificationMessage(record, record.content, pendingTasks, { queued: true });
+        if (task) {
+          if (task.message) messages.push(task.message);
+          continue;
+        }
         messages.push({
           role: 'human',
           content: record.content,
@@ -313,6 +330,16 @@ export function parseHistoryLines(content) {
           timestamp: record.timestamp || '',
         });
       } else if (record.type === 'assistant') {
+        // 途中経過（thinking の中身）。チャットでは本文と分けて薄い 1 行で出す
+        const thinking = extractThinkingText(record.message);
+        if (thinking) {
+          messages.push({
+            role: 'thinking',
+            content: thinking,
+            uuid: record.uuid,
+            timestamp: record.timestamp || record.updatedAt || '',
+          });
+        }
         const text = extractTextContent(record.message, 0);
         const toolUses = extractToolUses(record.message);
         if (text || toolUses.length > 0) {

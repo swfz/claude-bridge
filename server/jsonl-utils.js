@@ -32,6 +32,121 @@ export function extractTextContent(msg, maxLen = 0) {
   return maxLen > 0 ? text.slice(0, maxLen) : text;
 }
 
+// タスク通知（バックグラウンドのサブエージェント・シェル・Monitor が終わった／イベントが来たときに Claude Code が差し込む）。
+// 本文は `<task-notification><task-id>…<status>completed|failed|killed|stopped</status><summary>…</summary>
+// <usage><subagent_tokens>…<tool_uses>…<duration_ms>…</usage></task-notification>` の形（Monitor のイベントは
+// status の代わりに <event>）。1 つの本文に複数並ぶこともある。該当しなければ null
+const TASK_NOTIFICATION_PATTERN = /<task-notification>([\s\S]*?)<\/task-notification>/g;
+const TASK_TEXT_MAX = 2000;
+export function parseTaskNotifications(text) {
+  if (typeof text !== 'string' || !text.trimStart().startsWith('<task-notification>')) return null;
+  const tasks = [...text.matchAll(TASK_NOTIFICATION_PATTERN)].map(([, inner]) => {
+    const tag = (name, src = inner) => src.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1]?.trim() || '';
+    const usage = tag('usage');
+    const num = (name) => {
+      const v = tag(name, usage);
+      return /^\d+$/.test(v) ? Number(v) : null;
+    };
+    const event = tag('event');
+    return {
+      taskId: tag('task-id'),
+      toolUseId: tag('tool-use-id'),
+      status: tag('status') || (event ? 'event' : ''),
+      summary: tag('summary'),
+      event: event.slice(0, TASK_TEXT_MAX),
+      result: tag('result').slice(0, TASK_TEXT_MAX),
+      tokens: num('subagent_tokens'),
+      toolUses: num('tool_uses'),
+      durationMs: num('duration_ms'),
+    };
+  });
+  return tasks.length > 0 ? tasks : null;
+}
+
+// タスク通知をチャットのメッセージ（role: 'task'）にする。履歴読み込みと JSONL 監視で共用。
+// 通知は必ず queue-operation の enqueue に積まれ、Claude が手すきならその後に同じ本文の user レコード
+// （origin.kind === 'task-notification'）としても書かれる（作業中に取り込まれたときは書かれない）。
+// 両方出すと二重になるので、enqueue を出して本文を pending に覚え、後から来た同じ本文の user レコードは捨てる。
+// 同じ本文が積み直される（enqueue → remove → また enqueue）こともあるので、一度出した本文は shown に覚えて二度出さない。
+// state は createTaskNotificationState() で作り、1 つのセッションの読み込み・監視の間だけ持つ。
+// 戻り値: タスク通知でなければ null、通知なら {message}（捨てるときは message が null）
+export function createTaskNotificationState() {
+  return { pending: new Map(), shown: new Set() };
+}
+
+export function taskNotificationMessage(record, text, state, { queued = false } = {}) {
+  const tasks = parseTaskNotifications(text);
+  if (!tasks) return null;
+  const key = text.trim();
+  const { pending, shown } = state;
+  if (queued) {
+    pending.set(key, (pending.get(key) || 0) + 1);
+  } else {
+    const n = pending.get(key) || 0;
+    if (n > 0) {
+      if (n === 1) pending.delete(key);
+      else pending.set(key, n - 1);
+      return { message: null };
+    }
+  }
+  if (shown.has(key)) return { message: null };
+  shown.add(key);
+  return {
+    message: {
+      role: 'task',
+      content: tasks.map((t) => t.summary).join('\n'),
+      tasks,
+      uuid: record.uuid,
+      timestamp: record.timestamp || '',
+    },
+  };
+}
+
+// フックの失敗（`attachment.type === 'hook_non_blocking_error'`）。処理は止まらないが出しておきたいもの。
+// ツールのフック（PostToolUse 等）は toolUseID が `toolu_…` なので、そのツールの行に印を付ける（toolUseId）。
+// Stop などツールに紐づかないフックは toolUseId が null。stderr は定型の前置きと「No stderr output」を外す
+const HOOK_DETAIL_MAX = 500;
+export function extractHookError(record) {
+  const a =
+    record?.type === 'attachment' && record.attachment && typeof record.attachment === 'object'
+      ? record.attachment
+      : null;
+  if (!a || a.type !== 'hook_non_blocking_error') return null;
+  const detail = String(a.stderr || '')
+    .replace(/^Failed with non-blocking status code:\s*/, '')
+    .trim();
+  return {
+    toolUseId: typeof a.toolUseID === 'string' && a.toolUseID.startsWith('toolu_') ? a.toolUseID : null,
+    name: String(a.hookName || a.hookEvent || 'hook'),
+    exitCode: a.exitCode != null ? String(a.exitCode) : null,
+    command: typeof a.command === 'string' ? a.command : '',
+    detail: detail === 'No stderr output' ? '' : detail.slice(0, HOOK_DETAIL_MAX),
+  };
+}
+
+// フックの失敗をチャットのメッセージにする（履歴読み込みと JSONL 監視で共用）。
+// ツールのフックは toolresult として流し、チャットはそのツールの行に「フック失敗」を付ける。
+// ツールに紐づかないフックは role: 'hookerror' の 1 行として流す。該当しなければ null
+export function hookErrorMessage(record) {
+  const hook = extractHookError(record);
+  if (!hook) return null;
+  const { toolUseId, ...info } = hook;
+  const base = { uuid: record.uuid, timestamp: record.timestamp || '' };
+  if (toolUseId) return { ...base, role: 'toolresult', content: '', results: [{ id: toolUseId, hookError: info }] };
+  return { ...base, role: 'hookerror', content: info.detail, hook: info };
+}
+
+// assistant の thinking ブロックのうち中身があるもの（`thinkingDisplay: "updates"` のときに TUI が
+// 「· summary」付きの薄い文字で出す途中経過）を 1 つの文字列にする。中身の無い（署名だけの）thinking は空文字
+export function extractThinkingText(msg) {
+  const content = msg && typeof msg === 'object' ? msg.content : null;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((b) => b?.type === 'thinking' && typeof b.thinking === 'string' && b.thinking.trim())
+    .map((b) => b.thinking.trim())
+    .join('\n\n');
+}
+
 // Artifact ツールの publish 成功レコードから公開先を取り出す。
 // 成功時だけ toolUseResult がオブジェクトで url/path/title を持つ（失敗時は文字列 + is_error、
 // read/list の結果は url を持たない）ので、それを判定条件にしている。
@@ -195,6 +310,7 @@ export function humanMessageFields(record, text) {
     content:
       extractHandbackReport(record) ||
       (teammate ? teammate.map((m) => m.body).join('\n\n---\n\n') : null) ||
+      (sender?.kind === 'summary' ? sender.tools.join(', ') : null) ||
       (command ? `${command.name}${command.args ? ` ${command.args}` : ''}` : text),
     ...(command ? { command } : {}),
     // タグ注入・isMeta（人が打っていない）ときだけ付ける。リンク一覧で「自分が渡した」と数えないため
@@ -225,7 +341,24 @@ export function injectedSenderOf(record) {
   if (origin?.kind === 'task-notification') return { kind: 'task-notification' };
   const skill = skillNameOf(record);
   if (skill) return { kind: 'skill', name: skill };
+  const summaryTools = parseSummaryTools(extractTextContent(record.message, 0));
+  if (summaryTools) return { kind: 'summary', tools: summaryTools };
   return { kind: 'system' };
+}
+
+// 古いツール結果を Claude Code が要約に置き換えたときに差し込む isMeta の user レコード
+// （`<system-reminder><tools-used-before-summary>Read, Grep</tools-used-before-summary></system-reminder>`）の
+// ツール名の配列。会話の発言ではないので、チャットでは吹き出しにせず 1 行の注記で見せる。該当しなければ null
+export function parseSummaryTools(text) {
+  if (typeof text !== 'string') return null;
+  const m = text.match(
+    /^\s*<system-reminder>\s*<tools-used-before-summary>([\s\S]*?)<\/tools-used-before-summary>\s*<\/system-reminder>\s*$/,
+  );
+  if (!m) return null;
+  return m[1]
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 // サブエージェントの完了報告（peer + handback）の本文だけを取り出す。

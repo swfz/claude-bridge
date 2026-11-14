@@ -462,7 +462,9 @@ export default function App() {
       // artifact（公開リンク）と webfetch（WebFetch の結果。リンク一覧のタイトル用）はセッション種別を問わず受ける
       // toolresult（ツールの失敗・新規作成。チャットのツール行の印用）も同じく種別を問わず受ける
       const isLinkRecord = msg.role === 'artifact' || msg.role === 'webfetch' || msg.role === 'toolresult';
-      if (!(msg.role === 'assistant' || isLinkRecord || (isTmux && msg.role === 'human'))) return;
+      // thinking は Claude の途中経過（TUI で「· summary」付きで薄く出るもの）、hookerror はツールに紐づかないフックの失敗
+      const isNote = msg.role === 'thinking' || msg.role === 'hookerror' || msg.role === 'task';
+      if (!(msg.role === 'assistant' || isNote || isLinkRecord || (isTmux && msg.role === 'human'))) return;
 
       const newMsg = {
         id: `jsonl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -479,8 +481,12 @@ export default function App() {
         path: msg.path,
         // WebFetch の HTTP ステータス（role: 'webfetch' のときだけ入る）
         code: msg.code,
-        // ツールの結果の印 [{id, error?, created?}]（role: 'toolresult' のときだけ入る）
+        // ツールの結果の印 [{id, error?, created?, hookError?}]（role: 'toolresult' のときだけ入る）
         results: msg.results,
+        // フックの失敗 {name, exitCode, command, detail}（role: 'hookerror' のときだけ入る）
+        hook: msg.hook,
+        // タスク通知の中身 [{taskId, status, summary, …}]（role: 'task' のときだけ入る）
+        tasks: msg.tasks,
         // タグ注入・isMeta の user レコード（人が打っていない）。リンク一覧の origin 判定用
         injected: msg.injected,
         // 人が打っていない human の送り手（サブエージェントの報告・タスク通知など）。チャットの見出し用
@@ -756,6 +762,41 @@ export default function App() {
     });
   }, []);
 
+  // チャットのタスク通知（role: 'task'）から開く。task-id はサブエージェントなら agentId、シェルなら taskId と同じ。
+  // 一覧（ポーリングで取っているもの）にあればそちらの情報を使い、無ければ通知の中身で開く（ドロワーが取り直す）。
+  // 一覧は ref で読み、ChatMessage（memo）に渡すハンドラの参照をポーリングで変えない
+  const subagentTasksRef = useRef(subagentTasks);
+  subagentTasksRef.current = subagentTasks;
+  const shellTasksRef = useRef(shellTasks);
+  shellTasksRef.current = shellTasks;
+  const handleOpenTaskNotice = useCallback(
+    (kind, notice) => {
+      if (!notice?.taskId) return;
+      if (kind === 'agent') {
+        const known = (subagentTasksRef.current[activeSessionId] || []).find((t) => t.agentId === notice.taskId);
+        handleOpenSubagentTask(
+          known || {
+            agentId: notice.taskId,
+            description: notice.summary?.match(/^Agent "(.*)"/)?.[1] || notice.summary,
+            status: notice.status === 'completed' ? 'completed' : 'running',
+          },
+        );
+      } else if (kind === 'shell') {
+        const known = (shellTasksRef.current[activeSessionId] || []).find((t) => t.taskId === notice.taskId);
+        const exitCode = notice.summary?.match(/exit code (\d+)/)?.[1];
+        handleOpenShellTask(
+          known || {
+            taskId: notice.taskId,
+            label: notice.summary?.match(/"(.*)"/)?.[1] || notice.summary,
+            status: 'exited',
+            exitCode: exitCode != null ? Number(exitCode) : null,
+          },
+        );
+      }
+    },
+    [activeSessionId, handleOpenSubagentTask, handleOpenShellTask],
+  );
+
   // ドロワーからの取得要求（初回＋実行中のポーリング）
   const handleRequestShellOutput = useCallback(
     (taskId) => {
@@ -921,8 +962,12 @@ export default function App() {
         path: m.path,
         // WebFetch の HTTP ステータス（role: 'webfetch' のときだけ入る）
         code: m.code,
-        // ツールの結果の印 [{id, error?, created?}]（role: 'toolresult' のときだけ入る）
+        // ツールの結果の印 [{id, error?, created?, hookError?}]（role: 'toolresult' のときだけ入る）
         results: m.results,
+        // フックの失敗 {name, exitCode, command, detail}（role: 'hookerror' のときだけ入る）
+        hook: m.hook,
+        // タスク通知の中身 [{taskId, status, summary, …}]（role: 'task' のときだけ入る）
+        tasks: m.tasks,
         // タグ注入・isMeta の user レコード（人が打っていない）。リンク一覧の origin 判定用
         injected: m.injected,
         // 人が打っていない human の送り手（サブエージェントの報告・タスク通知など）。チャットの見出し用
@@ -2039,6 +2084,7 @@ export default function App() {
                     onPickMessageForReview={handlePickMessageForReview}
                     pins={pins}
                     onTogglePin={handleTogglePin}
+                    onOpenTaskNotice={handleOpenTaskNotice}
                     readonly={isReadonly}
                     sessionId={activeSessionId}
                   />

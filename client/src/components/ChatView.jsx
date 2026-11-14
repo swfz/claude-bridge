@@ -28,6 +28,10 @@ import { humanSenderLabel } from '../utils/messageSender.js';
 import { pinnedUuidSet } from '../utils/pins.js';
 import { dragTo } from '../utils/dragPosition.js';
 import {
+  TbActivity,
+  TbArrowsMinimize,
+  TbBell,
+  TbBolt,
   TbChecklist,
   TbChevronDown,
   TbChevronRight,
@@ -58,7 +62,9 @@ import {
   toolDiffStats,
   toolFilePath,
   toolFlagsKey,
+  hookErrorText,
 } from '../utils/toolLines.js';
+import { taskDetailText, taskKindOf, taskMetaText, taskStatusLabel } from '../utils/taskNotifications.js';
 import './ChatView.css';
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
@@ -154,6 +160,11 @@ function ToolLine({ tool, flags, sessionCwd, onOpenPreview, onOpenFileReview }) 
         {/* 差分の行数（新規ラベル＋追加行数）はファイル名のすぐ後ろ。ホバー中は右端の操作と入れ替える */}
         <DiffStats stats={stats} />
         {failed && <span className="tool-line-failed">失敗</span>}
+        {flags?.hookError && (
+          <span className="tool-line-failed tool-line-hook-failed" title={hookErrorText(flags.hookError)}>
+            フック失敗
+          </span>
+        )}
         <span className="tool-line-hover" onClick={(e) => e.stopPropagation()}>
           {filePath && onOpenFileReview && (
             <button className="tool-line-action" onClick={() => onOpenFileReview(filePath)}>
@@ -168,6 +179,64 @@ function ToolLine({ tool, flags, sessionCwd, onOpenPreview, onOpenFileReview }) 
       {expanded && (
         <div className="tool-use-detail">
           <pre className="tool-detail-pre">{formatToolInput(tool.name, tool.input)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// タスク通知（バックグラウンドのサブエージェント・シェル・Monitor の完了やイベント）の 1 件。
+// ツール行と同じ作法の 1 行で、失敗だけ赤くする。クリックでサブエージェントは会話、シェルは出力のドロワーを開き
+// （TaskNoticeContext で App のハンドラを受ける。SubagentDrawer の中など、無いところでは開かない）、
+// それ以外（Monitor のイベント本文など）は詳細をその場で開く
+const TASK_ICONS = { agent: TbRobot, shell: TbTerminal2, monitor: TbActivity, other: TbBell };
+const TaskNoticeContext = createContext(null);
+function TaskNotice({ task }) {
+  const [expanded, setExpanded] = useState(false);
+  const onOpenTaskNotice = useContext(TaskNoticeContext);
+  const kind = taskKindOf(task);
+  const Icon = TASK_ICONS[kind];
+  const statusLabel = taskStatusLabel(task.status);
+  const meta = taskMetaText(task);
+  const detail = taskDetailText(task);
+  const failed = task.status === 'failed';
+  const canOpen = !!onOpenTaskNotice && !!task.taskId && (kind === 'agent' || kind === 'shell');
+  const activate = canOpen ? () => onOpenTaskNotice(kind, task) : detail ? () => setExpanded((v) => !v) : null;
+  const openLabel = kind === 'agent' ? 'サブエージェントの会話を開く' : 'シェルの出力を開く';
+  return (
+    <div className={`tool-line task-notice${failed ? ' failed' : ''}`}>
+      <div
+        className="tool-line-row"
+        role={activate ? 'button' : undefined}
+        tabIndex={activate ? 0 : undefined}
+        onClick={activate || undefined}
+        onKeyDown={
+          activate
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  activate();
+                }
+              }
+            : undefined
+        }
+        title={[task.summary, task.taskId && `task-id: ${task.taskId}`, canOpen && `クリックで${openLabel}`]
+          .filter(Boolean)
+          .join('\n')}
+      >
+        <Icon className="tool-line-icon" aria-label={kind} />
+        <span className="tool-line-desc">{task.summary || task.taskId || 'タスク通知'}</span>
+        {statusLabel && <span className={failed ? 'tool-line-failed' : 'task-notice-status'}>{statusLabel}</span>}
+        {meta && <span className="task-notice-meta">{meta}</span>}
+        {activate && (
+          <span className="tool-line-hover">
+            <TbChevronRight className={`tool-line-caret${!canOpen && expanded ? ' open' : ''}`} aria-hidden="true" />
+          </span>
+        )}
+      </div>
+      {!canOpen && expanded && detail && (
+        <div className="tool-use-detail">
+          <pre className="tool-detail-pre">{detail}</pre>
         </div>
       )}
     </div>
@@ -194,6 +263,9 @@ function ToolGroup({ messages, resultIndex, sessionCwd, onOpenPreview, onOpenFil
         <TbChevronRight className={`tool-line-caret${open ? ' open' : ''}`} aria-hidden="true" />
         <span>ツール {summary.count}件</span>
         {summary.failed > 0 && <span className="tool-line-failed">{summary.failed}件失敗</span>}
+        {summary.hookFailed > 0 && (
+          <span className="tool-line-failed tool-line-hook-failed">フック {summary.hookFailed}件失敗</span>
+        )}
         {(summary.added > 0 || summary.removed > 0) && (
           <DiffStats stats={{ added: summary.added, removed: summary.removed, created: false }} />
         )}
@@ -505,6 +577,69 @@ export const ChatMessage = memo(function ChatMessage({
         >
           {message.title || message.content || message.url}
         </a>
+        <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
+      </div>
+    );
+  }
+  // タスク通知。人の発言ではないので吹き出しにせず、通知ごとに 1 行で出す
+  if (message.role === 'task') {
+    return (
+      <div className={`chat-message task ${isHistory ? 'history' : ''}`} data-message-uuid={message.uuid || undefined}>
+        {(message.tasks || []).map((task, i) => (
+          <TaskNotice key={`${task.taskId}-${i}`} task={task} />
+        ))}
+      </div>
+    );
+  }
+
+  // ツールに紐づかないフック（Stop 等）の失敗。ツール行と同じ作法の 1 行で、失敗の印を付ける
+  if (message.role === 'hookerror') {
+    const hook = message.hook || {};
+    return (
+      <div
+        className={`chat-message hook-error ${isHistory ? 'history' : ''}`}
+        data-message-uuid={message.uuid || undefined}
+      >
+        <div className="tool-line failed">
+          <div className="tool-line-row" title={hookErrorText(hook)}>
+            <TbBolt className="tool-line-icon" aria-label="フック" />
+            <span className="tool-line-desc">
+              <span className="tool-line-tool">{hook.name || 'hook'}</span>
+              {hook.detail || hook.command}
+            </span>
+            <span className="tool-line-failed">フック失敗</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Claude の途中経過（thinking の中身。TUI では「· summary」付きの薄い文字）。本文ではないので見出しを付けず薄く出す
+  if (message.role === 'thinking') {
+    return (
+      <div
+        className={`chat-message thinking ${isHistory ? 'history' : ''}`}
+        data-message-uuid={message.uuid || undefined}
+      >
+        <TbSparkles className="artifact-message-icon" aria-hidden="true" />
+        <span className="thinking-message-text">{message.content}</span>
+        <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
+      </div>
+    );
+  }
+
+  // 古いツール結果の要約（Claude Code が差し込む注記）。人の発言ではないので吹き出しにせず 1 行で出す
+  if (isHuman && message.sender?.kind === 'summary') {
+    const tools = message.sender.tools || [];
+    return (
+      <div
+        className={`chat-message context-summary ${isHistory ? 'history' : ''}`}
+        data-message-uuid={message.uuid || undefined}
+        title="Claude Code が古いツール結果を要約に置き換えた（コンテキストを空けるため）。ここに並ぶのは要約前に使っていたツール"
+      >
+        <TbArrowsMinimize className="artifact-message-icon" aria-hidden="true" />
+        <span className="artifact-message-label">ツール結果を要約</span>
+        {tools.length > 0 && <span className="context-summary-tools">{tools.join(', ')}</span>}
         <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
       </div>
     );
@@ -843,6 +978,7 @@ export default function ChatView({
   onPickMessageForReview,
   pins,
   onTogglePin,
+  onOpenTaskNotice,
   readonly,
   sessionId,
 }) {
@@ -1061,92 +1197,95 @@ export default function ChatView({
   }, [jumpToUuid, onJumpDone, scrollRef]);
 
   return (
-    <div className="chat-view" ref={scrollRef} onScroll={onScroll}>
-      {shown.length > 0 && <ArtifactStrip artifacts={artifacts} />}
-      {shown.length === 0 ? (
-        <div className="chat-empty">Chat モード — Claude の出力がここに表示されます</div>
-      ) : (
-        chatItems.map((item, i) => {
-          const last = item.kind === 'tools' ? item.messages[item.messages.length - 1] : item.message;
-          const next = chatItems[i + 1];
-          const nextFirst = next && (next.kind === 'tools' ? next.messages[0] : next.message);
-          const showDivider = last.isHistory && nextFirst && !nextFirst.isHistory;
-          if (item.kind === 'tools') {
+    // タスク通知の行から開くハンドラ。ChatMessage（memo）の props に足さず Context で渡す
+    <TaskNoticeContext.Provider value={onOpenTaskNotice || null}>
+      <div className="chat-view" ref={scrollRef} onScroll={onScroll}>
+        {shown.length > 0 && <ArtifactStrip artifacts={artifacts} />}
+        {shown.length === 0 ? (
+          <div className="chat-empty">Chat モード — Claude の出力がここに表示されます</div>
+        ) : (
+          chatItems.map((item, i) => {
+            const last = item.kind === 'tools' ? item.messages[item.messages.length - 1] : item.message;
+            const next = chatItems[i + 1];
+            const nextFirst = next && (next.kind === 'tools' ? next.messages[0] : next.message);
+            const showDivider = last.isHistory && nextFirst && !nextFirst.isHistory;
+            if (item.kind === 'tools') {
+              return (
+                <div key={item.key}>
+                  <ToolGroup
+                    messages={item.messages}
+                    resultIndex={toolResultIndex}
+                    sessionCwd={sessionCwd}
+                    onOpenPreview={onOpenPreview}
+                    onOpenFileReview={onOpenFileReview}
+                  />
+                  {showDivider && <div className="history-divider">--- 過去の会話 / ここから新規 ---</div>}
+                </div>
+              );
+            }
+            const msg = item.message;
             return (
-              <div key={item.key}>
-                <ToolGroup
-                  messages={item.messages}
-                  resultIndex={toolResultIndex}
+              <div key={msg.id}>
+                <ChatMessage
+                  message={msg}
+                  threads={threads}
+                  comments={comments}
                   sessionCwd={sessionCwd}
+                  onStartThread={onStartThread}
+                  onAddAnchoredReview={onAddAnchoredReview}
+                  onAddAnchoredComment={onAddAnchoredComment}
+                  onDeleteComment={onDeleteComment}
                   onOpenPreview={onOpenPreview}
+                  onPreviewMarkdown={onPreviewMarkdown}
                   onOpenFileReview={onOpenFileReview}
+                  readonly={readonly}
+                  // ピック中だけ番号を渡す（それ以外は undefined のままで memo を効かせる）
+                  pickNumber={pick.active ? (pickNumbers.get(msg.uuid) ?? null) : undefined}
+                  pickTarget={pick.active && pick.target != null && pickNumbers.get(msg.uuid) === pick.target}
+                  pickLine={
+                    pick.active && pick.sub != null && pickNumbers.get(msg.uuid) === pick.target
+                      ? pick.subTarget
+                      : undefined
+                  }
+                  expandCmd={expandCmd?.uuid === msg.uuid ? expandCmd : undefined}
+                  pinned={!!msg.uuid && pinnedUuids.has(msg.uuid)}
+                  onTogglePin={onTogglePin}
+                  toolFlags={toolFlagsKey(msg.toolUses, toolResultIndex)}
                 />
                 {showDivider && <div className="history-divider">--- 過去の会話 / ここから新規 ---</div>}
               </div>
             );
-          }
-          const msg = item.message;
-          return (
-            <div key={msg.id}>
-              <ChatMessage
-                message={msg}
-                threads={threads}
-                comments={comments}
-                sessionCwd={sessionCwd}
-                onStartThread={onStartThread}
-                onAddAnchoredReview={onAddAnchoredReview}
-                onAddAnchoredComment={onAddAnchoredComment}
-                onDeleteComment={onDeleteComment}
-                onOpenPreview={onOpenPreview}
-                onPreviewMarkdown={onPreviewMarkdown}
-                onOpenFileReview={onOpenFileReview}
-                readonly={readonly}
-                // ピック中だけ番号を渡す（それ以外は undefined のままで memo を効かせる）
-                pickNumber={pick.active ? (pickNumbers.get(msg.uuid) ?? null) : undefined}
-                pickTarget={pick.active && pick.target != null && pickNumbers.get(msg.uuid) === pick.target}
-                pickLine={
-                  pick.active && pick.sub != null && pickNumbers.get(msg.uuid) === pick.target
-                    ? pick.subTarget
-                    : undefined
-                }
-                expandCmd={expandCmd?.uuid === msg.uuid ? expandCmd : undefined}
-                pinned={!!msg.uuid && pinnedUuids.has(msg.uuid)}
-                onTogglePin={onTogglePin}
-                toolFlags={toolFlagsKey(msg.toolUses, toolResultIndex)}
-              />
-              {showDivider && <div className="history-divider">--- 過去の会話 / ここから新規 ---</div>}
-            </div>
-          );
-        })
-      )}
+          })
+        )}
 
-      {hasNew && (
-        <button className="scroll-to-latest" onClick={scrollToBottom}>
-          ↓ 新しいメッセージ
-        </button>
-      )}
+        {hasNew && (
+          <button className="scroll-to-latest" onClick={scrollToBottom}>
+            ↓ 新しいメッセージ
+          </button>
+        )}
 
-      {/* メッセージピックの打鍵中に「今どのメッセージを指しているか」を出す */}
-      {pick.active && (
-        <div className="msg-pick-hud" data-mode={pick.sub == null ? 'message' : 'line'}>
-          <span className={`msg-pick-hud-value ${pickHudInvalid ? 'invalid' : ''}`}>
-            #{pick.buffer || '_'}
-            {pick.sub != null && `.${pick.sub || '_'}`}
-          </span>
-          {pickFiles.length > 0 && (
-            <span className="msg-pick-hud-file">
-              📄 {pickFiles[Math.min(pickFileIndex, pickFiles.length - 1)]} (
-              {Math.min(pickFileIndex, pickFiles.length - 1) + 1}/{pickFiles.length})
-              {pickFiles.length > 1 && ' · Tab で切替'}
+        {/* メッセージピックの打鍵中に「今どのメッセージを指しているか」を出す */}
+        {pick.active && (
+          <div className="msg-pick-hud" data-mode={pick.sub == null ? 'message' : 'line'}>
+            <span className={`msg-pick-hud-value ${pickHudInvalid ? 'invalid' : ''}`}>
+              #{pick.buffer || '_'}
+              {pick.sub != null && `.${pick.sub || '_'}`}
             </span>
-          )}
-          <span className="msg-pick-hud-hint">
-            {pick.sub == null
-              ? 'Enter 指摘 / . 行を指定 / ↑↓ 移動 / →← 全文表示 / p プレビュー / Esc 取消'
-              : '行番号を打つ / Enter 指摘 / ↑↓ 行を移動 / ⌫ 戻る'}
-          </span>
-        </div>
-      )}
-    </div>
+            {pickFiles.length > 0 && (
+              <span className="msg-pick-hud-file">
+                📄 {pickFiles[Math.min(pickFileIndex, pickFiles.length - 1)]} (
+                {Math.min(pickFileIndex, pickFiles.length - 1) + 1}/{pickFiles.length})
+                {pickFiles.length > 1 && ' · Tab で切替'}
+              </span>
+            )}
+            <span className="msg-pick-hud-hint">
+              {pick.sub == null
+                ? 'Enter 指摘 / . 行を指定 / ↑↓ 移動 / →← 全文表示 / p プレビュー / Esc 取消'
+                : '行番号を打つ / Enter 指摘 / ↑↓ 行を移動 / ⌫ 戻る'}
+            </span>
+          </div>
+        )}
+      </div>
+    </TaskNoticeContext.Provider>
   );
 }

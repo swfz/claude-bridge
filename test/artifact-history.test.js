@@ -117,7 +117,8 @@ describe('parseHistoryLines と注入された user レコード', () => {
       JSON.stringify({
         type: 'user',
         uuid: 'n1',
-        message: { role: 'user', content: '<task-notification>https://example.com/b</task-notification>' },
+        // タスク通知は role: 'task' になるので、ここでは別のタグ注入で確かめる
+        message: { role: 'user', content: '<system-reminder>https://example.com/b</system-reminder>' },
       }),
     ].join('\n');
 
