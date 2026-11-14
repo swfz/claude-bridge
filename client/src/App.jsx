@@ -2091,15 +2091,6 @@ export default function App() {
             )}
           </div>
 
-          {sessionUiVisible && (
-            <TaskStrip
-              tasks={subagentTasks[activeSessionId] || EMPTY_TASKS}
-              shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
-              onOpenTask={handleOpenSubagentTask}
-              onOpenShellTask={handleOpenShellTask}
-            />
-          )}
-
           {sessionUiVisible && !isReadonly && !activeChoice && (
             <WorkingIndicator
               status={activeSession?.status}
@@ -2108,6 +2099,15 @@ export default function App() {
               pendingSince={pendingTurns[activeSessionId]}
               runningAgents={runningAgentCount}
               runningShells={runningShellCount}
+            />
+          )}
+
+          {sessionUiVisible && (
+            <TaskStrip
+              tasks={subagentTasks[activeSessionId] || EMPTY_TASKS}
+              shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
+              onOpenTask={handleOpenSubagentTask}
+              onOpenShellTask={handleOpenShellTask}
             />
           )}
 
