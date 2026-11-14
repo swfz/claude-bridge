@@ -404,6 +404,52 @@ button.activity-cell {
   opacity: 0.8;
 }
 
+/* --- 棒を 3 指標で並べる（棒ビュー＋並べる）---
+   段ラベルの列と棒の列を 1 つの grid で共有する（段ラベルの幅が違っても棒の列が揃う）。
+   3 段＋月の目盛りの高さを単一指標の棒（--plot-height＋目盛り）と同じにし、切り替えで下の要素を動かさない */
+.activity-stack {
+  --stack-row: calc((var(--plot-height) - 2 * 3px) / 3);
+  display: grid;
+  grid-template-columns: auto max-content;
+  column-gap: 6px;
+  row-gap: 3px;
+  width: max-content;
+}
+
+.activity-stack-row {
+  display: contents;
+}
+
+/* 段ラベルと最大値。単一の棒の目盛りと同じく、横スクロールしても左端に残す */
+.activity-stack-axis {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding-right: 4px;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: var(--stack-row);
+  font-size: 9px;
+  line-height: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.activity-stack-axis.spacer {
+  height: auto;
+}
+
+.activity-stack-label {
+  color: var(--text-primary);
+}
+
+.activity-stack .activity-bars {
+  height: var(--stack-row);
+}
+
 /* --- 曜日別 --- */
 
 .activity-weekday-rows {

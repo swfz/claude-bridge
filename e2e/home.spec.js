@@ -69,6 +69,17 @@ test.describe('ホーム画面', () => {
     expect(monthlyBars).toBeGreaterThan(11);
     expect(monthlyBars).toBeLessThan(15);
 
+    // 並べる: メッセージ / トークン / 稼働時間の 3 段が同じ本数で縦に並ぶ。単一指標を選ぶと戻る
+    await activity.getByRole('button', { name: '並べる' }).click();
+    const stackRows = activity.locator('.activity-stack-row[data-metric]');
+    await expect(stackRows).toHaveCount(3);
+    for (let i = 0; i < 3; i++) {
+      await expect(stackRows.nth(i).locator('.activity-bar-slot')).toHaveCount(monthlyBars);
+    }
+    await activity.getByRole('button', { name: '稼働時間' }).click();
+    await expect(activity.locator('.activity-stack')).toHaveCount(0);
+    await expect(activity.locator('.activity-bar-slot')).toHaveCount(monthlyBars);
+
     // 曜日別: 月〜日の 7 行
     await activity.getByRole('button', { name: '曜日' }).click();
     const weekdayRows = activity.locator('.activity-weekday-row');
