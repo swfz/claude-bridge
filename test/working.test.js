@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  activeChoiceOf,
   backgroundLabel,
   clearObservedPending,
   runningToolOf,
@@ -168,5 +169,18 @@ describe('formatElapsed', () => {
     assert.equal(formatElapsed(125_000), '2m 5s');
     assert.equal(formatElapsed(3_725_000), '1h 2m');
     assert.equal(formatElapsed(-1), '');
+  });
+});
+
+describe('activeChoiceOf', () => {
+  it('待ちが解けた後の {prompt: null, waitingFor: null} はカード無し（インジケータを隠さない）', () => {
+    assert.equal(activeChoiceOf({ prompt: null, waitingFor: null }), null);
+    assert.equal(activeChoiceOf(undefined), null);
+  });
+  it('選択肢があるか、待っているのに読めなかったときはカードを出す', () => {
+    const withPrompt = { prompt: { question: 'q', options: [] }, waitingFor: 'input needed' };
+    assert.equal(activeChoiceOf(withPrompt), withPrompt);
+    const unread = { prompt: null, waitingFor: 'permission prompt' };
+    assert.equal(activeChoiceOf(unread), unread);
   });
 });

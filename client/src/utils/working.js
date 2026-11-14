@@ -76,6 +76,15 @@ export function workingStateOf({ status, waitingFor, messages, pendingSince, bac
   return null;
 }
 
+// 選択肢カードを出す必要があるか。choicePrompts の値（{prompt, waitingFor}）は待ちが解けると
+// prompt: null で上書きされて残り続けるので、値があるだけで「待ち」と扱ってはいけない
+// （扱うと、一度でも許可・質問に答えたタブでは以後インジケータが出なくなる）。
+// カードが何かを描く（prompt がある、または待っているのに画面が読めなかった）ときだけ返す
+export function activeChoiceOf(entry) {
+  if (!entry || (!entry.prompt && !entry.waitingFor)) return null;
+  return entry;
+}
+
 // 裏で動いているタスクの内訳（「サブエージェント 2 · シェル 1」）。どちらも 0 なら空文字
 export function backgroundLabel(background) {
   const parts = [];
