@@ -65,4 +65,45 @@ test.describe('推論中インジケータ', () => {
     await expect(page.locator('.choice-prompt')).toHaveCount(0);
     await expect(indicator).toContainText('考え中…');
   });
+
+  test('タスクのチップ列の上に背景なしで出て、出し入れでチップ列を動かさない', async ({ page }) => {
+    await page.addInitScript((id) => {
+      localStorage.setItem('showHome', 'false');
+      localStorage.setItem('activeSessionId', id);
+    }, SESSION.id);
+
+    let socket;
+    await page.routeWebSocket('**/ws', (ws) => {
+      socket = ws;
+      ws.onMessage(() => {});
+    });
+
+    await page.goto('/');
+    await expect.poll(() => !!socket).toBe(true);
+    const send = (msg) => socket.send(JSON.stringify(msg));
+
+    send({ type: 'session_list', sessions: [SESSION] });
+    send({
+      type: 'subagent_tasks',
+      sessionId: SESSION.id,
+      tasks: [{ agentId: 'a1', description: 'e2e task', status: 'running' }],
+    });
+    const indicator = page.locator('.working-indicator');
+    const strip = page.locator('.task-strip');
+    await expect(indicator).toContainText('考え中…');
+    await expect(strip).toContainText('e2e task');
+
+    const ind = await indicator.boundingBox();
+    const busyStrip = await strip.boundingBox();
+    expect(ind.y + ind.height).toBeLessThanOrEqual(busyStrip.y + 0.5);
+    const bg = await indicator.evaluate((el) => globalThis.getComputedStyle(el).backgroundColor);
+    expect(bg).toBe('rgba(0, 0, 0, 0)');
+
+    // 推論が終わって空の行に戻っても、チップ列の位置は変わらない
+    send({ type: 'session_list', sessions: [{ ...SESSION, status: 'idle' }] });
+    await expect(indicator).not.toContainText('考え中…');
+    const idleStrip = await strip.boundingBox();
+    expect(idleStrip.y).toBe(busyStrip.y);
+    expect(idleStrip.height).toBe(busyStrip.height);
+  });
 });
