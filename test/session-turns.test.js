@@ -95,6 +95,10 @@ describe('turnPrompt', () => {
     );
   });
 
+  it('ignores the auto-compact summary', () => {
+    assert.equal(turnPrompt({ ...prompt('This session is being continued ...'), isCompactSummary: true }), '');
+  });
+
   it('ignores messages from subagents and teammates', () => {
     assert.equal(
       turnPrompt(

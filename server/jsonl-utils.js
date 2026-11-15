@@ -236,7 +236,8 @@ export function extractWebFetchResult(record) {
 // 人の操作なので注入扱いしない。session-summary.js の userPrompt() と同じ考え方
 export function isInjectedUserRecord(record) {
   if (!record || record.type !== 'user') return false;
-  if (record.isMeta) return true;
+  // 自動コンパクトの要約（`isCompactSummary`）は本文が平文で始まるが、Claude Code が書いたもの
+  if (record.isMeta || record.isCompactSummary) return true;
   const text = extractTextContent(record.message, 0).trim();
   if (parseTeammateMessages(text)) return true;
   // スラッシュコマンドは `<command-message>` か `<command-name>` で、`!cmd` は `<bash-input>` で始まる（どれも人の操作）
@@ -339,6 +340,8 @@ export function injectedSenderOf(record) {
   }
   if (origin?.kind === 'human' || !isInjectedUserRecord(record)) return null;
   if (origin?.kind === 'task-notification') return { kind: 'task-notification' };
+  // コンテキストが尽きて会話を要約したときの続きの冒頭（「This session is being continued …」）
+  if (record.isCompactSummary) return { kind: 'compact' };
   const skill = skillNameOf(record);
   if (skill) return { kind: 'skill', name: skill };
   const summaryTools = parseSummaryTools(extractTextContent(record.message, 0));

@@ -341,6 +341,15 @@ describe('isInjectedUserRecord', () => {
     assert.equal(isInjectedUserRecord(user([{ type: 'text', text: '<system-reminder>...</system-reminder>' }])), true);
   });
 
+  it('自動コンパクトの要約（isCompactSummary）は本文が平文でも注入', () => {
+    const r = user('This session is being continued from a previous conversation that ran out of context.', {
+      isCompactSummary: true,
+      isVisibleInTranscriptOnly: true,
+    });
+    assert.equal(isInjectedUserRecord(r), true);
+    assert.deepEqual(injectedSenderOf(r), { kind: 'compact' });
+  });
+
   it('スラッシュコマンド（<command-name> 始まり）と普通の文は注入ではない', () => {
     assert.equal(isInjectedUserRecord(user('<command-name>/ship</command-name>')), false);
     assert.equal(isInjectedUserRecord(user('https://example.com/a を見て')), false);

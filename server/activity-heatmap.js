@@ -24,7 +24,8 @@ import { turnPrompt } from './session-turns.js';
 // 5: サブエージェント・チームメイトからの送信（`Another Claude session sent a message:`）を指示（prompts）から外す
 // 6: 10 分枠に AI 稼働時間・自動ツール・許可回数・縮める対象のツールの列を追加し、再開用の状態（busy・costStates・lastConvMs）を持つ。
 //    上げないと main の v5 キャッシュ（slots が 4 列）がそのまま受け入れられ、再走査されず過去の稼働が 0 のままになる
-const CACHE_VERSION = 6;
+// 7: 自動コンパクトの要約（isCompactSummary）を指示（prompts）・発言数から外す
+const CACHE_VERSION = 7;
 const MINUTE_MS = 60 * 1000;
 const CACHE_FILE = join(DATA_DIR, 'activity-heatmap.json');
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -166,7 +167,7 @@ function makeDateKeyResolver() {
 // ユーザーの「実際の入力」かどうか。tool_result（ツールの実行結果）は
 // user レコードとして書かれるが人が打ったものではないので数えない。
 function isUserPrompt(record) {
-  if (record.isMeta) return false;
+  if (record.isMeta || record.isCompactSummary) return false;
   const content = record.message?.content;
   if (typeof content === 'string') return content.length > 0;
   if (!Array.isArray(content)) return false;

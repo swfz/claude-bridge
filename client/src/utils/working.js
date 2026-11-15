@@ -12,6 +12,10 @@ function timeOf(m) {
   return Number.isFinite(t) ? t : null;
 }
 
+// ターンの区切りになる human メッセージか。自動コンパクトの要約はターンの途中に差し込まれるので区切りにしない
+// （区切りにすると経過時間がコンパクトの時刻から数え直しになる）
+const isTurnStart = (m) => m?.role === 'human' && m.sender?.kind !== 'compact';
+
 // 今のターン（最後の human 以降）で、まだ tool_result の返っていないツール呼び出し（実行中のもの）を返す。
 // JSONL ではツール呼び出しが 1 件ずつ別の assistant レコードになるので、並列に呼んだときは
 // 最後のレコードだけでなくターン内の assistant を全部見る（先に終わった方を見て「考え中」に戻さない）
@@ -20,7 +24,7 @@ export function runningToolOf(messages) {
   const resolved = new Set();
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m?.role === 'human') return null;
+    if (isTurnStart(m)) return null;
     if (m?.role === 'toolresult') {
       for (const r of m.results || []) if (r?.id) resolved.add(r.id);
       continue;
@@ -38,7 +42,7 @@ export function runningToolOf(messages) {
 export function turnStartOf(messages) {
   if (!Array.isArray(messages)) return null;
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === 'human') return timeOf(messages[i]);
+    if (isTurnStart(messages[i])) return timeOf(messages[i]);
   }
   return null;
 }

@@ -65,6 +65,15 @@ describe('turnStartOf', () => {
     assert.equal(turnStartOf(msgs), T0 + 2000);
     assert.equal(turnStartOf([]), null);
   });
+  it('自動コンパクトの要約はターンの区切りにしない', () => {
+    const msgs = [
+      { role: 'human', timestamp: iso(T0) },
+      { role: 'assistant', timestamp: iso(T0 + 1000), toolUses: [{ id: 'a', name: 'Bash' }] },
+      { role: 'human', timestamp: iso(T0 + 2000), sender: { kind: 'compact' } },
+    ];
+    assert.equal(turnStartOf(msgs), T0);
+    assert.equal(runningToolOf(msgs)?.id, 'a');
+  });
 });
 
 describe('workingStateOf', () => {
