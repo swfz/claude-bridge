@@ -8,6 +8,7 @@ import {
   summarizeTail,
   detectTurnState,
   endsWithQuestion,
+  userPrompt,
   readSessionSummary,
   readSessionSummaryFor,
   readLastLines,
@@ -367,6 +368,12 @@ describe('detectTurnState', () => {
 
   it("is 'ended' when the last turn closed with turn_duration (trailing metadata is ignored)", () => {
     assert.equal(detectTurnState([prompt(), toolUse(), toolResult(), text(), turnEnd, ...noise]), 'ended');
+  });
+
+  it('ignores the auto-compact summary as a prompt', () => {
+    const compact = { ...prompt('This session is being continued ...'), isCompactSummary: true };
+    assert.equal(detectTurnState([prompt(), text(), turnEnd, compact]), 'ended');
+    assert.equal(userPrompt(compact), '');
   });
 
   it("is 'ended' for a text reply without turn_duration (older transcripts)", () => {

@@ -69,7 +69,7 @@ import './ChatView.css';
 
 const COLLAPSE_THRESHOLD = 600; // 文字数がこれを超えたら折りたたみ
 // 本文を既定で畳んで隠す送り手（server/jsonl-utils.js の injectedSenderOf() の kind）
-const HIDDEN_BODY_SENDERS = new Set(['skill', 'subagent', 'peer']);
+const HIDDEN_BODY_SENDERS = new Set(['skill', 'subagent', 'peer', 'compact']);
 
 // ツールの種類はアイコンの形で表す（文字バッジは使わない）。名前は title で出す
 const TOOL_ICONS = {

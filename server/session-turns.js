@@ -77,7 +77,7 @@ export function parseCommitSubjects(command) {
 // ターンの区切りになる指示。普通の指示に加え、スラッシュコマンド（/ship など）は本文が
 // <command-name> タグで書かれ userPrompt() では落ちるので、コマンド名と引数を取り出す
 export function turnPrompt(record) {
-  if (record.type !== 'user' || record.isMeta) return '';
+  if (record.type !== 'user' || record.isMeta || record.isCompactSummary) return '';
   const content = record.message?.content;
   if (typeof content === 'string') {
     const name = content.match(/<command-name>([^<]+)<\/command-name>/);

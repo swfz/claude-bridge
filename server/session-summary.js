@@ -79,7 +79,8 @@ export function snippetText(text) {
 
 // ユーザーが実際に打った指示か（tool_result やスラッシュコマンドの展開は除く）
 export function userPrompt(record) {
-  if (record.type !== 'user' || record.isMeta) return '';
+  // isCompactSummary は自動コンパクトの要約（人の指示ではない）
+  if (record.type !== 'user' || record.isMeta || record.isCompactSummary) return '';
   const raw = extractTextContent(record.message, 0).trim();
   // `<` 始まりはタグ注入、`Another Claude session sent a message:` はサブエージェント・チームメイトからの送信（人の指示ではない）
   if (!raw || raw.startsWith('<') || raw.startsWith(PEER_MESSAGE_PREFIX)) return '';
@@ -181,7 +182,7 @@ export function detectTurnState(records) {
       if (sawTurnEnd || !hasBlock(record, 'tool_use')) return 'ended';
       return 'midway';
     }
-    if (record.type !== 'user' || record.isMeta) continue;
+    if (record.type !== 'user' || record.isMeta || record.isCompactSummary) continue;
     const text = extractTextContent(record.message, 0).trim();
     if (text.startsWith('[Request interrupted by user')) return 'interrupted';
     if (hasBlock(record, 'tool_result')) return sawTurnEnd ? 'ended' : 'midway';
