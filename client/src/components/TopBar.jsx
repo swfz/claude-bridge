@@ -1,5 +1,6 @@
 import { TbBell, TbBellOff, TbEye, TbEyeOff, TbMoon, TbSun } from 'react-icons/tb';
 import { parseCwd } from '../utils/cwdLabel.js';
+import SessionIdCopy from './SessionIdCopy.jsx';
 import UsageMeter from './UsageMeter.jsx';
 import './TopBar.css';
 
@@ -32,6 +33,7 @@ function CurrentSession({ session }) {
       />
       {project && <span className="topbar-current-dir">{project}</span>}
       <span className="topbar-current-title">{session.title}</span>
+      {session.claudeSessionId && <SessionIdCopy id={session.claudeSessionId} className="topbar-session-id" />}
     </div>
   );
 }

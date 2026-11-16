@@ -254,6 +254,35 @@ export async function listClaudeSessions({ limit = 30 } = {}) {
   return sessions;
 }
 
+// session ID（前方一致・大文字小文字は区別しない）で JSONL を探す。新規作成ダイアログの
+// 「既存セッションを再開」で、一覧（直近 limit 件）に無い古いセッションを ID 指定で開くため。
+// 4 文字未満や ID に使わない文字を含むものは探さない（全件ヒットや任意パスを避ける）。
+// cwd は projectDir 名からの復元だとハイフンが壊れるので JSONL の先頭に書かれたものを優先する
+export const SESSION_ID_QUERY_RE = /^[\w-]{4,64}$/;
+
+export async function findClaudeSessions(query, { dir = CLAUDE_PROJECTS_DIR, limit = 10 } = {}) {
+  const q = typeof query === 'string' ? query.trim().toLowerCase() : '';
+  if (!SESSION_ID_QUERY_RE.test(q)) return [];
+  const hits = collectSessionFiles(dir)
+    .filter((c) => c.sessionId.toLowerCase().startsWith(q))
+    .slice(0, limit);
+  return Promise.all(
+    hits.map(async (c) => {
+      const lines = await readFirstLines(c.filePath, 40).catch(() => []);
+      const head = summarizeHead(lines);
+      return {
+        sessionId: c.sessionId,
+        projectDir: c.projectDir,
+        cwd: head.cwd || c.cwd,
+        firstUserMessage: head.firstUserMessage || extractFirstUserMessage(lines),
+        title: head.title,
+        updatedAt: c.updatedAt,
+        size: c.size,
+      };
+    }),
+  );
+}
+
 // JSONL の文字列を会話履歴（メッセージ配列）に変換する。
 // セッション本体とサブエージェントのトランスクリプトは同じ形式なので両方から使う。
 export function parseHistoryLines(content) {

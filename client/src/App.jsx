@@ -228,6 +228,8 @@ export default function App() {
   const [jumpToUuid, setJumpToUuid] = useState(null);
   const [showFileExplorer, setShowFileExplorer] = useState(false);
   const [claudeSessions, setClaudeSessions] = useState(null);
+  // 新規作成ダイアログで session ID を打ったときの検索結果（{query, sessions}）
+  const [foundClaudeSessions, setFoundClaudeSessions] = useState(null);
   const [tmuxPanes, setTmuxPanes] = useState(null);
   // 新規作成ダイアログの作業ディレクトリ候補（直近 90 日のセッションの cwd）
   const [recentDirs, setRecentDirs] = useState(null);
@@ -548,6 +550,12 @@ export default function App() {
   useEffect(() => {
     return on('claude_sessions', (msg) => {
       setClaudeSessions(msg.sessions);
+    });
+  }, [on]);
+
+  useEffect(() => {
+    return on('claude_sessions_found', (msg) => {
+      setFoundClaudeSessions({ query: msg.query, sessions: msg.sessions || [] });
     });
   }, [on]);
 
@@ -1162,6 +1170,13 @@ export default function App() {
   const handleRequestClaudeSessions = useCallback(() => {
     send({ type: 'list_claude_sessions' });
   }, [send]);
+
+  const handleFindClaudeSessions = useCallback(
+    (query) => {
+      send({ type: 'find_claude_sessions', query });
+    },
+    [send],
+  );
 
   const handleRequestRecentDirs = useCallback(() => {
     send({ type: 'list_recent_dirs' });
@@ -1937,7 +1952,12 @@ export default function App() {
   const activeHidden = shareMode && activeSession?.claudeSessionId && sensitiveIds.has(activeSession.claudeSessionId);
   const currentSessionForBar =
     sessionUiVisible && activeSession && !activeHidden
-      ? { title: activeSession.name, cwd: activeSession.cwd, color: dirColorOfCwd(activeSession.cwd) }
+      ? {
+          title: activeSession.name,
+          cwd: activeSession.cwd,
+          color: dirColorOfCwd(activeSession.cwd),
+          claudeSessionId: activeSession.claudeSessionId || null,
+        }
       : null;
   const hiddenSensitiveCount = shareMode
     ? countHiddenSensitive(sensitiveSessions, { tabs: sessions, running: runningSessions, recent: recentSessions })
@@ -2197,12 +2217,16 @@ export default function App() {
           onClose={() => {
             setShowNewSession(false);
             setClaudeSessions(null);
+            setFoundClaudeSessions(null);
             setTmuxPanes(null);
             setNewSessionError(null);
             setNewSessionDraft(null);
           }}
           onCreate={handleCreateSession}
           onResume={handleResumeSession}
+          onResumeInTmux={handleResumeInTmux}
+          onFindClaudeSessions={handleFindClaudeSessions}
+          foundClaudeSessions={foundClaudeSessions}
           onAttachTmux={handleAttachTmux}
           onOpenReadonly={handleOpenReadonly}
           onRequestClaudeSessions={handleRequestClaudeSessions}

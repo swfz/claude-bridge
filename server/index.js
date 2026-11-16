@@ -10,7 +10,13 @@ import { SessionManager, ReadonlySessionManager } from './session.js';
 import { resolveResumeCwd, isValidProjectDir } from './resume-cwd.js';
 import { Storage, DATA_DIR } from './storage.js';
 import { ThreadStore } from './thread-store.js';
-import { listClaudeSessions, listRecentDirs, listRecentSessions, loadSessionHistory } from './claude-sessions.js';
+import {
+  findClaudeSessions,
+  listClaudeSessions,
+  listRecentDirs,
+  listRecentSessions,
+  loadSessionHistory,
+} from './claude-sessions.js';
 import { JsonlWatcher } from './jsonl-watcher.js';
 import { CLAUDE_PROJECTS_DIR, cwdToProjectDir } from './jsonl-utils.js';
 import { readSessionSummary } from './session-summary.js';
@@ -1466,6 +1472,19 @@ wss.on('connection', (ws) => {
             }),
           );
         });
+        break;
+      }
+
+      case 'find_claude_sessions': {
+        // 新規作成ダイアログの「既存セッションを再開」で session ID を打ったとき。
+        // 一覧（直近 30 件）に無い古いセッションも ID の前方一致で探す
+        const query = typeof msg.query === 'string' ? msg.query : '';
+        findClaudeSessions(query)
+          .then((sessions) => ws.send(JSON.stringify({ type: 'claude_sessions_found', query, sessions })))
+          .catch((e) => {
+            console.error('find_claude_sessions failed:', e.message);
+            ws.send(JSON.stringify({ type: 'claude_sessions_found', query, sessions: [] }));
+          });
         break;
       }
 
