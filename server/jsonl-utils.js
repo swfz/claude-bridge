@@ -70,8 +70,9 @@ export function parseTaskNotifications(text) {
 // 同じ本文が積み直される（enqueue → remove → また enqueue）こともあるので、一度出した本文は shown に覚えて二度出さない。
 // state は createTaskNotificationState() で作り、1 つのセッションの読み込み・監視の間だけ持つ。
 // 戻り値: タスク通知でなければ null、通知なら {message}（捨てるときは message が null）
+// サブエージェントの報告（queuedAgentMessage）も同じ state を使う（agentTypes / agentNames は種別名の引き当て用）
 export function createTaskNotificationState() {
-  return { pending: new Map(), shown: new Set() };
+  return { pending: new Map(), shown: new Set(), agentTypes: new Map(), agentNames: new Map() };
 }
 
 export function taskNotificationMessage(record, text, state, { queued = false } = {}) {
@@ -100,6 +101,73 @@ export function taskNotificationMessage(record, text, state, { queued = false } 
       timestamp: record.timestamp || '',
     },
   };
+}
+
+// Claude の作業中に届いたサブエージェントの報告は queue-operation の enqueue に
+// `<agent-message from="<agentId>">\n<本文>\n</agent-message>` で積まれる。多くはその後に同じ本文の user レコード
+// （origin.kind === 'peer'、origin.from === agentId、origin.body === 本文）としても書かれるが、作業中に取り込まれると
+// enqueue（と remove）にしか残らない。タスク通知と同じく enqueue を Subagent の報告として出し、後の user レコードは捨てる。
+// 戻り値: 該当しなければ null（呼び出し側は従来どおり処理する）、該当すれば {message}（捨てるときは message が null）
+const AGENT_MESSAGE_RE = /^\s*<agent-message from="([^"]+)"[^>]*>\n?([\s\S]*?)\n?<\/agent-message>\s*$/;
+
+export function queuedAgentMessage(record, text, state, { queued = false } = {}) {
+  let from;
+  let body;
+  if (queued) {
+    const m = typeof text === 'string' ? text.match(AGENT_MESSAGE_RE) : null;
+    if (!m) return null;
+    [, from, body] = m;
+  } else {
+    const origin = record?.origin;
+    if (origin?.kind !== 'peer' || typeof origin.from !== 'string' || typeof origin.body !== 'string') return null;
+    ({ from, body } = origin);
+  }
+  const key = `agent:${from}\n${body.trim()}`;
+  const { pending, shown } = state;
+  if (!queued) {
+    const n = pending.get(key) || 0;
+    if (n === 0) return null;
+    if (n === 1) pending.delete(key);
+    else pending.set(key, n - 1);
+    return { message: null };
+  }
+  pending.set(key, (pending.get(key) || 0) + 1);
+  if (shown.has(key)) return { message: null };
+  shown.add(key);
+  const report = handbackReportOf(body);
+  const name = state.agentNames?.get(from);
+  return {
+    message: {
+      role: 'human',
+      content: report || body.trim(),
+      injected: true,
+      sender: {
+        kind: report || /^\s*\[Subagent hand-back\]/.test(body) ? 'subagent' : 'peer',
+        ...(name ? { name } : {}),
+      },
+      uuid: record.uuid,
+      timestamp: record.timestamp || '',
+    },
+  };
+}
+
+// enqueue の報告には送り手の種別名が無いので、Agent ツールの呼び出し（input.subagent_type）と
+// その結果（toolUseResult.agentId）から agentId → 種別名を覚えておく。全レコードに対して呼んでよい
+export function noteAgentLaunch(record, state) {
+  if (!state?.agentNames) return;
+  const content = Array.isArray(record?.message?.content) ? record.message.content : [];
+  if (record.type === 'assistant') {
+    for (const b of content) {
+      if (b?.type === 'tool_use' && (b.name === 'Agent' || b.name === 'Task') && b.input?.subagent_type)
+        state.agentTypes.set(b.id, String(b.input.subagent_type));
+    }
+    return;
+  }
+  const result = record.toolUseResult;
+  if (record.type !== 'user' || !result || typeof result !== 'object' || typeof result.agentId !== 'string') return;
+  const toolUseId = content.find((b) => b?.type === 'tool_result')?.tool_use_id;
+  const name = state.agentTypes.get(toolUseId) || (typeof result.agentType === 'string' ? result.agentType : '');
+  if (name) state.agentNames.set(result.agentId, name);
 }
 
 // フックの失敗（`attachment.type === 'hook_non_blocking_error'`）。処理は止まらないが出しておきたいもの。
@@ -371,10 +439,14 @@ export function parseSummaryTools(text) {
 export function extractHandbackReport(record) {
   const origin = record?.origin;
   if (origin?.kind !== 'peer' || !origin.handback || typeof origin.body !== 'string') return null;
+  return handbackReportOf(origin.body);
+}
+
+function handbackReportOf(body) {
   const marker = 'The report follows:\n';
-  const at = origin.body.indexOf(marker);
+  const at = body.indexOf(marker);
   if (at < 0) return null;
-  const report = origin.body
+  const report = body
     .slice(at + marker.length)
     .split('\n')
     .map((line) => line.replace(/^ {2}/, ''))
