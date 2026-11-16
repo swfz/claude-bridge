@@ -1806,6 +1806,7 @@ export default function App() {
   const chatPanelsVisible = sessionUiVisible && effectiveViewMode === 'chat';
   // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
   const activeChoice = sessionUiVisible && !isReadonly ? activeChoiceOf(choicePrompts[activeSessionId]) : null;
+  const showWorking = sessionUiVisible && !isReadonly && !activeChoice;
   // 推論中インジケータの「裏で実行中…」に出す件数（TaskStrip と同じ一覧から数える）
   const runningAgentCount = (subagentTasks[activeSessionId] || EMPTY_TASKS).filter(
     (t) => t.status === 'running',
@@ -2019,7 +2020,9 @@ export default function App() {
                 onOpenPreview={handleOpenPreview}
               />
             )}
-            <main className="app-main">
+            {/* 推論中の行・タスクのチップ列・選択肢カード・入力欄は本文の列（ファイラ・右パネルの間）の直下に置く。
+                ファイラや右パネルは画面の下端まで伸び、開くとその幅だけ本文の列が縮む */}
+            <main className={`app-main${showHome ? '' : ' with-bottom'}`}>
               {showHome ? (
                 <HomeView
                   dirColorOf={dirColorOfCwd}
@@ -2117,6 +2120,61 @@ export default function App() {
                   </button>
                 </div>
               )}
+              {!showHome && (
+                <div className="app-main-bottom">
+                  {showWorking && (
+                    <WorkingIndicator
+                      status={activeSession?.status}
+                      waitingFor={activeSession?.waitingFor}
+                      messages={activeMessages}
+                      pendingSince={pendingTurns[activeSessionId]}
+                      runningAgents={runningAgentCount}
+                      runningShells={runningShellCount}
+                    />
+                  )}
+                  {sessionUiVisible && (
+                    <TaskStrip
+                      tasks={subagentTasks[activeSessionId] || EMPTY_TASKS}
+                      shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
+                      onOpenTask={handleOpenSubagentTask}
+                      onOpenShellTask={handleOpenShellTask}
+                    />
+                  )}
+
+                  {activeChoice && (
+                    <ChoicePrompt
+                      prompt={activeChoice.prompt}
+                      waitingFor={activeChoice.waitingFor}
+                      error={choiceError}
+                      onAnswer={handleAnswerChoice}
+                      onRefresh={handleRefreshChoice}
+                    />
+                  )}
+
+                  {isReadonly ? (
+                    <InputBar
+                      key={activeSessionId}
+                      draftKey={activeSessionId}
+                      onSubmit={handleSendToReadonly}
+                      disabled={!activeSession?.claudeSessionId}
+                      placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
+                      slashCommands={slashCommands[activeSessionId] || []}
+                      notice={readonlyNotice}
+                      onLocalCommand={handleLocalCommand}
+                    />
+                  ) : (
+                    <InputBar
+                      key={activeSessionId}
+                      draftKey={activeSessionId}
+                      onSubmit={handleInput}
+                      disabled={!activeSessionId}
+                      slashCommands={slashCommands[activeSessionId] || []}
+                      onSendEscape={handleSendEscape}
+                      onLocalCommand={handleLocalCommand}
+                    />
+                  )}
+                </div>
+              )}
             </main>
 
             {showThreadPanel && chatPanelsVisible && (
@@ -2156,59 +2214,6 @@ export default function App() {
               />
             )}
           </div>
-
-          {sessionUiVisible && !isReadonly && !activeChoice && (
-            <WorkingIndicator
-              status={activeSession?.status}
-              waitingFor={activeSession?.waitingFor}
-              messages={activeMessages}
-              pendingSince={pendingTurns[activeSessionId]}
-              runningAgents={runningAgentCount}
-              runningShells={runningShellCount}
-            />
-          )}
-
-          {sessionUiVisible && (
-            <TaskStrip
-              tasks={subagentTasks[activeSessionId] || EMPTY_TASKS}
-              shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
-              onOpenTask={handleOpenSubagentTask}
-              onOpenShellTask={handleOpenShellTask}
-            />
-          )}
-
-          {activeChoice && (
-            <ChoicePrompt
-              prompt={activeChoice.prompt}
-              waitingFor={activeChoice.waitingFor}
-              error={choiceError}
-              onAnswer={handleAnswerChoice}
-              onRefresh={handleRefreshChoice}
-            />
-          )}
-
-          {showHome ? null : isReadonly ? (
-            <InputBar
-              key={activeSessionId}
-              draftKey={activeSessionId}
-              onSubmit={handleSendToReadonly}
-              disabled={!activeSession?.claudeSessionId}
-              placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
-              slashCommands={slashCommands[activeSessionId] || []}
-              notice={readonlyNotice}
-              onLocalCommand={handleLocalCommand}
-            />
-          ) : (
-            <InputBar
-              key={activeSessionId}
-              draftKey={activeSessionId}
-              onSubmit={handleInput}
-              disabled={!activeSessionId}
-              slashCommands={slashCommands[activeSessionId] || []}
-              onSendEscape={handleSendEscape}
-              onLocalCommand={handleLocalCommand}
-            />
-          )}
         </div>
       </div>
 

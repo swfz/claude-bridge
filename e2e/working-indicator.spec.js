@@ -106,4 +106,46 @@ test.describe('推論中インジケータ', () => {
     expect(idleStrip.y).toBe(busyStrip.y);
     expect(idleStrip.height).toBe(busyStrip.height);
   });
+
+  test('ファイラを開くと推論中の行と入力欄が本文の列に合わせて右にずれ、ファイラは下端まで伸びる', async ({ page }) => {
+    await page.addInitScript((id) => {
+      localStorage.setItem('showHome', 'false');
+      localStorage.setItem('activeSessionId', id);
+    }, SESSION.id);
+
+    let socket;
+    await page.routeWebSocket('**/ws', (ws) => {
+      socket = ws;
+      ws.onMessage(() => {});
+    });
+
+    await page.goto('/');
+    await expect.poll(() => !!socket).toBe(true);
+    socket.send(JSON.stringify({ type: 'session_list', sessions: [SESSION] }));
+    const indicator = page.locator('.working-indicator');
+    await expect(indicator).toContainText('考え中…');
+
+    const before = await indicator.boundingBox();
+    await page.locator('.panel-tab', { hasText: 'Files' }).click();
+    const explorer = page.locator('.file-explorer');
+    await expect(explorer).toBeVisible();
+
+    await expect(async () => {
+      const ex = await explorer.boundingBox();
+      const ind = await indicator.boundingBox();
+      const chat = await page.locator('.chat-view').boundingBox();
+      // ファイラの右端から始まり、本文と同じ列・本文の直下
+      expect(ind.x).toBeGreaterThanOrEqual(ex.x + ex.width - 0.5);
+      expect(Math.abs(ind.x - chat.x)).toBeLessThan(0.5);
+      expect(Math.abs(ind.y - (chat.y + chat.height))).toBeLessThan(0.5);
+      // 縦位置・高さは変わらない
+      expect(ind.y).toBe(before.y);
+      expect(ind.height).toBe(before.height);
+      // 入力欄も本文の列に揃い、ファイラは入力欄の下端まで伸びる
+      const input = await page.locator('.input-bar').boundingBox();
+      expect(Math.abs(input.x - chat.x)).toBeLessThan(0.5);
+      expect(Math.abs(input.width - chat.width)).toBeLessThan(0.5);
+      expect(Math.abs(ex.y + ex.height - (input.y + input.height))).toBeLessThan(0.5);
+    }).toPass();
+  });
 });
