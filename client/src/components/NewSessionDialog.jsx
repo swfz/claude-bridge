@@ -7,6 +7,15 @@ const WORKTREE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MODEL_RE = /^[A-Za-z0-9][\w.[\]-]{0,63}$/;
 const MODEL_SUGGESTIONS = ['opus', 'sonnet', 'haiku', 'fable', 'opus[1m]', 'sonnet[1m]'];
 const LAUNCH_KEY = 'newSessionLaunch';
+// 検索欄に session ID（の先頭）らしきものを打ったら、一覧（直近 30 件）の外もサーバーに探させる。
+// サーバー側の SESSION_ID_QUERY_RE と同じく 4 文字以上。UUID の文字（16 進とハイフン）だけ
+const SESSION_ID_QUERY_RE = /^[0-9a-f-]{4,64}$/i;
+const FIND_DEBOUNCE_MS = 250;
+
+function sessionIdQueryOf(filter) {
+  const q = filter.trim();
+  return SESSION_ID_QUERY_RE.test(q) ? q.toLowerCase() : null;
+}
 
 function loadLaunch() {
   try {
@@ -127,6 +136,9 @@ export default function NewSessionDialog({
   onClose,
   onCreate,
   onResume,
+  onResumeInTmux,
+  onFindClaudeSessions,
+  foundClaudeSessions,
   onAttachTmux,
   onOpenReadonly,
   onRequestClaudeSessions,
@@ -190,7 +202,14 @@ export default function NewSessionDialog({
     });
   };
 
-  const filteredSessions = (claudeSessions || []).filter((s) => {
+  const idQuery = tab === 'resume' ? sessionIdQueryOf(filter) : null;
+  useEffect(() => {
+    if (!idQuery || !onFindClaudeSessions) return;
+    const timer = setTimeout(() => onFindClaudeSessions(idQuery), FIND_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [idQuery, onFindClaudeSessions]);
+
+  const listedSessions = (claudeSessions || []).filter((s) => {
     if (!filter) return true;
     const lower = filter.toLowerCase();
     return (
@@ -198,6 +217,18 @@ export default function NewSessionDialog({
       s.firstUserMessage.toLowerCase().includes(lower) ||
       s.sessionId.includes(lower)
     );
+  });
+  // ID 検索の結果のうち一覧に無いもの（直近 30 件より古いセッション）を後ろに足す
+  const found = idQuery && foundClaudeSessions?.query === idQuery ? foundClaudeSessions.sessions : [];
+  const listedIds = new Set(listedSessions.map((s) => s.sessionId));
+  const filteredSessions = [...listedSessions, ...found.filter((s) => !listedIds.has(s.sessionId))];
+  const searchingById = !!idQuery && foundClaudeSessions?.query !== idQuery;
+
+  const sessionPayload = (s) => ({
+    claudeSessionId: s.sessionId,
+    name: s.title || (s.firstUserMessage ? s.firstUserMessage.slice(0, 40) : s.sessionId.slice(0, 8)),
+    cwd: s.cwd,
+    projectDir: s.projectDir,
   });
 
   return (
@@ -375,24 +406,27 @@ export default function NewSessionDialog({
                 type="text"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
-                placeholder="セッションを検索（パス、メッセージ、ID）..."
+                onKeyDown={(e) => {
+                  // 1 件に絞れていれば Enter で tmux 再開（ID を貼って Enter で起こせるように）
+                  if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+                  // ID 検索の応答待ちの間は、一覧の別セッションがたまたま 1 件だけ当たっていても起こさない
+                  if (searchingById || filteredSessions.length !== 1 || !onResumeInTmux) return;
+                  e.preventDefault();
+                  onResumeInTmux(sessionPayload(filteredSessions[0]));
+                }}
+                placeholder="セッションを検索（パス、メッセージ、ID）... 1 件に絞れたら Enter で tmux 再開"
                 autoFocus
+                spellCheck={false}
               />
             </div>
             <div className="session-list">
               {filteredSessions.length === 0 ? (
                 <p className="session-list-empty">
-                  {claudeSessions === null ? '読み込み中...' : 'セッションが見つかりません'}
+                  {claudeSessions === null || searchingById ? '読み込み中...' : 'セッションが見つかりません'}
                 </p>
               ) : (
                 filteredSessions.map((s) => {
-                  const name = s.firstUserMessage ? s.firstUserMessage.slice(0, 40) : s.sessionId.slice(0, 8);
-                  const payload = {
-                    claudeSessionId: s.sessionId,
-                    name,
-                    cwd: s.cwd,
-                    projectDir: s.projectDir,
-                  };
+                  const payload = sessionPayload(s);
                   return (
                     <div key={s.sessionId} className="session-list-item session-list-item-static">
                       <div className="session-item-main">
@@ -402,12 +436,21 @@ export default function NewSessionDialog({
                       <div className="session-item-message">{s.firstUserMessage || '(メッセージなし)'}</div>
                       <div className="session-item-id">{s.sessionId}</div>
                       <div className="session-item-actions">
+                        {onResumeInTmux && (
+                          <button
+                            className="session-resume-btn"
+                            onClick={() => onResumeInTmux(payload)}
+                            data-tooltip="tmux の新しい window で claude --resume。ブリッジを落としても残る"
+                          >
+                            tmux で再開
+                          </button>
+                        )}
                         <button
-                          className="session-resume-btn"
+                          className={onResumeInTmux ? 'session-readonly-btn' : 'session-resume-btn'}
                           onClick={() => onResume(payload)}
-                          data-tooltip="claude を起動して再開。直接やりとりできる（プロセス起動）"
+                          data-tooltip="ブリッジの子プロセスとして claude --resume。ブリッジを落とすと終了する"
                         >
-                          再開
+                          {onResumeInTmux ? '再開（内蔵）' : '再開'}
                         </button>
                         <button
                           className="session-readonly-btn"
