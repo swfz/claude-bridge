@@ -36,6 +36,7 @@ import { filterBySearch, collectProjects, filterByProject, rankProjects } from '
 import ActivityPanel from './ActivityPanel.jsx';
 import SessionDetailDrawer from './SessionDetailDrawer.jsx';
 import HomeArtifactChips from './HomeArtifactChips.jsx';
+import SessionIdCopy from './SessionIdCopy.jsx';
 import RecentPeek from './RecentPeek.jsx';
 import { contextPercent, formatTokens, isUsageNotable, usageColor } from '../utils/contextUsage.js';
 import { groupArtifactPublishes } from '../utils/artifacts.js';
@@ -557,6 +558,7 @@ export default function HomeView({
                   <UsageBar usage={r.contextUsage} />
                   <CompletionBadge session={r} running />
                   <ArtifactCount artifacts={r.artifacts} />
+                  <SessionIdCopy id={r.sessionId} className="home-card-session-id" />
                   <span className="home-card-time">{formatElapsed(r.updatedAt)}</span>
                 </div>
 

@@ -473,6 +473,15 @@
   min-height: 16px;
 }
 
+/* session ID は更新時刻と並べて右に寄せる */
+.home-card-session-id {
+  margin-left: auto;
+}
+
+.home-card-session-id + .home-card-time {
+  margin-left: 0;
+}
+
 .home-card-time {
   margin-left: auto;
   white-space: nowrap;
