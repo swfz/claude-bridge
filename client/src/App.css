@@ -77,3 +77,19 @@
   flex: 1;
   overflow: hidden;
 }
+
+/* 推論中の行（WorkingIndicator）を本文の直下に置くときだけ縦に積む。本文側は残りの高さを取る */
+.app-main.with-working {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main.with-working > :first-child {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.app-main.with-working > .working-indicator {
+  flex-shrink: 0;
+}

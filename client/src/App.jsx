@@ -1806,6 +1806,7 @@ export default function App() {
   const chatPanelsVisible = sessionUiVisible && effectiveViewMode === 'chat';
   // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
   const activeChoice = sessionUiVisible && !isReadonly ? activeChoiceOf(choicePrompts[activeSessionId]) : null;
+  const showWorking = sessionUiVisible && !isReadonly && !activeChoice;
   // 推論中インジケータの「裏で実行中…」に出す件数（TaskStrip と同じ一覧から数える）
   const runningAgentCount = (subagentTasks[activeSessionId] || EMPTY_TASKS).filter(
     (t) => t.status === 'running',
@@ -2019,7 +2020,8 @@ export default function App() {
                 onOpenPreview={handleOpenPreview}
               />
             )}
-            <main className="app-main">
+            {/* 推論中の行は本文の列（ファイラ・右パネルの間）の直下に置く。ファイラを開くとその幅だけ右にずれる */}
+            <main className={`app-main${showWorking ? ' with-working' : ''}`}>
               {showHome ? (
                 <HomeView
                   dirColorOf={dirColorOfCwd}
@@ -2117,6 +2119,16 @@ export default function App() {
                   </button>
                 </div>
               )}
+              {showWorking && (
+                <WorkingIndicator
+                  status={activeSession?.status}
+                  waitingFor={activeSession?.waitingFor}
+                  messages={activeMessages}
+                  pendingSince={pendingTurns[activeSessionId]}
+                  runningAgents={runningAgentCount}
+                  runningShells={runningShellCount}
+                />
+              )}
             </main>
 
             {showThreadPanel && chatPanelsVisible && (
@@ -2156,17 +2168,6 @@ export default function App() {
               />
             )}
           </div>
-
-          {sessionUiVisible && !isReadonly && !activeChoice && (
-            <WorkingIndicator
-              status={activeSession?.status}
-              waitingFor={activeSession?.waitingFor}
-              messages={activeMessages}
-              pendingSince={pendingTurns[activeSessionId]}
-              runningAgents={runningAgentCount}
-              runningShells={runningShellCount}
-            />
-          )}
 
           {sessionUiVisible && (
             <TaskStrip
