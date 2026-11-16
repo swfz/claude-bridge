@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { contextColorFor, contextPercent, formatTokens } from '../utils/contextUsage.js';
 import { formatDuration, formatTurnTime, mainRepository, prLabel, relativeToCwd } from '../utils/sessionTurns.js';
 import './SessionDetailDrawer.css';
+import SessionIdCopy from './SessionIdCopy.jsx';
 
 // ホームの「セッション詳細」。ユーザーの指示 1 件を 1 ターンとして、時刻・トークン・
 // 所要時間・コンテキスト量と、そのターンで作ったコミット・PR・編集したファイルを並べる。
@@ -33,9 +34,12 @@ export default function SessionDetailDrawer({ target, data, onRequest, onOpen, o
         <header className="session-detail-header">
           <div className="session-detail-title-area">
             <span className="session-detail-title">{target.title || sessionId.slice(0, 8)}</span>
-            <span className="session-detail-cwd" title={target.cwd}>
-              {target.cwd}
-            </span>
+            <div className="session-detail-sub">
+              <span className="session-detail-cwd" title={target.cwd}>
+                {target.cwd}
+              </span>
+              <SessionIdCopy id={sessionId} />
+            </div>
           </div>
           <button className="home-action primary" onClick={() => onOpen(target)}>
             開く

@@ -1,0 +1,33 @@
+/* session ID。全件に付く情報なので薄い等幅の文字だけ（枠なし、hover で下地） */
+.session-id-copy {
+  position: relative;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.session-id-copy:hover,
+.session-id-copy:focus-visible {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.session-id-copy-text.hidden {
+  visibility: hidden;
+}
+
+.session-id-copy-done {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: var(--text-primary);
+}

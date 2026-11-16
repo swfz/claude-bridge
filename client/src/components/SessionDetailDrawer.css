@@ -54,7 +54,15 @@
   text-overflow: ellipsis;
 }
 
+.session-detail-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .session-detail-cwd {
+  min-width: 0;
   font-size: 11px;
   color: var(--text-secondary);
   white-space: nowrap;
