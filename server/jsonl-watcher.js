@@ -11,6 +11,8 @@ import {
   extractThinkingText,
   hookErrorMessage,
   taskNotificationMessage,
+  queuedAgentMessage,
+  noteAgentLaunch,
   createTaskNotificationState,
   extractToolUses,
   humanMessageFields,
@@ -213,9 +215,12 @@ export class JsonlWatcher {
     for (const line of newLines) {
       try {
         const record = JSON.parse(line);
+        noteAgentLaunch(record, state.pendingTasks);
         if (record.type === 'user') {
           const text = extractTextContent(record.message);
-          const task = text ? taskNotificationMessage(record, text, state.pendingTasks) : null;
+          const task =
+            (text ? taskNotificationMessage(record, text, state.pendingTasks) : null) ||
+            queuedAgentMessage(record, text, state.pendingTasks);
           if (task) {
             if (task.message)
               state.onMessage({ type: 'chat_message', bridgeSessionId: state.bridgeSessionId, ...task.message });
@@ -279,7 +284,9 @@ export class JsonlWatcher {
           if (hookError)
             state.onMessage({ type: 'chat_message', bridgeSessionId: state.bridgeSessionId, ...hookError });
         } else if (record.type === 'queue-operation' && record.operation === 'enqueue' && record.content) {
-          const task = taskNotificationMessage(record, record.content, state.pendingTasks, { queued: true });
+          const task =
+            taskNotificationMessage(record, record.content, state.pendingTasks, { queued: true }) ||
+            queuedAgentMessage(record, record.content, state.pendingTasks, { queued: true });
           if (task) {
             if (task.message)
               state.onMessage({ type: 'chat_message', bridgeSessionId: state.bridgeSessionId, ...task.message });

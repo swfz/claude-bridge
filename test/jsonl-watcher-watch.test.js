@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync } from 'f
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { JsonlWatcher } from '../server/jsonl-watcher.js';
+import { createTaskNotificationState } from '../server/jsonl-utils.js';
 
 // startWatching の統合テスト（実ファイルの監視）
 
@@ -243,6 +244,49 @@ describe('JsonlWatcher startWatching integration', () => {
     assert.equal(humanMsgs.length, 2, 'Both queue-operation and user should be emitted');
     assert.equal(humanMsgs[0].content, 'my input');
     assert.equal(humanMsgs[1].content, 'my input');
+
+    if (state.fsWatcher) state.fsWatcher.close();
+  });
+
+  it('処理待ちに積まれたサブエージェントの報告は Subagent の 1 件だけ配る（後の user レコードは捨てる）', async () => {
+    const messages = [];
+    const filePath = join(tmpDir, 'session.jsonl');
+    writeFileSync(filePath, makeRecord('assistant', 'initial') + '\n');
+    const state = {
+      bridgeSessionId: 'test',
+      cwd: '/fake',
+      projectPath: tmpDir,
+      targetFile: filePath,
+      linesRead: 1,
+      attachExisting: true,
+      onMessage: (msg) => messages.push(msg),
+      pendingTasks: createTaskNotificationState(),
+      fsWatcher: null,
+      pollTimer: null,
+    };
+    watcher.watchers.set('test', state);
+    watcher._startFileWatch(state);
+
+    const body = '[Subagent hand-back] report.\nThe report follows:\n  終わりました';
+    const enq = `<agent-message from="a1">\n${body}\n</agent-message>`;
+    appendFileSync(
+      filePath,
+      [
+        JSON.stringify({ type: 'queue-operation', operation: 'enqueue', content: enq }),
+        JSON.stringify({
+          type: 'user',
+          uuid: 'p1',
+          origin: { kind: 'peer', from: 'a1', handback: true, body },
+          message: { content: `Another Claude session sent a message:\n${enq}` },
+        }),
+      ].join('\n') + '\n',
+    );
+    await wait(500);
+
+    const humanMsgs = messages.filter((m) => m.role === 'human');
+    assert.equal(humanMsgs.length, 1);
+    assert.equal(humanMsgs[0].content, '終わりました');
+    assert.equal(humanMsgs[0].sender.kind, 'subagent');
 
     if (state.fsWatcher) state.fsWatcher.close();
   });

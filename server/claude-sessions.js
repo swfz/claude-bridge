@@ -11,6 +11,8 @@ import {
   extractThinkingText,
   hookErrorMessage,
   taskNotificationMessage,
+  queuedAgentMessage,
+  noteAgentLaunch,
   createTaskNotificationState,
   extractToolUses,
   humanMessageFields,
@@ -291,9 +293,12 @@ export function parseHistoryLines(content) {
     if (!line.trim()) continue;
     try {
       const record = JSON.parse(line);
+      noteAgentLaunch(record, pendingTasks);
       if (record.type === 'user') {
         const text = extractTextContent(record.message, 0);
-        const task = text ? taskNotificationMessage(record, text, pendingTasks) : null;
+        const task =
+          (text ? taskNotificationMessage(record, text, pendingTasks) : null) ||
+          queuedAgentMessage(record, text, pendingTasks);
         if (task) {
           if (task.message) messages.push(task.message);
         } else if (text) {
@@ -347,7 +352,9 @@ export function parseHistoryLines(content) {
         const hookError = hookErrorMessage(record);
         if (hookError) messages.push(hookError);
       } else if (record.type === 'queue-operation' && record.operation === 'enqueue' && record.content) {
-        const task = taskNotificationMessage(record, record.content, pendingTasks, { queued: true });
+        const task =
+          taskNotificationMessage(record, record.content, pendingTasks, { queued: true }) ||
+          queuedAgentMessage(record, record.content, pendingTasks, { queued: true });
         if (task) {
           if (task.message) messages.push(task.message);
           continue;
