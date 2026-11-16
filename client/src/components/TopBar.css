@@ -99,6 +99,39 @@
   text-overflow: ellipsis;
 }
 
+/* session ID。全件に付く情報なので薄い等幅の文字だけ（枠なし、hover で下地） */
+.topbar-session-id {
+  position: relative;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.topbar-session-id:hover,
+.topbar-session-id:focus-visible {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.topbar-session-id-text.hidden {
+  visibility: hidden;
+}
+
+.topbar-session-id-copied {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: var(--text-primary);
+}
+
 .header-controls {
   display: flex;
   align-items: center;

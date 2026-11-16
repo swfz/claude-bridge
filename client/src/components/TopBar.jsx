@@ -1,4 +1,5 @@
-import { TbBell, TbBellOff, TbEye, TbEyeOff, TbMoon, TbSun } from 'react-icons/tb';
+import { useEffect, useRef, useState } from 'react';
+import { TbBell, TbBellOff, TbCheck, TbEye, TbEyeOff, TbMoon, TbSun } from 'react-icons/tb';
 import { parseCwd } from '../utils/cwdLabel.js';
 import UsageMeter from './UsageMeter.jsx';
 import './TopBar.css';
@@ -20,6 +21,39 @@ function ThemeToggle({ appTheme, onToggleTheme }) {
   );
 }
 
+const COPIED_MS = 1500;
+
+// claude の session ID（先頭 8 文字だけ薄く出し、クリックで全文をコピー）。
+// `claude --resume <id>` や新規作成ダイアログの ID 検索に貼るため。
+// コピー済みの印は同じ幅の中で文字と入れ替えるだけにして、隣を押し動かさない
+function SessionIdCopy({ id }) {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef(null);
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+  useEffect(() => {
+    setCopied(false);
+  }, [id]);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopied(true);
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), COPIED_MS);
+    } catch (err) {
+      console.warn('[copy] failed', err);
+    }
+  };
+
+  const label = `session ID: ${id}（クリックでコピー）`;
+  return (
+    <button type="button" className="topbar-session-id" onClick={handleCopy} title={label} aria-label={label}>
+      <span className={copied ? 'topbar-session-id-text hidden' : 'topbar-session-id-text'}>{id.slice(0, 8)}</span>
+      {copied && <TbCheck className="topbar-session-id-copied" aria-hidden />}
+    </button>
+  );
+}
+
 // 今見ているセッション。ディレクトリ色のドット＋リポジトリ名＋タイトル 1 行（フルパスは tooltip）
 function CurrentSession({ session }) {
   if (!session) return null;
@@ -32,6 +66,7 @@ function CurrentSession({ session }) {
       />
       {project && <span className="topbar-current-dir">{project}</span>}
       <span className="topbar-current-title">{session.title}</span>
+      {session.claudeSessionId && <SessionIdCopy id={session.claudeSessionId} />}
     </div>
   );
 }

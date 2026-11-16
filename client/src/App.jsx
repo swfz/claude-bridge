@@ -1952,7 +1952,12 @@ export default function App() {
   const activeHidden = shareMode && activeSession?.claudeSessionId && sensitiveIds.has(activeSession.claudeSessionId);
   const currentSessionForBar =
     sessionUiVisible && activeSession && !activeHidden
-      ? { title: activeSession.name, cwd: activeSession.cwd, color: dirColorOfCwd(activeSession.cwd) }
+      ? {
+          title: activeSession.name,
+          cwd: activeSession.cwd,
+          color: dirColorOfCwd(activeSession.cwd),
+          claudeSessionId: activeSession.claudeSessionId || null,
+        }
       : null;
   const hiddenSensitiveCount = shareMode
     ? countHiddenSensitive(sensitiveSessions, { tabs: sessions, running: runningSessions, recent: recentSessions })
