@@ -78,18 +78,20 @@
   overflow: hidden;
 }
 
-/* 推論中の行（WorkingIndicator）を本文の直下に置くときだけ縦に積む。本文側は残りの高さを取る */
-.app-main.with-working {
+/* 作業中タブでは本文の列の下に、推論中の行・タスクのチップ列・選択肢カード・入力欄（.app-main-bottom）を積む。
+   本文側は残りの高さを取り、ファイラ・右パネルは画面の下端まで伸びる */
+.app-main.with-bottom {
   display: flex;
   flex-direction: column;
 }
 
-.app-main.with-working > :first-child {
+.app-main.with-bottom > :first-child {
   flex: 1;
   min-height: 0;
   height: auto;
 }
 
-.app-main.with-working > .working-indicator {
+.app-main-bottom {
   flex-shrink: 0;
+  min-width: 0;
 }

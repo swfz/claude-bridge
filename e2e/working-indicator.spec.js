@@ -107,7 +107,7 @@ test.describe('推論中インジケータ', () => {
     expect(idleStrip.height).toBe(busyStrip.height);
   });
 
-  test('ファイラを開くと本文の列に合わせて右にずれ、本文の直下に収まる', async ({ page }) => {
+  test('ファイラを開くと推論中の行と入力欄が本文の列に合わせて右にずれ、ファイラは下端まで伸びる', async ({ page }) => {
     await page.addInitScript((id) => {
       localStorage.setItem('showHome', 'false');
       localStorage.setItem('activeSessionId', id);
@@ -141,6 +141,11 @@ test.describe('推論中インジケータ', () => {
       // 縦位置・高さは変わらない
       expect(ind.y).toBe(before.y);
       expect(ind.height).toBe(before.height);
+      // 入力欄も本文の列に揃い、ファイラは入力欄の下端まで伸びる
+      const input = await page.locator('.input-bar').boundingBox();
+      expect(Math.abs(input.x - chat.x)).toBeLessThan(0.5);
+      expect(Math.abs(input.width - chat.width)).toBeLessThan(0.5);
+      expect(Math.abs(ex.y + ex.height - (input.y + input.height))).toBeLessThan(0.5);
     }).toPass();
   });
 });
