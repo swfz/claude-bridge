@@ -1,9 +1,13 @@
 import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, appendFile, truncate } from 'fs/promises';
+import { mkdtemp, writeFile, appendFile, truncate, utimes } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { readSessionArtifacts, clearSessionArtifactsCache } from '../server/session-artifacts.js';
+import {
+  readSessionArtifacts,
+  readSessionCustomTitle,
+  clearSessionArtifactsCache,
+} from '../server/session-artifacts.js';
 
 const line = (record) => JSON.stringify(record) + '\n';
 
@@ -226,5 +230,88 @@ describe('readSessionArtifacts (並行呼び出し)', () => {
     assert.equal(a.length, 1);
     assert.equal(b.length, 1);
     assert.equal((await readSessionArtifacts(filePath)).length, 1);
+  });
+});
+
+describe('readSessionCustomTitle', () => {
+  beforeEach(() => clearSessionArtifactsCache());
+
+  it('会話の途中に書かれた /rename のうち最後のものを前後の空白を落として返す', async () => {
+    const file = await tmpFile();
+    await writeFile(
+      file,
+      fillerBlock(50) +
+        line({ type: 'custom-title', customTitle: '最初の名前' }) +
+        fillerBlock(5, 100) +
+        line({ type: 'custom-title', customTitle: '  付け直した名前  ' }) +
+        fillerBlock(5, 200),
+    );
+    assert.equal(await readSessionCustomTitle(file), '付け直した名前');
+  });
+
+  it('customTitle が文字列でない custom-title は無視して前の名前を残し、後続も読む', async () => {
+    const file = await tmpFile();
+    await writeFile(
+      file,
+      line({ type: 'custom-title', customTitle: 42 }) +
+        line({ type: 'custom-title', customTitle: '有効な名前' }) +
+        line({ type: 'custom-title', customTitle: null }),
+    );
+    assert.equal(await readSessionCustomTitle(file), '有効な名前');
+  });
+
+  it('custom-title は publish として数えず、publish も名前にしない', async () => {
+    const file = await tmpFile();
+    await writeFile(
+      file,
+      line({ type: 'custom-title', customTitle: '名前', toolUseResult: { url: 'https://claude.ai/code/artifact/x' } }) +
+        line(publishRecord('https://claude.ai/code/artifact/a', { title: 'ページ' })),
+    );
+    assert.equal(await readSessionCustomTitle(file), '名前');
+    assert.deepEqual(
+      (await readSessionArtifacts(file)).map((a) => a.title),
+      ['ページ'],
+    );
+  });
+
+  it('/rename が無い・ファイルが無いときは空文字', async () => {
+    const file = await tmpFile();
+    await writeFile(file, fillerBlock(3));
+    assert.equal(await readSessionCustomTitle(file), '');
+    assert.equal(await readSessionCustomTitle(join(tmpdir(), 'cb-nope-title.jsonl')), '');
+  });
+});
+
+describe('clearSessionArtifactsCache', () => {
+  it('捨てた後は同じ stat のファイルでも読み直す', async () => {
+    const file = await tmpFile();
+    const fixed = new Date('2026-10-01T00:00:00.000Z');
+    await writeFile(file, line({ type: 'custom-title', customTitle: '名前A' }));
+    await utimes(file, fixed, fixed);
+    assert.equal(await readSessionCustomTitle(file), '名前A');
+
+    // 同じサイズ・同じ mtime で書き換える（キャッシュのままなら古い名前が返る）
+    await writeFile(file, line({ type: 'custom-title', customTitle: '名前B' }));
+    await utimes(file, fixed, fixed);
+    assert.equal(await readSessionCustomTitle(file), '名前A');
+    clearSessionArtifactsCache();
+    assert.equal(await readSessionCustomTitle(file), '名前B');
+  });
+});
+
+describe('readSessionArtifacts (プリフィルタ)', () => {
+  beforeEach(() => clearSessionArtifactsCache());
+
+  it('toolUseResult を持っていても claude.ai を含まない行は publish にしない', async () => {
+    const file = await tmpFile();
+    await writeFile(file, line(publishRecord('https://example.com/page', { title: '外部' })));
+    assert.deepEqual(await readSessionArtifacts(file), []);
+  });
+
+  it('timestamp の無い publish は timestamp を空文字にする', async () => {
+    const file = await tmpFile();
+    await writeFile(file, line(publishRecord('https://claude.ai/code/artifact/a', { title: '時刻なし' })));
+    const [artifact] = await readSessionArtifacts(file);
+    assert.equal(artifact.timestamp, '');
   });
 });
