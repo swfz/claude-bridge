@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'vitest';
 import assert from 'node:assert/strict';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -118,7 +118,7 @@ describe('headerPath', () => {
 describe('readSessionDiff', () => {
   let repo;
   let secretDir;
-  before(async () => {
+  beforeAll(async () => {
     secretDir = await mkdtemp(join(tmpdir(), 'session-diff-secret-'));
     repo = await mkdtemp(join(tmpdir(), 'session-diff-'));
     await git(repo, 'init', '-q');
@@ -148,7 +148,7 @@ describe('readSessionDiff', () => {
     await writeFile(join(repo, 'untracked-other.txt'), 'u\n');
     await writeFile(join(repo, 'bin.dat'), Buffer.from([0, 1, 2]));
   });
-  after(async () => {
+  afterAll(async () => {
     await rm(repo, { recursive: true, force: true });
     await rm(secretDir, { recursive: true, force: true });
   });

@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { INITIAL_PICK_STATE, keyToPickAction, pickReducer, resolveTarget } from '../client/src/utils/numberPick.js';
 import { isPickModeShortcut } from '../client/src/utils/keys.js';

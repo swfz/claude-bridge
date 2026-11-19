@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
 // child_process.exec をモック。コマンドごとに stdout を出し分ける
@@ -13,19 +13,17 @@ function stdoutFor(cmd) {
   return '';
 }
 
-mock.module('child_process', {
-  namedExports: {
-    exec: (cmd, cb) => {
-      execCalls.push(cmd);
-      const value = stdoutFor(cmd);
-      if (value instanceof Error) {
-        cb(value);
-      } else {
-        cb(null, { stdout: value, stderr: '' });
-      }
-    },
+vi.mock('child_process', () => ({
+  exec: (cmd, cb) => {
+    execCalls.push(cmd);
+    const value = stdoutFor(cmd);
+    if (value instanceof Error) {
+      cb(value);
+    } else {
+      cb(null, { stdout: value, stderr: '' });
+    }
   },
-});
+}));
 
 const { killClaudePane } = await import('../server/tmux-session.js');
 

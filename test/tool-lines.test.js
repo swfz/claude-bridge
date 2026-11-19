@@ -1,6 +1,6 @@
 // チャットのツール行・束の整形（client/src/utils/toolLines.js）と、
 // サーバーが流すツールの結果の印（server/jsonl-utils.js の extractToolResultFlags）のテスト
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   buildToolResultIndex,

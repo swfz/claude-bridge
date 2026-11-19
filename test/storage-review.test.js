@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
@@ -12,10 +12,10 @@ const { Storage } = await import('../server/storage.js');
 
 describe('Storage review draft (pending review の永続化)', () => {
   let storage;
-  before(() => {
+  beforeAll(() => {
     storage = new Storage();
   });
-  after(() => {
+  afterAll(() => {
     rmSync(TMP, { recursive: true, force: true });
   });
 
@@ -46,10 +46,10 @@ describe('Storage review draft (pending review の永続化)', () => {
 
 describe('Storage pins (ピン留めの永続化)', () => {
   let storage;
-  before(() => {
+  beforeAll(() => {
     storage = new Storage();
   });
-  after(() => {
+  afterAll(() => {
     rmSync(TMP, { recursive: true, force: true });
   });
 

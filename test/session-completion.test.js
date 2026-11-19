@@ -1,4 +1,4 @@
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { exec } from 'child_process';
 import { promisify } from 'util';

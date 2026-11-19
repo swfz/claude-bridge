@@ -7,7 +7,7 @@ const noUnusedVarsRule = ['error', { argsIgnorePattern: '^_', varsIgnorePattern:
 
 export default [
   {
-    ignores: ['client/dist/**', 'node_modules/**', 'client/node_modules/**', 'samples/**'],
+    ignores: ['client/dist/**', 'coverage/**', 'node_modules/**', 'client/node_modules/**', 'samples/**'],
   },
   js.configs.recommended,
   {
