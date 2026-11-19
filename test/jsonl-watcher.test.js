@@ -1,9 +1,10 @@
-import { describe, it, beforeEach, afterEach } from 'vitest';
+import { describe, it, beforeEach, afterEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, utimesSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { JsonlWatcher } from '../server/jsonl-watcher.js';
+import { createTaskNotificationState } from '../server/jsonl-utils.js';
 
 // _findLatestJsonl と findSessionForCwd のテスト用に
 // CLAUDE_PROJECTS_DIR を差し替えることはできないが、
@@ -604,5 +605,267 @@ describe('JsonlWatcher', () => {
       assert.equal(typeof meta.projectDir, 'string');
       assert.ok(meta.projectDir.length > 0);
     });
+  });
+});
+
+describe('JsonlWatcher が配るメッセージ', () => {
+  let watcher;
+  let tmpDir;
+
+  beforeEach(() => {
+    watcher = new JsonlWatcher();
+    tmpDir = mkdtempSync(join(tmpdir(), 'jsonl-msg-'));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    watcher.stopAll();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const TASK_TEXT =
+    '<task-notification>\n<task-id>bg1</task-id>\n<status>completed</status>\n<summary>テスト完了</summary>\n</task-notification>';
+
+  // records を書いたファイルを先頭から読み、配られたメッセージを返す
+  function readAll(records) {
+    const filePath = join(tmpDir, 'session.jsonl');
+    writeFileSync(filePath, records.map((r) => JSON.stringify(r)).join('\n') + '\n');
+    const messages = [];
+    watcher._readNewLines({
+      bridgeSessionId: 'b1',
+      targetFile: filePath,
+      linesRead: 0,
+      pendingTasks: createTaskNotificationState(),
+      onMessage: (msg) => messages.push(msg),
+    });
+    return messages;
+  }
+
+  const base = { type: 'chat_message', bridgeSessionId: 'b1' };
+
+  it('人の発言・Artifact・ツール結果の印・WebFetch に時刻（無ければ空文字）を付けて配る', () => {
+    const url = 'https://claude.ai/code/artifact/00000000-0000-0000-0000-000000000001';
+    const toolResult = (id) => ({ role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] });
+    const messages = readAll([
+      { type: 'user', uuid: 'u1', timestamp: 'T1', message: { content: 'a' } },
+      // 監視側は updatedAt を見ない
+      { type: 'user', uuid: 'u2', updatedAt: 'U2', message: { content: 'b' } },
+      { type: 'user', uuid: 'p1', message: toolResult('toolu_1'), toolUseResult: { url, path: '/r.html', title: 'R' } },
+      {
+        type: 'user',
+        uuid: 'f1',
+        message: toolResult('toolu_2'),
+        toolUseResult: { url: 'https://example.com/', code: 200, result: '# Example\n本文' },
+      },
+    ]);
+    assert.deepEqual(messages, [
+      { ...base, role: 'human', content: 'a', uuid: 'u1', timestamp: 'T1' },
+      { ...base, role: 'human', content: 'b', uuid: 'u2', timestamp: '' },
+      { ...base, role: 'artifact', content: 'R', url, title: 'R', path: '/r.html', uuid: 'p1', timestamp: '' },
+      { ...base, role: 'toolresult', content: '', results: [{ id: 'toolu_1' }], uuid: 'p1', timestamp: '' },
+      { ...base, role: 'toolresult', content: '', results: [{ id: 'toolu_2' }], uuid: 'f1', timestamp: '' },
+      {
+        ...base,
+        role: 'webfetch',
+        content: 'Example',
+        url: 'https://example.com/',
+        title: 'Example',
+        code: 200,
+        uuid: 'f1',
+        timestamp: '',
+      },
+    ]);
+  });
+
+  it('assistant の thinking・本文・ツール呼び出しを分けて配り、中身の無い応答や他の種類は配らない', () => {
+    const messages = readAll([
+      {
+        type: 'assistant',
+        uuid: 'k1',
+        timestamp: 'T1',
+        message: { content: [{ type: 'thinking', thinking: '考え1' }] },
+      },
+      { type: 'assistant', uuid: 'k2', message: { content: [{ type: 'thinking', thinking: '考え2' }] } },
+      { type: 'assistant', uuid: 'e1', message: { content: [] } },
+      { type: 'system', uuid: 's1', message: { content: [{ type: 'text', text: 'system の本文' }] } },
+      { type: 'assistant', uuid: 'a1', message: { content: [{ type: 'text', text: '本文だけ' }] } },
+      {
+        type: 'assistant',
+        uuid: 'a2',
+        timestamp: 'T2',
+        message: {
+          model: 'claude-sonnet-4',
+          usage: { input_tokens: 10, output_tokens: 1 },
+          content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/x' } }],
+        },
+      },
+    ]);
+    assert.deepEqual(messages, [
+      { ...base, role: 'thinking', content: '考え1', uuid: 'k1', timestamp: 'T1' },
+      { ...base, role: 'thinking', content: '考え2', uuid: 'k2', timestamp: '' },
+      {
+        ...base,
+        role: 'assistant',
+        content: '本文だけ',
+        toolUses: undefined,
+        contextUsage: undefined,
+        uuid: 'a1',
+        timestamp: '',
+      },
+      {
+        ...base,
+        role: 'assistant',
+        content: '',
+        toolUses: [{ id: 't1', name: 'Read', input: { file_path: '/x' }, summary: '/x' }],
+        contextUsage: {
+          inputTokens: 10,
+          cacheCreationTokens: 0,
+          cacheReadTokens: 0,
+          outputTokens: 1,
+          contextTokens: 10,
+          contextWindow: 200000,
+          model: 'claude-sonnet-4',
+        },
+        uuid: 'a2',
+        timestamp: 'T2',
+      },
+    ]);
+  });
+
+  it('attachment はフックの失敗だけを配る', () => {
+    const messages = readAll([
+      {
+        type: 'attachment',
+        uuid: 'h1',
+        timestamp: 'T1',
+        attachment: { type: 'hook_non_blocking_error', hookName: 'Stop', stderr: 'boom' },
+      },
+      { type: 'attachment', uuid: 'h2', attachment: { type: 'file', path: '/x' } },
+    ]);
+    assert.deepEqual(messages, [
+      {
+        ...base,
+        uuid: 'h1',
+        timestamp: 'T1',
+        role: 'hookerror',
+        content: 'boom',
+        hook: { name: 'Stop', exitCode: null, command: '', detail: 'boom' },
+      },
+    ]);
+  });
+
+  it('queue-operation は本文のある enqueue だけを人の発言として配る', () => {
+    const messages = readAll([
+      { type: 'queue-operation', operation: 'enqueue', uuid: 'q1', timestamp: 'T1', content: '積んだ指示' },
+      { type: 'queue-operation', operation: 'enqueue', uuid: 'q2', content: '時刻なし' },
+      { type: 'queue-operation', operation: 'remove', uuid: 'q3', content: '取り消し' },
+      { type: 'queue-operation', operation: 'enqueue', uuid: 'q4', content: '' },
+      { type: 'system', operation: 'enqueue', uuid: 'q5', content: '別の種類' },
+    ]);
+    assert.deepEqual(messages, [
+      { ...base, role: 'human', content: '積んだ指示', uuid: 'q1', timestamp: 'T1' },
+      { ...base, role: 'human', content: '時刻なし', uuid: 'q2', timestamp: '' },
+    ]);
+  });
+
+  it('enqueue されたタスク通知は積み直しや後の user レコードがあっても 1 件だけ配る', () => {
+    const messages = readAll([
+      { type: 'queue-operation', operation: 'enqueue', uuid: 'q1', timestamp: 'T1', content: TASK_TEXT },
+      { type: 'queue-operation', operation: 'enqueue', uuid: 'q2', timestamp: 'T2', content: TASK_TEXT },
+      { type: 'user', uuid: 'u1', timestamp: 'T3', message: { content: TASK_TEXT } },
+      { type: 'user', uuid: 'u2', timestamp: 'T4', message: { content: TASK_TEXT } },
+      { type: 'user', uuid: 'u3', timestamp: 'T5', message: { content: '次の指示' } },
+    ]);
+    assert.deepEqual(
+      messages.map((m) => [m.type, m.bridgeSessionId, m.role, m.content, m.uuid]),
+      [
+        ['chat_message', 'b1', 'task', 'テスト完了', 'q1'],
+        ['chat_message', 'b1', 'human', '次の指示', 'u3'],
+      ],
+    );
+  });
+
+  it('enqueue されていないタスク通知の user レコードはタスク通知として配る', () => {
+    const messages = readAll([{ type: 'user', uuid: 'u1', timestamp: 'T1', message: { content: TASK_TEXT } }]);
+    assert.deepEqual(
+      messages.map((m) => [m.type, m.bridgeSessionId, m.role, m.content, m.uuid, m.timestamp]),
+      [['chat_message', 'b1', 'task', 'テスト完了', 'u1', 'T1']],
+    );
+  });
+
+  it('Agent ツールで起動したサブエージェントの報告には種別名を付ける', () => {
+    const messages = readAll([
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        message: { content: [{ type: 'tool_use', id: 'toolu_a', name: 'Agent', input: { subagent_type: 'Explore' } }] },
+      },
+      {
+        type: 'user',
+        uuid: 'r1',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_a', content: 'launched' }] },
+        toolUseResult: { agentId: 'agent123' },
+      },
+      {
+        type: 'queue-operation',
+        operation: 'enqueue',
+        uuid: 'q1',
+        content: '<agent-message from="agent123">\n[Subagent hand-back] 終わりました\n</agent-message>',
+      },
+    ]);
+    const report = messages.find((m) => m.uuid === 'q1');
+    assert.equal(report.role, 'human');
+    assert.deepEqual(report.sender, { kind: 'subagent', name: 'Explore' });
+  });
+
+  it('監視先のファイルが消えていても例外を投げず何も配らない', () => {
+    const messages = [];
+    watcher._readNewLines({
+      bridgeSessionId: 'b1',
+      targetFile: join(tmpDir, 'missing.jsonl'),
+      linesRead: 0,
+      pendingTasks: createTaskNotificationState(),
+      onMessage: (msg) => messages.push(msg),
+    });
+    assert.deepEqual(messages, []);
+  });
+
+  it('_findLatestJsonl は更新日時が最も新しい .jsonl を返す（他の拡張子は新しくても見ない）', () => {
+    const names = ['a.jsonl', 'b.jsonl', 'c.jsonl'];
+    for (const n of names) writeFileSync(join(tmpDir, n), '{}');
+    writeFileSync(join(tmpDir, 'z.txt'), 'x');
+    const now = Date.now();
+    utimesSync(join(tmpDir, 'z.txt'), new Date(now + 60000), new Date(now + 60000));
+    for (const newest of names) {
+      names.forEach((n, i) => {
+        const at = n === newest ? now : now - (i + 1) * 10000;
+        utimesSync(join(tmpDir, n), new Date(at), new Date(at));
+      });
+      assert.equal(watcher._findLatestJsonl(tmpDir), join(tmpDir, newest));
+    }
+  });
+
+  it('_detectNewFile は更新からちょうど 10 秒経ったファイルを新しいセッションとみなさない', () => {
+    const filePath = join(tmpDir, 'session.jsonl');
+    writeFileSync(filePath, '{}\n');
+    const at = Math.floor(Date.now() / 1000) * 1000 - 60000;
+    utimesSync(filePath, new Date(at), new Date(at));
+    vi.spyOn(Date, 'now').mockReturnValue(at + 10000);
+    const state = {
+      bridgeSessionId: 'b1',
+      projectPath: tmpDir,
+      targetFile: null,
+      linesRead: 0,
+      attachExisting: false,
+      onMessage: () => {},
+      fsWatcher: null,
+      pollTimer: null,
+    };
+    watcher._detectNewFile(state);
+    assert.equal(state.targetFile, null);
+  });
+
+  it('監視していない ID の stopWatching は何もしない', () => {
+    assert.doesNotThrow(() => watcher.stopWatching('unknown'));
   });
 });

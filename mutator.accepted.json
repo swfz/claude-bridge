@@ -1,4 +1,8 @@
 {
+  "106fa1m8ngh": {
+    "reason": "equivalent: for an empty list files[0].path throws inside the try and the catch returns null",
+    "where": "server/jsonl-watcher.js:124:14 files.length > 0 -> true"
+  },
   "10l4py29gx2": {
     "reason": "equivalent: bucketDays(days, 'day') yields one bucket per day with the same metric values, so the stacked max is identical",
     "where": "client/src/utils/heatmap.js:350:21 granularity === 'day' -> false"
@@ -7,9 +11,17 @@
     "reason": "equivalent: the fallback element is a string whose ?.claudeSessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:64:29 [] -> [\"Stryker was here!\"]"
   },
+  "10n4r2pd0iv": {
+    "reason": "equivalent: the targetFile branch above returns early, so state.targetFile is always null here and both forms reduce to !newestPath",
+    "where": "server/jsonl-watcher.js:144:9 !newestPath || state.targetFile === newestPath -> (!newestPath && state.targetFile === newestPath)"
+  },
   "114dqx61hv1": {
     "reason": "equivalent: JSON.parse never yields a non-array with a filter method; calling filter on anything else throws and the catch returns []",
     "where": "client/src/utils/filerRoots.js:73:12 Array.isArray(raw) -> true"
+  },
+  "11acfrn9pct": {
+    "reason": "equivalent: readFirstLines never rejects for a string path, so the .catch fallback is unreachable",
+    "where": "server/claude-sessions.js:271:70 [] -> undefined"
   },
   "11b77v49rnh": {
     "reason": "equivalent: shiftDate is only used by weekStartOf as a bucket id compared for equality within bucketDays; the full ISO string compares the same way as its date part and never appears in the output",
@@ -19,13 +31,37 @@
     "reason": "equivalent: a sentinel string as a session has no slots, so buildRuns(undefined) yields no runs and no segment is produced",
     "where": "client/src/utils/calendar.js:113:37 [] -> [\"Stryker was here!\"]"
   },
+  "12ch2deufwv": {
+    "reason": "equivalent: continue is the last statement of the loop body, so removing it changes nothing",
+    "where": "server/activity-heatmap.js:132:17 { continue; } -> {}"
+  },
   "12gl9342ay5": {
     "reason": "equivalent: when resetAt is set the date is valid, so remaining is always a non-empty string and the '' branch is never taken",
     "where": "client/src/utils/usageMeter.js:73:73 '' -> 'Stryker was here!'"
   },
+  "12gzugr6gy7": {
+    "reason": "equivalent: noteCostState ignores records without numeric startTime and totalToolDuration, which user/assistant/system records do not carry",
+    "where": "server/activity-heatmap.js:590:7 type === 'cost-state' -> true"
+  },
+  "12uqethkkwv": {
+    "reason": "equivalent: this fallback watcher is only installed when targetFile is set (with no target the same projectPath watch has just failed), and _detectNewFile on a set target ends in _readNewLines",
+    "where": "server/jsonl-watcher.js:184:15 !state.targetFile -> state.targetFile"
+  },
+  "12x93dp156g": {
+    "reason": "equivalent: a pending tool keeps its request info alive through pruneRequests, so info is never undefined here",
+    "where": "server/activity-heatmap.js:321:30 ?. -> ."
+  },
+  "13i4ybmwgxb": {
+    "reason": "equivalent: when no latest file exists targetFile is null, readFileSync(null) throws and the catch leaves linesRead at 0, same as skipping",
+    "where": "server/jsonl-watcher.js:55:11 targetFile -> true"
+  },
   "13iabbwu8n7": {
     "reason": "equivalent: at d = 7, starts[8] is undefined so ms < undefined is false and totals[7] is never written",
     "where": "client/src/utils/calendar.js:234:23 d < totals.length -> d <= totals.length"
+  },
+  "13qdd4kzwhl": {
+    "reason": "equivalent: pruning only drops request info no pending/held tool or active request refers to; a lingering entry has endMs reset when its key is reused and its lastResultMs never exceeds a later tool_use time",
+    "where": "server/activity-heatmap.js:348:3 pruneRequests(state); -> ;"
   },
   "13uls4qj4eg": {
     "reason": "equivalent: tool input is JSON, so the non-string primitives that reach here (number, boolean) give Object.values() === [] just like the early return; only a function input could differ",
@@ -35,41 +71,137 @@
     "reason": "equivalent: when state.groups is missing the extra 'g:undefined' entry in byKey is never reached: groupKeyOf rejects g: keys (no manual groups) and the returned manual list uses its own st.groups || []",
     "where": "client/src/utils/tabGroups.js:56:32 [] -> [\"Stryker was here!\"]"
   },
+  "14l7xgysbd5": {
+    "reason": "equivalent: TAB_RE is only an early-out guard; the item regex itself needs a ☐/☒ followed by a non-empty label, so lines rejected or admitted differently by the inverted class still end with items empty and return null",
+    "where": "server/choice-prompt.js:28:16 /[☐☒]/ -> /[^☐☒]/"
+  },
   "14orevbcdp": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:77:40 '' -> 'Stryker was here!'"
+  },
+  "14tvbzpk1rw": {
+    "reason": "equivalent: adjustAutoTools with empty lists returns {}",
+    "where": "server/activity-heatmap.js:909:19 group.autoMain.length + group.autoSub.length > 0 -> group.autoMain.length + group.autoSub.length >= 0"
+  },
+  "15jacm6pe8i": {
+    "reason": "equivalent: 件数 1 のキーを delete する代わりに 0 を入れても、読む側は pending.get(key) || 0 で同じ 0 になる",
+    "where": "server/jsonl-utils.js:130:9 n === 1 -> false"
   },
   "15wbd46ma9o": {
     "reason": "equivalent: BARE_URL_RE excludes the full-width closing bracket, so a bare URL match can never end with it",
     "where": "client/src/utils/links.js:12:73 '）' -> ''"
   },
+  "15yy0eyyvwx": {
+    "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクトなら result.url は undefined で、次の typeof url 検査で同じく null になる",
+    "where": "server/jsonl-utils.js:227:18 typeof result !== 'object' -> false"
+  },
+  "160vayyzzar": {
+    "reason": "equivalent: with exactly 200 pending tools ids.slice(0, 0) is empty, so nothing is deleted",
+    "where": "server/activity-heatmap.js:295:9 ids.length > MAX_PENDING_TOOLS -> ids.length >= MAX_PENDING_TOOLS"
+  },
   "162sktold7f": {
     "reason": "equivalent: a sentinel string as a slot has slot[0]='S', so ms is NaN and matches no day (and slot[7]=' ' is skipped by value <= 0)",
     "where": "client/src/utils/calendar.js:230:41 [] -> [\"Stryker was here!\"]"
+  },
+  "16c3zphffnm": {
+    "reason": "equivalent: touching intervals give the same union length whether merged or added as separate segments",
+    "where": "server/activity-heatmap.js:531:28 a > curEnd -> a >= curEnd"
   },
   "16fiaxayp3g": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:76:40 '' -> 'Stryker was here!'"
   },
+  "16ntpd15nk": {
+    "reason": "equivalent: when out is empty out[-1] is undefined, which is not '', so the trailing-blank loop stops without popping",
+    "where": "server/choice-prompt.js:169:10 out.length > 0 -> true"
+  },
+  "16nwkzz01ff": {
+    "reason": "equivalent: a placeholder string main entry has no prompts, so it contributes nothing",
+    "where": "server/activity-heatmap.js:887:22 [] -> [\"Stryker was here!\"]"
+  },
+  "16qwpgomrxs": {
+    "reason": "equivalent: continue is the last statement of the loop body, so removing it changes nothing",
+    "where": "server/claude-sessions.js:31:13 { continue; } -> {}"
+  },
+  "178lxry72g7": {
+    "reason": "equivalent: adjustAutoTools with empty lists returns {}",
+    "where": "server/activity-heatmap.js:909:19 group.autoMain.length + group.autoSub.length > 0 -> true"
+  },
+  "17944cbcj81": {
+    "reason": "equivalent: an oversized buffer is filled only up to bytesRead, and only buf.subarray(0, bytesRead) is used",
+    "where": "server/shell-tasks.js:192:20 fileStat.size - entry.offset -> fileStat.size + entry.offset"
+  },
+  "17amltjp4ro": {
+    "reason": "equivalent: the extra index 6 of the totals cell is never read (toDay destructures 6 values)",
+    "where": "server/activity-heatmap.js:779:23 i < CELL_SIZE -> i <= CELL_SIZE"
+  },
+  "17nnwz525w5": {
+    "reason": "equivalent: every caller of isRule passes an already trimmed string (collectDescription, collectQuestion and extractPermissionDetail all trim first)",
+    "where": "server/choice-prompt.js:48:39 line.trim() -> line"
+  },
+  "17oduu1hf5v": {
+    "reason": "equivalent: adding 0 ms to userSkippedMs does not change it",
+    "where": "server/activity-heatmap.js:334:67 ms - usedAt > 0 -> ms - usedAt >= 0"
+  },
+  "17qogj7netn": {
+    "reason": "equivalent: sum 0 means every interval is 0, so every share is 0 and skipped",
+    "where": "server/activity-heatmap.js:570:22 sum <= 0 -> false"
+  },
+  "17spegl43b3": {
+    "reason": "equivalent: the extra non-option element sits at found[0]; it has no index so it is never the start, and the block is built only from entries after the start",
+    "where": "server/choice-prompt.js:81:17 [] -> [\"Stryker was here!\"]"
+  },
+  "17z44iw1qzm": {
+    "reason": "equivalent: an active request only has info while one of its tools is pending or held, which already protects it",
+    "where": "server/activity-heatmap.js:413:22 used.add(state.request.key); -> ;"
+  },
   "18bqajqyich": {
     "reason": "equivalent: the final flush with an empty cluster (no segments) pushes nothing",
     "where": "client/src/utils/calendar.js:94:7 cluster.length > 0 -> true"
+  },
+  "18ia9mtc1na": {
+    "reason": "equivalent: a placeholder string entry has no slots or prompts, so it contributes nothing",
+    "where": "server/activity-heatmap.js:886:18 [] -> [\"Stryker was here!\"]"
   },
   "18xxspt59a5": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:66:38 '' -> 'Stryker was here!'"
   },
+  "198gs7eydue": {
+    "reason": "equivalent: for an empty list files[0].path throws inside the try and the catch returns null",
+    "where": "server/jsonl-watcher.js:124:14 files.length > 0 -> files.length >= 0"
+  },
+  "19jd9zbhotq": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:86:15 pending.get(key) || 0 -> (pending.get(key) && 0)"
+  },
   "19mj04nklwn": {
     "reason": "equivalent: on an empty string last is undefined, which is not in TRAILING_CHARS, so the loop breaks right away",
     "where": "client/src/utils/links.js:32:10 result.length > 0 -> result.length >= 0"
+  },
+  "19z1rswvb86": {
+    "reason": "equivalent: model が文字列でないときの '' をダミー文字列にしても、[1m] も MODELS_1M にも当たらないので窓は同じ",
+    "where": "server/jsonl-utils.js:520:50 '' -> 'Stryker was here!'"
   },
   "1agtw2kh8dy": {
     "reason": "equivalent: indexes past the end read undefined, whose ?.id is undefined, so they are skipped",
     "where": "client/src/utils/working.js:34:18 tools.length - 1 -> tools.length + 1"
   },
+  "1ao4o9fgo69": {
+    "reason": "equivalent: an active request only has info while one of its tools is pending or held, which already protects it",
+    "where": "server/activity-heatmap.js:413:7 state.request -> false"
+  },
   "1b0byu6nfze": {
     "reason": "equivalent: with nothing stored, JSON.parse('') throws and the catch returns EMPTY_STATE, the same value the null branch returns",
     "where": "client/src/utils/tabGroups.js:134:68 'null' -> ''"
+  },
+  "1b8s48ryl6d": {
+    "reason": "equivalent: with a target file, _detectNewFile checks it exists, re-arms the watch and calls _readNewLines, which is the same output as calling _readNewLines directly (a missing file yields nothing either way)",
+    "where": "server/jsonl-watcher.js:174:13 !state.targetFile -> true"
+  },
+  "1bcejfkf51f": {
+    "reason": "equivalent: the text of a non-string/non-array tool_result is only searched for the background-ID marker, which neither '' nor the placeholder contains",
+    "where": "server/shell-tasks.js:166:10 '' -> 'Stryker was here!'"
   },
   "1bemfwq5vla": {
     "reason": "equivalent: ms === 0 is already caught by !ms, so <= 0 and < 0 differ on no input that reaches the check",
@@ -78,6 +210,14 @@
   "1bkpjtgn1yc": {
     "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:65:30 [] -> [\"Stryker was here!\"]"
+  },
+  "1bml90ni39w": {
+    "reason": "equivalent: the extra iteration at index*SLOT_MS === endMs has to === from and adds nothing",
+    "where": "server/activity-heatmap.js:191:51 index * SLOT_MS < endMs -> index * SLOT_MS <= endMs"
+  },
+  "1buhsszve7j": {
+    "reason": "equivalent: getLine が undefined を返す行は走査範囲に無く、'' の分岐には到達しない",
+    "where": "server/session.js:113:56 '' -> 'Stryker was here!'"
   },
   "1c2fgaa1g4u": {
     "reason": "equivalent: field !== 'Stryker was here!' is true whenever the original condition matters; an extra trailing empty record is always removed as a blank record",
@@ -95,29 +235,85 @@
     "reason": "equivalent: an empty array maps to an empty points list and joins to '' without the guard",
     "where": "client/src/utils/heatmap.js:430:18 values.length === 0 -> false"
   },
+  "1dp6iegm990": {
+    "reason": "equivalent: when size === offset the read is zero-length, finds no newline and returns without changing the entry",
+    "where": "server/shell-tasks.js:187:7 fileStat.size === entry.offset -> false"
+  },
+  "1ecc7cyj4nl": {
+    "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクト（文字列・数値・真偽値）なら result.agentId は undefined で、次の typeof result.agentId !== 'string' で同じく return する",
+    "where": "server/jsonl-utils.js:167:44 typeof result !== 'object' -> false"
+  },
+  "1f5o0u8v8qv": {
+    "reason": "equivalent: every entry produced by refreshDaily has busy",
+    "where": "server/activity-heatmap.js:898:78 ?. -> ."
+  },
+  "1fvpn99gq31": {
+    "reason": "equivalent: assigning curEnd = b when b === curEnd changes nothing",
+    "where": "server/activity-heatmap.js:535:16 b > curEnd -> b >= curEnd"
+  },
+  "1g2x7y92srs": {
+    "reason": "equivalent: a missing worktreeSession makes '.' throw a TypeError inside the try, which is caught and the line is skipped exactly as '?.' skips it",
+    "where": "server/claude-sessions.js:200:37 ?. -> ."
+  },
   "1g4d6zm8g4w": {
     "reason": "equivalent: after trim, split yields '' only for an empty query; terms [''] match every dir with rank 0 and keep server order, same as list.slice(0, limit)",
     "where": "client/src/utils/recentDirs.js:25:17 (query || '').trim().toLowerCase().split(/\\s+/).filter(Bool… -> (query || '').trim().toLowerCase().split(/\\s+/)"
+  },
+  "1g6cs82xqh6": {
+    "reason": "equivalent: when curEnd is null curStart is null too and null - null adds 0",
+    "where": "server/activity-heatmap.js:532:11 curEnd !== null -> true"
+  },
+  "1gcyrp32dlx": {
+    "reason": "equivalent: 呼び出し側が code を number か null に正規化済みで、null < 200 は true なので同じくタイトルなしになる",
+    "where": "server/jsonl-utils.js:271:7 typeof code !== 'number' -> false"
   },
   "1h340xxwdxq": {
     "reason": "equivalent: pos = found + 1 never exceeds length; at pos === length indexOf finds only an empty needle, which is returned early",
     "where": "client/src/utils/previewLocation.js:78:10 pos <= sourceText.length -> pos < sourceText.length"
   },
+  "1h6y8p06bmt": {
+    "reason": "equivalent: settleStaleBusy returns early when held is empty",
+    "where": "server/activity-heatmap.js:764:9 entry.busy.held.length > 0 -> entry.busy.held.length >= 0"
+  },
   "1h9b3t97r56": {
     "reason": "equivalent: the default isHidden result is only negated in filter, and !undefined === !false",
     "where": "client/src/utils/tabGroups.js:191:57 false -> undefined"
+  },
+  "1hjoo838ylj": {
+    "reason": "equivalent: 2 つ目の ?. は、match が null なら 1 つ目の ?. で式全体が短絡し、非 null ならキャプチャ群は必ず文字列なので . でも同じ",
+    "where": "server/jsonl-utils.js:355:78 ?. -> ."
   },
   "1hnap7vg8wr": {
     "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
     "where": "client/src/utils/tabOrder.js:51:12 Array.isArray(raw) -> true"
   },
+  "1i9doxhem9o": {
+    "reason": "equivalent: 置き換え後の文字列 'Stryker was here!' も空白と ! を含み /^[\\w-]+$/ に一致しないので、sessionId が空・未指定のときに同じメッセージで例外になる",
+    "where": "server/storage.js:63:39 '' -> 'Stryker was here!'"
+  },
+  "1igmyw6gab2": {
+    "reason": "equivalent: a pending tool keeps its request info alive through pruneRequests, so info is never undefined here",
+    "where": "server/activity-heatmap.js:322:9 info -> true"
+  },
   "1jdqqki8drh": {
     "reason": "equivalent: dropping a last character that is not a newline does not change the number of newlines, so the line count is the same (a single char gives [''] = 1)",
     "where": "client/src/utils/toolLines.js:29:16 text.endsWith('\\n') -> true"
   },
+  "1jhj42j1fs0": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> true"
+  },
+  "1ji5bmeps1q": {
+    "reason": "equivalent: 文字列でない agentId で agentNames に登録されても、引く側（queuedAgentMessage）の from は正規表現か typeof 検査済みで常に文字列なので引き当たらない",
+    "where": "server/jsonl-utils.js:167:74 typeof result.agentId !== 'string' -> false"
+  },
   "1jiczj7khdt": {
     "reason": "equivalent: splitting on single whitespace only adds empty terms, which filter((term) => term.length > 0) removes",
     "where": "client/src/utils/sessionSearch.js:23:12 /[\\s\\u3000]+/ -> /[\\s\\u3000]/"
+  },
+  "1joih4xsb3k": {
+    "reason": "equivalent: whenever a date key exists the timestamp parses, so the slot always exists",
+    "where": "server/activity-heatmap.js:609:9 slot -> true"
   },
   "1jy2k8tz9vg": {
     "reason": "equivalent: indexes past the end read undefined, which is not a turn start, so they are skipped",
@@ -131,6 +327,10 @@
     "reason": "equivalent: bucketIdOf and bucketLabel treat any value other than week/month as day, so the default '' behaves exactly like 'day'",
     "where": "client/src/utils/heatmap.js:230:48 'day' -> ''"
   },
+  "1kytxr29f1m": {
+    "reason": "equivalent: addBusy itself adds nothing when to <= from",
+    "where": "server/activity-heatmap.js:287:9 to > from -> true"
+  },
   "1la519gey6l": {
     "reason": "equivalent: String.prototype.slice clamps an end past the length, so max and min give the same slice",
     "where": "client/src/utils/previewLocation.js:46:25 min -> max"
@@ -139,6 +339,14 @@
     "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
     "where": "client/src/utils/sensitiveSessions.js:32:67 '[]' -> ''"
   },
+  "1llbls3tm3c": {
+    "reason": "equivalent: rest 0 gives ratio 0 and sum 0 means every interval is 0, so every share is 0 and skipped by share > 0",
+    "where": "server/activity-heatmap.js:570:9 rest <= 0 || sum <= 0 -> (rest <= 0 && sum <= 0)"
+  },
+  "1lovyep9u6i": {
+    "reason": "equivalent: intervals are max(0, ...) so sum is never negative; sum 0 gives zero shares",
+    "where": "server/activity-heatmap.js:570:22 sum <= 0 -> sum < 0"
+  },
   "1lrq1hmopzd": {
     "reason": "equivalent: the sentinel string slot gives slot[1]+slot[2] = 'tr', and 'tr' > 0 is false, so it is filtered out exactly like an empty list",
     "where": "client/src/utils/calendar.js:44:32 [] -> [\"Stryker was here!\"]"
@@ -146,6 +354,10 @@
   "1lt1e8cfkis": {
     "reason": "equivalent: removing claude- elsewhere only drops a token that is neither a family name nor a 1-2 digit version, so the output is the same",
     "where": "client/src/utils/modelLabel.js:15:44 /^claude-/ -> /claude-/"
+  },
+  "1lwm50stl2k": {
+    "reason": "equivalent: null > a positive epoch ms is always false, so a null lastConvMs never counts as a conversation",
+    "where": "server/activity-heatmap.js:437:21 lastConvMs !== null -> true"
   },
   "1lzvln3c213": {
     "reason": "equivalent: the fallback tool is a string whose ?.id is undefined, so it is never returned as running",
@@ -163,6 +375,30 @@
     "reason": "equivalent: BARE_URL_RE excludes the closing corner bracket, so a bare URL match can never end with it",
     "where": "client/src/utils/links.js:12:78 '」' -> ''"
   },
+  "1o5rkigtq6x": {
+    "reason": "equivalent: with empty text parseTaskNotifications returns null, so taskNotificationMessage returns null like the short-circuit",
+    "where": "server/jsonl-watcher.js:222:14 text -> true"
+  },
+  "1o8fn10vhdw": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> (pending.get(key) && 0)"
+  },
+  "1ojyyyd6ajj": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:88:11 n === 1 -> n !== 1"
+  },
+  "1ong9cqixqi": {
+    "reason": "equivalent: a null cache makes cache.version throw inside the try, which falls back to the same empty cache",
+    "where": "server/activity-heatmap.js:656:14 ?. -> ."
+  },
+  "1p16ssalesl": {
+    "reason": "equivalent: questions が無いときの [] を文字列 1 要素の配列にしても、文字列の q?.question は undefined で filter(Boolean) に落ち、同じく AskUserQuestion になる",
+    "where": "server/jsonl-utils.js:493:29 [] -> [\"Stryker was here!\"]"
+  },
+  "1pebuf6yki4": {
+    "reason": "equivalent: clearInterval(null) is a no-op",
+    "where": "server/jsonl-watcher.js:343:11 state.pollTimer -> true"
+  },
   "1pipvett5vx": {
     "reason": "equivalent: new Date(undefined) is an invalid date, so formatClock returns null through the NaN check anyway",
     "where": "client/src/utils/usageMeter.js:26:23 iso === undefined -> false"
@@ -171,17 +407,41 @@
     "reason": "equivalent: when prevStatus is undefined the next check prevStatus === 'busy' is false anyway, so the session is skipped either way",
     "where": "client/src/utils/attention.js:47:9 prevStatus === undefined -> false"
   },
+  "1q9n7evhe3p": {
+    "reason": "equivalent: the Error is thrown only to jump to the catch, which ignores it; its message is never read",
+    "where": "server/jsonl-watcher.js:45:40 'fromStart' -> ''"
+  },
   "1qcc0c8adzo": {
     "reason": "equivalent: JSON.parse('') throws and the catch returns [], the same as parsing '[]'",
     "where": "client/src/utils/filerRoots.js:72:76 '[]' -> ''"
+  },
+  "1qnjz0hebvw": {
+    "reason": "equivalent: the substring check is only a JSON.parse prefilter; a JSONL line written by Claude Code (JSON.stringify) that has a tool_use/tool_result block always contains the literal type string, so parsing every line records the same blocks",
+    "where": "server/shell-tasks.js:206:24 '\"tool_use\"' -> ''"
+  },
+  "1qsjnce4vmz": {
+    "reason": "equivalent: a placeholder string in autoTools yields NaN intervals, which shrink nothing",
+    "where": "server/activity-heatmap.js:736:58 [] -> [\"Stryker was here!\"]"
   },
   "1riwol4zvs6": {
     "reason": "equivalent: the fallback edit is a string; its ?.old_string/?.new_string are undefined so lineDiffStats adds 0/0",
     "where": "client/src/utils/toolLines.js:62:67 [] -> [\"Stryker was here!\"]"
   },
+  "1rla7roa62m": {
+    "reason": "equivalent: a placeholder string in autoMain yields NaN intervals that shrink nothing",
+    "where": "server/activity-heatmap.js:889:19 [] -> [\"Stryker was here!\"]"
+  },
+  "1rn2etn7zz0": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:88:11 n === 1 -> false"
+  },
   "1rszyqlbbvz": {
     "reason": "equivalent: fallback for a missing e.code; 'Stryker was here!' does not match /^(?:Digit|Numpad)([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:56 '' -> 'Stryker was here!'"
+  },
+  "1rvb9nc4tb2": {
+    "reason": "equivalent: a zero-length FileHandle.read returns bytesRead 0, so an empty file still yields { text: '', truncated: false }",
+    "where": "server/shell-tasks.js:57:7 length <= 0 -> false"
   },
   "1rxv7jr3xih": {
     "reason": "equivalent: with sessions missing, the placeholder string has no alive/id, so it is filtered out of aliveIds and skipped in the loop exactly like an empty list",
@@ -203,6 +463,14 @@
     "reason": "equivalent: with turn 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'; other turns take the same branch",
     "where": "client/src/utils/completionState.js:87:29 'ended' -> ''"
   },
+  "1sne8zchnht": {
+    "reason": "equivalent: whenever a date key exists the timestamp parses, so the slot always exists",
+    "where": "server/activity-heatmap.js:617:7 slot -> true"
+  },
+  "1tbrn3ewqc5": {
+    "reason": "equivalent: a daily cell only exists after a prompt or a reply was counted in it, so the sum is always >= 1",
+    "where": "server/activity-heatmap.js:863:11 cell[PROMPTS] + cell[REPLIES] > 0 -> true"
+  },
   "1tm1yyvauye": {
     "reason": "equivalent: when turn is 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'",
     "where": "client/src/utils/completionState.js:87:20 turn !== 'ended' -> true"
@@ -214,6 +482,22 @@
   "1uw1yz18vqb": {
     "reason": "equivalent (assumes unique bridge ids): dropping a tab on itself removes it, the target is then not found, and it is reinserted at its original index",
     "where": "client/src/utils/tabOrder.js:37:19 fromId === targetId -> false"
+  },
+  "1vfypapg15t": {
+    "reason": "equivalent: attachment が JSON 由来の非オブジェクトなら a.type は undefined で、次の a.type !== 'hook_non_blocking_error' で同じく null になる",
+    "where": "server/jsonl-utils.js:179:59 typeof record.attachment === 'object' -> true"
+  },
+  "1vmhnbol2db": {
+    "reason": "equivalent: addToolTime only compares kind with 'unverified' and 'full', so '' behaves exactly like 'reported'",
+    "where": "server/activity-heatmap.js:341:40 'reported' -> ''"
+  },
+  "1vxqg1rlwip": {
+    "reason": "equivalent: content が無いときの [] を文字列 1 要素の配列にしても、文字列には type が無いので tool_use / tool_result として拾われない",
+    "where": "server/jsonl-utils.js:158:86 [] -> [\"Stryker was here!\"]"
+  },
+  "1vzbnixf54o": {
+    "reason": "equivalent: a chunk whose only newline is at index 0 holds no complete record; not advancing the offset just re-reads that blank line next time",
+    "where": "server/shell-tasks.js:197:9 lastNewline < 0 -> lastNewline <= 0"
   },
   "1w3fyjlr77a": {
     "reason": "equivalent: Object.values of a JSON array is its elements in order, the same as the array itself",
@@ -231,25 +515,73 @@
     "reason": "equivalent: unreachable; pos = found + 1 <= length always holds, so the loop only exits through its returns",
     "where": "client/src/utils/previewLocation.js:85:10 -1 -> +1"
   },
+  "1xdvpzdt677": {
+    "reason": "equivalent: the enqueue is shown and added to 'shown' either way; later identical user records are dropped via 'shown' when pending is not counted, so the output is the same",
+    "where": "server/claude-sessions.js:356:83 true -> false"
+  },
+  "1xeoyvs7dmb": {
+    "reason": "equivalent: with no intervals null - null adds 0",
+    "where": "server/activity-heatmap.js:539:7 curEnd !== null -> true"
+  },
+  "1xirllvy39e": {
+    "reason": "equivalent: every entry has busy, so the fallback is never used",
+    "where": "server/activity-heatmap.js:898:93 [] -> [\"Stryker was here!\"]"
+  },
   "1y0xxmthpdc": {
     "reason": "equivalent: body.slice(0, MAX_TABLE_ROWS) equals body when body has at most MAX_TABLE_ROWS rows",
     "where": "client/src/utils/delimited.js:89:26 truncated -> true"
+  },
+  "1y6bwy0zxc1": {
+    "reason": "equivalent: a 0 ms slot is skipped later by ms <= 0 in dailyActiveMs",
+    "where": "server/activity-heatmap.js:933:9 ms -> true"
   },
   "1yvjp69w1hq": {
     "reason": "equivalent: offset 0 also yields {line: 1, column: 1} through the normal path",
     "where": "client/src/utils/previewLocation.js:34:7 offset < 0 -> offset <= 0"
   },
+  "1ywy8eezzps": {
+    "reason": "equivalent: for 'full'/'unverified' the decision source never starts with 'user', so the branch leaves kind unchanged and adds nothing",
+    "where": "server/activity-heatmap.js:327:9 countMode === 'skip' -> true"
+  },
+  "1yy8fr6arjk": {
+    "reason": "equivalent: keys for keyless responses stay unique whether the counter increments or decrements",
+    "where": "server/activity-heatmap.js:278:35 state.seq++ -> state.seq--"
+  },
   "1z6mh2ish97": {
     "reason": "equivalent: TURN_LABELS.ended is never read; completionChecks uses the literal 'ターン終了' when turn === 'ended'",
     "where": "client/src/utils/completionState.js:25:10 'ターン終了' -> ''"
+  },
+  "1z7lkhbplle": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:87:16 { if (n === 1) pending.delete(key); else pending.set(key, n… -> {}"
+  },
+  "1zby0urc667": {
+    "reason": "equivalent: the enqueue is shown and added to 'shown' either way; later identical user records are dropped via 'shown' when pending is not counted, so the output is the same",
+    "where": "server/claude-sessions.js:356:73 { queued: true } -> {}"
+  },
+  "1zkipfdpftb": {
+    "reason": "equivalent: a placeholder string in autoSub yields NaN intervals that shrink nothing",
+    "where": "server/activity-heatmap.js:890:18 [] -> [\"Stryker was here!\"]"
+  },
+  "1zlfwuyqhv6": {
+    "reason": "equivalent: unreachable; this fallback watcher is only installed when targetFile is set",
+    "where": "server/jsonl-watcher.js:184:34 { this._detectNewFile(state); } -> {}"
   },
   "200uz498wwn": {
     "reason": "equivalent: this loop runs only when no block has x.line === line (exact matches return earlier), so <= and < select the same block",
     "where": "client/src/utils/sourceBlocks.js:30:9 x.line <= line -> x.line < line"
   },
+  "20od1euym6m": {
+    "reason": "equivalent: 2 つ目の ?. は、match が null なら 1 つ目の ?. で式全体が短絡し、非 null ならキャプチャ群は必ず文字列なので . でも同じ",
+    "where": "server/jsonl-utils.js:44:101 ?. -> ."
+  },
   "215s1jfeehy": {
     "reason": "equivalent: headings after the node in document order neither have FOLLOWING set nor equal the node, so continuing the loop never changes last",
     "where": "client/src/utils/previewLocation.js:101:12 { // 後続の見出しに来たら打ち切り break; } -> {}"
+  },
+  "21geicnrx0d": {
+    "reason": "equivalent: continue is the last statement of the loop body, so removing it changes nothing",
+    "where": "server/claude-sessions.js:79:15 { continue; } -> {}"
   },
   "21ilzlb2ydv": {
     "reason": "equivalent: Date.parse of the placeholder is NaN just like Date.parse(''), and both fall back to 0",
@@ -259,13 +591,33 @@
     "reason": "equivalent: the placeholder summary matches none of the Monitor/Agent/Background patterns, so the kind is 'other' just like for ''",
     "where": "client/src/utils/taskNotifications.js:8:36 '' -> 'Stryker was here!'"
   },
+  "21pm1w91hdk": {
+    "reason": "equivalent: after trim() the label has no trailing whitespace, so /\\s+$/ never matches and the replacement string is never inserted",
+    "where": "server/choice-prompt.js:67:47 '' -> 'Stryker was here!'"
+  },
+  "22a39muh34f": {
+    "reason": "equivalent: readFileSync(null) throws and the catch returns, same as the guard",
+    "where": "server/jsonl-watcher.js:202:9 !state.targetFile -> false"
+  },
+  "22ut8sz84bh": {
+    "reason": "equivalent: addBusy over a zero-length share adds nothing",
+    "where": "server/activity-heatmap.js:574:11 share > 0 -> true"
+  },
   "22w9o6qr67r": {
     "reason": "equivalent: the placeholder text for null has no NUL and no U+FFFD, so looksBinary returns false just like for ''",
     "where": "client/src/utils/binaryText.js:14:31 '' -> 'Stryker was here!'"
   },
+  "2334zd2gu1d": {
+    "reason": "equivalent: every entry has busy, so the fallback is never used",
+    "where": "server/activity-heatmap.js:897:53 [] -> [\"Stryker was here!\"]"
+  },
   "2359pfindo5": {
     "reason": "equivalent: the placeholder string has no alive flag, so the alive filter removes it, the same as an empty tab list",
     "where": "client/src/utils/runningSessions.js:46:35 [] -> [\"Stryker was here!\"]"
+  },
+  "2379s7gbw2i": {
+    "reason": "equivalent: the placeholder text for a non-string part can never form the reject phrase checked by toolCountMode",
+    "where": "server/activity-heatmap.js:226:78 '' -> 'Stryker was here!'"
   },
   "239z2ga5ry1": {
     "reason": "equivalent: the fallback message is a string whose ?.role is not 'toolresult', so it is skipped and the index stays empty",
@@ -275,9 +627,21 @@
     "reason": "equivalent: when i === -1, path.slice(0, i + 1) is '' and path.slice(i + 1) is path, same as the i < 0 branch",
     "where": "client/src/utils/diffView.js:78:10 i < 0 -> false"
   },
+  "23dbw2037w1": {
+    "reason": "equivalent: readFileSync(file, '') は Buffer を返し、JSON.parse は Buffer を文字列化して同じ結果を返す",
+    "where": "server/storage.js:20:53 'utf-8' -> ''"
+  },
+  "23hvu0wivqr": {
+    "reason": "equivalent: y は baseY..baseY+rows-1 の範囲だけを回し、その行は xterm のバッファに必ず存在するので getLine が undefined を返さない",
+    "where": "server/session.js:113:18 line -> true"
+  },
   "23mtvdq3qfe": {
     "reason": "equivalent: a sentinel string as a session has no slots (session.slots || []), so nothing is added",
     "where": "client/src/utils/calendar.js:229:37 [] -> [\"Stryker was here!\"]"
+  },
+  "24pirhmb26v": {
+    "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクトなら result.url は undefined で、次の typeof url 検査で同じく null になる",
+    "where": "server/jsonl-utils.js:291:18 typeof result !== 'object' -> false"
   },
   "24u5ctkinwu": {
     "reason": "equivalent: tokens ending in 8 digits are neither a family name nor a 1-2 digit version, so dropping them changes nothing",
@@ -287,41 +651,169 @@
     "reason": "equivalent: at left === margin, setting left = margin changes nothing",
     "where": "client/src/utils/recentPeek.js:11:7 left < margin -> left <= margin"
   },
+  "25dwcg5ince": {
+    "reason": "equivalent: readFileSync with encoding '' returns a Buffer, which JSON.parse reads as utf8 text",
+    "where": "server/activity-heatmap.js:655:54 'utf-8' -> ''"
+  },
+  "25grbo148v7": {
+    "reason": "equivalent: readFileSync(file, '') は Buffer を返し、JSON.parse は Buffer を文字列化して同じ結果を返す",
+    "where": "server/storage.js:36:50 'utf-8' -> ''"
+  },
   "25kytrajlmn": {
     "reason": "equivalent: the placeholder string has no alive flag and is skipped, the same as iterating an empty list",
     "where": "client/src/utils/notifications.js:9:28 [] -> [\"Stryker was here!\"]"
+  },
+  "25lrerc3sx7": {
+    "reason": "equivalent: with no options found the backwards search leaves start at -1 and the function returns null at the next check",
+    "where": "server/choice-prompt.js:86:7 found.length === 0 -> false"
+  },
+  "25m8idkkjlw": {
+    "reason": "equivalent: length is never negative; for 0 the zero-length read returns the same { text: '', truncated: false }",
+    "where": "server/shell-tasks.js:57:7 length <= 0 -> length < 0"
+  },
+  "25mn4b4s47a": {
+    "reason": "equivalent: adding 0 to a date total gives the same activeMs (missing dates read as 0)",
+    "where": "server/activity-heatmap.js:952:11 ms <= 0 -> ms < 0"
+  },
+  "25nr6jclxil": {
+    "reason": "equivalent: a placeholder string in approved never falls in a cost-state window (NaN start)",
+    "where": "server/activity-heatmap.js:735:56 [] -> [\"Stryker was here!\"]"
+  },
+  "25ojuxwfuw5": {
+    "reason": "equivalent: memoisation only; recomputing gives the same date key",
+    "where": "server/activity-heatmap.js:954:11 date === undefined -> true"
   },
   "25qd7ayohbs": {
     "reason": "equivalent: leading/trailing whitespace only produces '' terms, which filter(Boolean) drops",
     "where": "client/src/utils/recentDirs.js:25:17 (query || '').trim() -> (query || '')"
   },
+  "25qkaywzgr3": {
+    "reason": "equivalent: the early return is an optimisation; windows without approved tools are skipped later and {} is returned",
+    "where": "server/activity-heatmap.js:558:28 w.tools.length > 0 -> true"
+  },
   "26j5skqqnv3": {
     "reason": "equivalent: Date.parse('Stryker was here!') and Date.parse('') are both NaN, so timeOf returns null either way",
     "where": "client/src/utils/working.js:11:40 '' -> 'Stryker was here!'"
+  },
+  "26mlw3yev7v": {
+    "reason": "equivalent: the substring check is only a JSON.parse prefilter; a JSONL line written by Claude Code (JSON.stringify) that has a tool_use/tool_result block always contains the literal type string, so parsing every line records the same blocks",
+    "where": "server/shell-tasks.js:206:56 '\"tool_result\"' -> ''"
+  },
+  "26q0jrpgk8r": {
+    "reason": "equivalent: for the last option the description range starts at blockEnd + 1, so ending it at blockEnd - 1 or blockEnd + 1 is an empty range either way",
+    "where": "server/choice-prompt.js:225:65 blockEnd + 1 -> blockEnd - 1"
+  },
+  "275j1sneovw": {
+    "reason": "equivalent: rest is max(0, ...) so it is never negative; rest 0 gives zero shares",
+    "where": "server/activity-heatmap.js:570:9 rest <= 0 -> rest < 0"
+  },
+  "27k025xwe61": {
+    "reason": "equivalent: for the first interval a > null is true for positive epoch ms, so the same branch runs",
+    "where": "server/activity-heatmap.js:531:9 curEnd === null -> false"
+  },
+  "27owr5xz11d": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:88:20 pending.delete(key); -> ;"
+  },
+  "27rd1yyzmkj": {
+    "reason": "equivalent: msg が文字列なら msg.content は undefined で、次の Array.isArray(content) で同じく [] になる",
+    "where": "server/jsonl-utils.js:460:15 typeof msg === 'string' -> false"
   },
   "287ulgc71t4": {
     "reason": "equivalent: when resetAt is set the date is valid, so remaining is always a non-empty string ('now' at the latest)",
     "where": "client/src/utils/usageMeter.js:73:39 remaining -> true"
   },
+  "288gyyzd8oy": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:83:7 queued -> true"
+  },
+  "28n7u2osdgf": {
+    "reason": "equivalent: 先頭の [\\s\\S]*? が空から伸びられるので、^ が無くても exec は必ず位置 0 から一致し、m[1] は同じになる",
+    "where": "server/session.js:76:15 /^([\\s\\S]*?)(\\r+)$/ -> /([\\s\\S]*?)(\\r+)$/"
+  },
+  "293assy9m0b": {
+    "reason": "equivalent: adding 0 to a date total gives the same activeMs (missing dates read as 0)",
+    "where": "server/activity-heatmap.js:952:11 ms <= 0 -> false"
+  },
   "29bcibxlam7": {
     "reason": "equivalent: the placeholder string has no repository, so the if (pr.repository) guard skips it",
     "where": "client/src/utils/sessionTurns.js:50:31 [] -> [\"Stryker was here!\"]"
+  },
+  "29cc3v0colh": {
+    "reason": "equivalent: head.cwd || '' and head.title || '' turn missing fields into '' anyway",
+    "where": "server/activity-heatmap.js:1039:95 { title: '', cwd: '' } -> {}"
+  },
+  "29h2mr0oux": {
+    "reason": "equivalent: with empty text parseTaskNotifications returns null, so taskNotificationMessage returns null like the short-circuit",
+    "where": "server/claude-sessions.js:300:12 text -> true"
+  },
+  "29odj2miwjt": {
+    "reason": "equivalent: allocateApprovedTools returns {} when there are no cost-state windows",
+    "where": "server/activity-heatmap.js:913:38 Object.keys(group.costStates).length === 0 -> false"
+  },
+  "2a08l2n1wme": {
+    "reason": "equivalent: a zero-length interval shrinks nothing and removes 0 ms",
+    "where": "server/activity-heatmap.js:497:11 resultAt <= usedAt -> resultAt < usedAt"
   },
   "2a5fje276wt": {
     "reason": "equivalent: the placeholder text does not match the rgb() regex, so parseCssColor returns null just like for ''",
     "where": "client/src/utils/previewColorScheme.js:11:112 '' -> 'Stryker was here!'"
   },
+  "2aflamqv8zu": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:86:15 pending.get(key) || 0 -> false"
+  },
   "2b2uxun9ppg": {
     "reason": "equivalent: timeOf is only called on messages that passed isTurnStart (role === 'human'), so m is never nullish",
     "where": "client/src/utils/working.js:11:25 ?. -> ."
+  },
+  "2byoc66hi38": {
+    "reason": "equivalent: webFetch null makes webFetch.title throw after every other message for the record was pushed; the per-line catch swallows it",
+    "where": "server/claude-sessions.js:340:13 webFetch -> true"
   },
   "2camx43sohe": {
     "reason": "equivalent: cluster is empty only for the first segment (clusterEnd = -Infinity); flushing an empty cluster pushes nothing and resets already-empty arrays",
     "where": "client/src/utils/calendar.js:83:38 cluster.length > 0 -> true"
   },
+  "2csygsifyjp": {
+    "reason": "equivalent: Buffer.byteLength with encoding '' defaults to utf8",
+    "where": "server/activity-heatmap.js:646:43 'utf-8' -> ''"
+  },
+  "2cvdiaizbe9": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:85:10 { const n = pending.get(key) || 0; if (n > 0) { if (n === 1… -> {}"
+  },
+  "2cvfck10jl9": {
+    "reason": "equivalent: a zero-length interval adds 0 to the union length",
+    "where": "server/activity-heatmap.js:526:47 b > a -> b >= a"
+  },
   "2cwltaeaymu": {
     "reason": "equivalent: consecutive whitespace only produces '' terms, which filter(Boolean) drops",
     "where": "client/src/utils/recentDirs.js:25:58 /\\s+/ -> /\\s/"
+  },
+  "2d09b238gvt": {
+    "reason": "equivalent: for a non-directory entry the following readdirSync throws (ENOTDIR) and the same catch skips it",
+    "where": "server/claude-sessions.js:51:9 { if (!statSync(projectPath).isDirectory()) continue; } -> {}"
+  },
+  "2d3oewfcy9d": {
+    "reason": "equivalent: adjustAutoTools with empty lists returns {}",
+    "where": "server/activity-heatmap.js:910:17 hasAuto -> true"
+  },
+  "2d4tvaukhlw": {
+    "reason": "equivalent: text は '' で初期化済みなので、早期 return を消しても末尾で '' が返る",
+    "where": "server/jsonl-utils.js:19:20 { return ''; } -> {}"
+  },
+  "2daevbdzmgp": {
+    "reason": "equivalent: with 200 or fewer pending tools ids.slice(0, length - 200) is empty, so nothing is deleted",
+    "where": "server/activity-heatmap.js:295:9 ids.length > MAX_PENDING_TOOLS -> true"
+  },
+  "2de6iiviju7": {
+    "reason": "equivalent: rest 0 gives ratio 0, so every share is 0 and skipped by share > 0",
+    "where": "server/activity-heatmap.js:570:9 rest <= 0 -> false"
+  },
+  "2dhrequrs8o": {
+    "reason": "equivalent: the enqueue is shown and added to 'shown' either way; later identical user records are dropped via 'shown' when pending is not counted, so the output is the same",
+    "where": "server/jsonl-watcher.js:288:81 { queued: true } -> {}"
   },
   "2djtkzh1d0n": {
     "reason": "equivalent: the placeholder string has no prs, so it contributes nothing to the counts",
@@ -331,6 +823,10 @@
     "reason": "equivalent: the placeholder string has no utilization, so windowMeter returns null and it is skipped, the same as no extras",
     "where": "client/src/utils/usageMeter.js:94:41 [] -> [\"Stryker was here!\"]"
   },
+  "2dz0j6hp9kb": {
+    "reason": "equivalent: addBusy over a zero-length share adds nothing",
+    "where": "server/activity-heatmap.js:574:11 share > 0 -> share >= 0"
+  },
   "2eg9ojkbvts": {
     "reason": "equivalent: bridge tabs from session_list always have an id, so an undefined entry in the matched set never excludes a tab",
     "where": "client/src/utils/runningSessions.js:32:5 [ ...annotateRunningSessions(runningSessions, bridgeSession… -> [ ...annotateRunningSessions(runningSessions, bridgeSession…"
@@ -339,21 +835,57 @@
     "reason": "equivalent: ms = 0 is already caught by !ms, so <= 0 and < 0 differ for no input",
     "where": "client/src/utils/calendar.js:256:14 ms <= 0 -> ms < 0"
   },
+  "2ezznkratn": {
+    "reason": "equivalent: the preceding greedy \\s* consumes all whitespace, so m[2] never starts with whitespace, and trailing whitespace is removed by the following replace",
+    "where": "server/choice-prompt.js:67:19 m[2].trim() -> m[2]"
+  },
   "2fdmx5k57y3": {
     "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
+  },
+  "2fgur0spfhd": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> false"
+  },
+  "2fjsd6zzlht": {
+    "reason": "equivalent: trailing whitespace is already stripped from every line in parseChoicePrompt, and leading whitespace is absorbed by ^(\\s*) in OPTION_RE",
+    "where": "server/choice-prompt.js:51:33 trimEnd -> trimStart"
+  },
+  "2fpywxil4wc": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:83:15 { pending.set(key, (pending.get(key) || 0) + 1); } -> {}"
+  },
+  "2ft3zaw3ri5": {
+    "reason": "equivalent: allocateApprovedTools returns {} when there are no approved tools",
+    "where": "server/activity-heatmap.js:913:7 group.approved.length === 0 -> false"
+  },
+  "2gadf25fgtf": {
+    "reason": "equivalent: i === segs.length では segs[i] が undefined で、SENSITIVE_DIRS.has(undefined) も SUBDIRS の比較も偽になり結果が変わらない",
+    "where": "server/sensitive-paths.js:55:19 i < segs.length -> i <= segs.length"
   },
   "2gb1iqdlgg7": {
     "reason": "equivalent: the fallback string does not start with '/', so normalizeRootInput returns null either way",
     "where": "client/src/utils/filerRoots.js:15:31 '' -> 'Stryker was here!'"
   },
+  "2gff6zqjstp": {
+    "reason": "equivalent: with no newline the chunk becomes '' and the offset advances by 0, so nothing is recorded either way",
+    "where": "server/shell-tasks.js:197:9 lastNewline < 0 -> false"
+  },
   "2jj4n004l6": {
     "reason": "equivalent: pos = found + 1 never exceeds length; at pos === length indexOf finds only an empty needle, which is returned early",
     "where": "client/src/utils/previewLocation.js:61:10 pos <= text.length -> pos < text.length"
   },
+  "32eywbcryk": {
+    "reason": "equivalent: the enqueue is shown and added to 'shown' either way; later identical user records are dropped via 'shown' when pending is not counted, so the output is the same",
+    "where": "server/jsonl-watcher.js:288:91 true -> false"
+  },
   "32hwu6c84l": {
     "reason": "equivalent: with '' the day case goes through bucketDays(days, 'day'), which yields the same per-day metric values",
     "where": "client/src/utils/heatmap.js:362:37 'day' -> ''"
+  },
+  "36asvclp04": {
+    "reason": "equivalent: pruning only drops request info no pending/held tool or active request refers to; a lingering entry has endMs reset when its key is reused and its lastResultMs never exceeds a later tool_use time",
+    "where": "server/activity-heatmap.js:365:3 pruneRequests(state); -> ;"
   },
   "3bw6vo9p3d": {
     "reason": "equivalent: contextSide only checks side === 'before'; any other value, including '', takes the after branch",
@@ -363,6 +895,18 @@
     "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
     "where": "client/src/utils/sensitiveSessions.js:33:12 Array.isArray(raw) -> true"
   },
+  "3uempgj671": {
+    "reason": "equivalent: taskToToolUse is only set for ids already in bashUses and both are reset together, so the lookup is never undefined",
+    "where": "server/shell-tasks.js:312:47 ?. -> ."
+  },
+  "3uhswbi9jw": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:78:73 false -> true"
+  },
+  "438bniwlgl": {
+    "reason": "equivalent: with 3+ spaces the unanchored \\s{2} still matches the last two spaces before the box; test() gives the same boolean and the leftover space is removed by the label trim()",
+    "where": "server/choice-prompt.js:36:24 /\\s{2,}[┌│└├╭╰].*$/ -> /\\s{2}[┌│└├╭╰].*$/"
+  },
   "43e0a5gs6y": {
     "reason": "equivalent: the placeholder string has no sessionId, so filter(Boolean) removes it and runningIds stays empty",
     "where": "client/src/utils/runningSessions.js:45:50 [] -> [\"Stryker was here!\"]"
@@ -371,9 +915,25 @@
     "reason": "equivalent: letting value 0 through adds 0 to the day total",
     "where": "client/src/utils/calendar.js:232:11 value <= 0 -> value < 0"
   },
+  "4r2cr457uu": {
+    "reason": "equivalent: when out is empty out[-1] is undefined, which is not '', so the trailing-blank loop stops without popping",
+    "where": "server/choice-prompt.js:169:10 out.length > 0 -> out.length >= 0"
+  },
+  "59l0xrtzbo": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:83:7 queued -> false"
+  },
+  "6deus6ugk5": {
+    "reason": "equivalent: 2 つ目の ?. は、match が null なら 1 つ目の ?. で式全体が短絡し、非 null ならキャプチャ群は必ず文字列なので . でも同じ",
+    "where": "server/jsonl-utils.js:357:78 ?. -> ."
+  },
   "6eb7gjw1q8": {
     "reason": "equivalent: when idx is -1, clamped - idx equals clamped + 1",
     "where": "client/src/utils/previewLocation.js:39:18 idx === -1 -> false"
+  },
+  "6ks48egefs": {
+    "reason": "equivalent: a daily cell only exists after a prompt or a reply was counted in it, so the sum is always >= 1",
+    "where": "server/activity-heatmap.js:863:11 cell[PROMPTS] + cell[REPLIES] > 0 -> cell[PROMPTS] + cell[REPLIES] >= 0"
   },
   "6xcjeh57h4": {
     "reason": "equivalent: count starts at 1 and only grows, so it never equals a targetIndex < 1; the loop ends with -1 when indexOf stops finding",
@@ -383,17 +943,65 @@
     "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
     "where": "client/src/utils/tabOrder.js:50:67 '[]' -> ''"
   },
+  "76k04kcnbq": {
+    "reason": "equivalent: record is declared per iteration, so on a parse failure it stays undefined and the following record?.message?.content check continues anyway",
+    "where": "server/shell-tasks.js:210:13 { continue; } -> {}"
+  },
+  "7722c1rmgp": {
+    "reason": "equivalent: draft が null/undefined なら .items が TypeError になり catch で同じ { items: [] } を返す",
+    "where": "server/storage.js:54:33 ?. -> ."
+  },
+  "798rclllpj": {
+    "reason": "equivalent: allocateApprovedTools returns {} when there are no approved tools or no cost-state windows",
+    "where": "server/activity-heatmap.js:913:7 group.approved.length === 0 || Object.keys(group.costStates… -> (group.approved.length === 0 && Object.keys(group.costState…"
+  },
+  "7ash5kw93z": {
+    "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクトなら result.type は undefined なので created は false のまま",
+    "where": "server/jsonl-utils.js:250:31 typeof result === 'object' -> true"
+  },
+  "7gqrnub0gr": {
+    "reason": "equivalent: a placeholder string in approved never falls in a cost-state window (NaN start)",
+    "where": "server/activity-heatmap.js:888:19 [] -> [\"Stryker was here!\"]"
+  },
   "7jwqd9p23q": {
     "reason": "equivalent: indexes past the end read messages[i]?.contextUsage as undefined and are skipped, so the scan result is unchanged",
     "where": "client/src/utils/contextUsage.js:9:16 messages.length - 1 -> messages.length + 1"
+  },
+  "7khhd10zlw": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:87:9 n > 0 -> false"
+  },
+  "7m6kyic2hw": {
+    "reason": "equivalent: readFirstLines never rejects for a string path and summarizeHead does not throw; even if reached, falling through returns the same empty cwd",
+    "where": "server/claude-sessions.js:207:11 { return ''; } -> {}"
+  },
+  "80qk4u6wdt": {
+    "reason": "equivalent: record が null なら次の行の record.type で同じ TypeError になるので、ここで落ちても外から見た結果は同じ",
+    "where": "server/jsonl-utils.js:158:39 ?. -> ."
+  },
+  "82mck3dxu5": {
+    "reason": "equivalent: a placeholder string in held yields NaN times, which add nothing to any slot",
+    "where": "server/activity-heatmap.js:734:44 [] -> [\"Stryker was here!\"]"
+  },
+  "8hajvve5m9": {
+    "reason": "equivalent: delta slots lie on tool intervals that were added to the same session's slots at scan time, so the target always exists",
+    "where": "server/activity-heatmap.js:1023:11 target -> true"
   },
   "8mrlkfqera": {
     "reason": "equivalent: fallback for a missing e.key; VIM_NAV_BY_KEY has no 'stryker was here!' entry, so the lookup is undefined as with '' and the result is null",
     "where": "client/src/utils/keys.js:58:54 '' -> 'Stryker was here!'"
   },
+  "8t9lngw497": {
+    "reason": "equivalent: kill 後は _term を null にするので dispose の有無は呼び出し側から観測できない（リソース解放のみ）",
+    "where": "server/session.js:135:7 this._term.dispose(); -> ;"
+  },
   "93n31vq41k": {
     "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:66:29 [] -> [\"Stryker was here!\"]"
+  },
+  "9atkq5ibee": {
+    "reason": "equivalent: after trim() the label has no trailing whitespace, so the replace is a no-op either way",
+    "where": "server/choice-prompt.js:67:39 /\\s+$/ -> /\\s$/"
   },
   "9mcdojeoyi": {
     "reason": "equivalent: width only feeds left; whenever width differs, left = viewport.width - margin - width falls below margin and is clamped to margin, the same as the original",
@@ -403,6 +1011,14 @@
     "reason": "equivalent: without the branch, '~' expands to home + '/' and the trailing slash is then removed, giving home",
     "where": "client/src/utils/filerRoots.js:19:12 path === '~' -> false"
   },
+  "a9ao1h8a4z": {
+    "reason": "equivalent: every entry produced by refreshDaily has busy",
+    "where": "server/activity-heatmap.js:897:39 ?. -> ."
+  },
+  "akeixg9vj5": {
+    "reason": "equivalent: a window without tools has sum 0 and is skipped by the next guard",
+    "where": "server/activity-heatmap.js:566:9 window.tools.length === 0 -> false"
+  },
   "box5f11qqk": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
     "where": "client/src/utils/tabGroups.js:145:21 typeof raw.colors === 'object' -> true"
@@ -410,6 +1026,10 @@
   "bxaorqq920": {
     "reason": "equivalent: with nothing stored, JSON.parse('') throws and the catch returns [], the same as parsing '[]'",
     "where": "client/src/utils/starredSessions.js:30:65 '[]' -> ''"
+  },
+  "byckhk1ua0": {
+    "reason": "equivalent: pruning only drops request info no pending/held tool or active request refers to; a lingering entry has endMs reset when its key is reused and its lastResultMs never exceeds a later tool_use time",
+    "where": "server/activity-heatmap.js:297:7 pruneRequests(state); -> ;"
   },
   "d2ix5byxfg": {
     "reason": "equivalent: the placeholder string has no alive flag, so the alive filter removes it, the same as an empty tab list",
@@ -419,13 +1039,37 @@
     "reason": "equivalent: for an empty head the ratio is 0/0 = NaN and NaN > 0.05 is false, the same result as the early return",
     "where": "client/src/utils/binaryText.js:15:7 head.length === 0 -> false"
   },
+  "df2mueafh6": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:84:22 (pending.get(key) || 0) + 1 -> (pending.get(key) || 0) - 1"
+  },
   "do60oj4gb5": {
     "reason": "equivalent: bucketTicks only special-cases 'month'; any other default takes the same day/week path",
     "where": "client/src/utils/heatmap.js:274:52 'day' -> ''"
   },
+  "duejkhoxh2": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:89:29 n - 1 -> n + 1"
+  },
   "e1hx4lek3q": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
     "where": "client/src/utils/tabGroups.js:145:7 raw.colors && typeof raw.colors === 'object' -> (raw.colors || typeof raw.colors === 'object')"
+  },
+  "e3me3n9bs6": {
+    "reason": "equivalent: msg が文字列なら msg.content は undefined で、次の Array.isArray(content) で同じく [] になる",
+    "where": "server/jsonl-utils.js:460:30 'string' -> ''"
+  },
+  "f1zb8c5ar0": {
+    "reason": "equivalent: unreachable; this fallback watcher is only installed when targetFile is set",
+    "where": "server/jsonl-watcher.js:185:13 this._detectNewFile(state); -> ;"
+  },
+  "f7793t6x3c": {
+    "reason": "equivalent: msg が文字列などの非オブジェクトなら msg.content は undefined で、次の Array.isArray で同じく '' になる",
+    "where": "server/jsonl-utils.js:210:26 typeof msg === 'object' -> true"
+  },
+  "fj9bpc49q2": {
+    "reason": "equivalent: a truthy non-object files has no entry for any path and is replaced on save",
+    "where": "server/activity-heatmap.js:656:60 typeof cache.files === 'object' -> true"
   },
   "fs23oc78yo": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
@@ -434,6 +1078,26 @@
   "g372z8uexz": {
     "reason": "equivalent: the greedy [^/]+ always stops right before '/' or the end of the string, so the lookahead (?=\\/|$) is always satisfied and dropping $ changes no match",
     "where": "client/src/utils/tabGroups.js:186:23 /^\\/(?:home|Users)\\/[^/]+(?=\\/|$)/ -> /^\\/(?:home|Users)\\/[^/]+(?=\\/|)/"
+  },
+  "g4myg8lqxp": {
+    "reason": "equivalent: never pruning keeps unreferenced request info, which is reset (endMs=null) on key reuse and whose lastResultMs never exceeds a later tool_use time",
+    "where": "server/activity-heatmap.js:410:31 { const used = new Set(Object.values(state.tools).map((tool… -> {}"
+  },
+  "ggu4oybvqu": {
+    "reason": "equivalent: allocateApprovedTools returns {} when there are no approved tools or no cost-state windows",
+    "where": "server/activity-heatmap.js:913:7 group.approved.length === 0 || Object.keys(group.costStates… -> false"
+  },
+  "gi9oz1l3f0": {
+    "reason": "equivalent: for a non-string query the replacement 'Stryker was here!' contains spaces and '!', which SESSION_ID_QUERY_RE rejects, so [] is returned either way",
+    "where": "server/claude-sessions.js:264:70 '' -> 'Stryker was here!'"
+  },
+  "gmpln5o5lo": {
+    "reason": "equivalent: slotCellOf is only reached after dateKeyOf parsed the same timestamp into a date, so Date.parse is never NaN there",
+    "where": "server/activity-heatmap.js:89:7 Number.isNaN(ms) -> false"
+  },
+  "gsyklstm1": {
+    "reason": "equivalent: held tools always belong to the active request, which pruneRequests already protects via state.request",
+    "where": "server/activity-heatmap.js:412:34 used.add(held[0]); -> ;"
   },
   "gug07pz3uo": {
     "reason": "equivalent: with an empty Map every index.get misses, so no parts are pushed and the result is '' anyway",
@@ -447,13 +1111,41 @@
     "reason": "equivalent: when prevStatus is undefined the next check prevStatus === 'busy' is false anyway, so the session is skipped either way",
     "where": "client/src/utils/notifications.js:15:9 prevStatus === undefined -> false"
   },
+  "hogkm6w4df": {
+    "reason": "equivalent: when finishRequest runs, every held tool belongs to the request being finished, so rest stays empty",
+    "where": "server/activity-heatmap.js:362:10 rest.push(held); -> ;"
+  },
   "hq0b8gesgh": {
     "reason": "equivalent: parseCwd returns parent null whenever project is empty, so the template also yields 'p:'",
     "where": "client/src/utils/tabGroups.js:23:7 !project -> false"
   },
+  "hy4rcihkjp": {
+    "reason": "equivalent: Math.max(start, null) treats null as 0 and start is a positive epoch ms",
+    "where": "server/activity-heatmap.js:372:37 prevResultMs !== null -> true"
+  },
+  "hys8elgst8": {
+    "reason": "equivalent: with no foreground running task pairs is 0 and the loop assigns nothing",
+    "where": "server/shell-tasks.js:317:7 foregroundRunning.length === 0 -> false"
+  },
+  "iq954cfjub": {
+    "reason": "equivalent: a null root is merged under the null key and then dropped by existsSync(null) === false before slicing",
+    "where": "server/claude-sessions.js:228:9 !root -> false"
+  },
   "iytu4kbcvj": {
     "reason": "equivalent: raw is trimmed and non-empty, so path === '' is never true and '~' still expands to home via the other branch and trailing-slash removal",
     "where": "client/src/utils/filerRoots.js:19:21 '~' -> ''"
+  },
+  "j1t5f7d8qc": {
+    "reason": "equivalent: the injected string entry has no filePath, readStartCwd(undefined) returns '' and projectRootOf(undefined) is null, so it is dropped",
+    "where": "server/claude-sessions.js:219:17 [] -> [\"Stryker was here!\"]"
+  },
+  "j3lcc5qfqd": {
+    "reason": "equivalent: an invalid Date yields the key 'NaN-NaN-NaN', which is never inside the YYYY-MM-DD day range or any from/to period, so no output changes",
+    "where": "server/activity-heatmap.js:160:13 Number.isNaN(date.getTime()) -> false"
+  },
+  "jgbmdgqy7w": {
+    "reason": "equivalent: never pruning keeps unreferenced request info, which is reset (endMs=null) on key reuse and whose lastResultMs never exceeds a later tool_use time",
+    "where": "server/activity-heatmap.js:414:54 !used.has(key) -> false"
   },
   "jmpafd0jdy": {
     "reason": "equivalent: at equality the shifted left (viewport.width - margin - width) equals the current left, so >= and > give the same position",
@@ -463,6 +1155,10 @@
     "reason": "equivalent: dir is always 1 or -1, never 0",
     "where": "client/src/utils/pickJump.js:14:12 dir > 0 -> dir >= 0"
   },
+  "k3g6thth7t": {
+    "reason": "equivalent: readFirstLines of a missing file yields an empty head, giving title '' and cwd '' like the fallback",
+    "where": "server/activity-heatmap.js:1039:20 existsSync(mainPath) -> true"
+  },
   "kh652apbcg": {
     "reason": "equivalent: the placeholder string has no uuid, so nothing is added to byUuid, the same as an empty message list",
     "where": "client/src/utils/pins.js:27:31 [] -> [\"Stryker was here!\"]"
@@ -471,9 +1167,17 @@
     "reason": "equivalent: a match at i = 0 always has projectIdx < 0 (or start < 0), so it never returns; skipping i = 0 changes nothing",
     "where": "client/src/utils/cwdLabel.js:22:37 i >= 0 -> i > 0"
   },
+  "ktxcjq2c4d": {
+    "reason": "equivalent: adding 0 ms to a slot does not change the deducted automatic tool time",
+    "where": "server/activity-heatmap.js:918:9 ms -> true"
+  },
   "l5qv6k5ivi": {
     "reason": "equivalent: cluster is empty only for the first segment (clusterEnd = -Infinity); flushing an empty cluster pushes nothing and resets already-empty arrays",
     "where": "client/src/utils/calendar.js:83:38 cluster.length > 0 -> cluster.length >= 0"
+  },
+  "l6nehbslkt": {
+    "reason": "equivalent: the early return is an optimisation; windows without approved tools are skipped later and {} is returned",
+    "where": "server/activity-heatmap.js:558:7 !windows.some((w) => w.tools.length > 0) -> false"
   },
   "l8a2ybil5f": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
@@ -483,6 +1187,10 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:35:41 '' -> 'Stryker was here!'"
   },
+  "lmis8xs2cp": {
+    "reason": "equivalent: usage が JSON 由来の非オブジェクトなら各トークンは undefined→0 で contextTokens が 0 になり、同じく null を返す",
+    "where": "server/jsonl-utils.js:533:17 typeof usage !== 'object' -> false"
+  },
   "lqnyv9p8fj": {
     "reason": "equivalent: occ is only read as occ.total > 1 (undefined > 1 is false), and occ.index only inside that branch",
     "where": "client/src/utils/previewLocation.js:124:88 { index: 0, total: 0 } -> {}"
@@ -490,6 +1198,10 @@
   "lqxjqot9zu": {
     "reason": "equivalent: 8-letter non-digit tokens are neither a family name (max 7 letters) nor a version, so dropping them changes nothing",
     "where": "client/src/utils/modelLabel.js:16:46 /^\\d{8}$/ -> /^\\D{8}$/"
+  },
+  "ls9tafhctn": {
+    "reason": "equivalent: 直前で record.message?.usage が truthy なのを確かめているので、ここでは message は必ずある",
+    "where": "server/jsonl-utils.js:540:38 ?. -> ."
   },
   "lz4hiv0u77": {
     "reason": "equivalent: the placeholder string has no cwd, so its project is '' and never equals the truthy project filter",
@@ -499,6 +1211,10 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:42:41 '' -> 'Stryker was here!'"
   },
+  "mktk1sirgp": {
+    "reason": "equivalent: webFetch null makes webFetch.title throw after every other message for the record was emitted; the per-line catch swallows it",
+    "where": "server/jsonl-watcher.js:269:15 webFetch -> true"
+  },
   "n7ysnadd2v": {
     "reason": "equivalent: when i === -1, shown.slice(0, i + 1) is '' and shown.slice(i + 1) is shown, same as the i < 0 branch",
     "where": "client/src/utils/toolLines.js:23:10 i < 0 -> false"
@@ -507,29 +1223,89 @@
     "reason": "equivalent: the fallback result is a string whose ?.id is undefined, so nothing is added to resolved",
     "where": "client/src/utils/working.js:29:36 [] -> [\"Stryker was here!\"]"
   },
+  "ne04xqwga7": {
+    "reason": "equivalent: whitespace-only lines make JSON.parse throw and the catch skips them",
+    "where": "server/claude-sessions.js:293:10 line.trim() -> line"
+  },
   "njnucljzlg": {
     "reason": "equivalent: always ending a trailing record only adds a single empty-field record after a final newline, which the blank-record trim removes",
     "where": "client/src/utils/delimited.js:81:7 field !== '' || cells.length > 0 || inQuotes -> true"
+  },
+  "o11h45kfto": {
+    "reason": "equivalent: a zero-length interval adds nothing to any slot, union or cap",
+    "where": "server/activity-heatmap.js:384:7 end <= start -> end < start"
   },
   "owjdfg0l4u": {
     "reason": "equivalent: endsWith('') is always true; dropping a last character that is not a newline does not change the line count",
     "where": "client/src/utils/toolLines.js:29:30 '\\n' -> ''"
   },
+  "p6kfgcvu6u": {
+    "reason": "equivalent: usageKeyOf only runs after message.usage was found, so record.message is always present there",
+    "where": "server/activity-heatmap.js:183:28 ?. -> ."
+  },
+  "q1myd3h2xr": {
+    "reason": "equivalent: the substring check is only a JSON.parse prefilter; a JSONL line written by Claude Code (JSON.stringify) that has a tool_use/tool_result block always contains the literal type string, so parsing every line records the same blocks",
+    "where": "server/shell-tasks.js:206:9 !line.includes('\"tool_use\"') && !line.includes('\"tool_resul… -> false"
+  },
   "rfdm28ktj7": {
     "reason": "equivalent: lastTimestamp is always a string (set from publish.timestamp || ''), so the || '' fallback in the sort is never taken",
     "where": "client/src/utils/artifacts.js:30:65 '' -> 'Stryker was here!'"
+  },
+  "rginfcukpj": {
+    "reason": "equivalent: if the target file is missing, continuing re-arms the watch (directory watcher or a new poll) and the read fails silently, so the watcher keeps waiting for the same file just as the early return does",
+    "where": "server/jsonl-watcher.js:136:11 !existsSync(state.targetFile) -> false"
+  },
+  "rkteozauh2": {
+    "reason": "equivalent: readFirstLines never rejects for a string path and summarizeHead does not throw, so this catch is unreachable",
+    "where": "server/claude-sessions.js:208:12 '' -> 'Stryker was here!'"
+  },
+  "rs4dm9rcqi": {
+    "reason": "equivalent: for non-array content a placeholder string element is neither a tool_use nor a tool_result block",
+    "where": "server/activity-heatmap.js:269:85 [] -> [\"Stryker was here!\"]"
+  },
+  "rstkbxt9yg": {
+    "reason": "equivalent: a line that passes the prefilter contains a string literal, so JSON.parse can never return null/undefined for it",
+    "where": "server/shell-tasks.js:213:27 ?. -> ."
+  },
+  "s5eqaj0vlc": {
+    "reason": "equivalent: zero/negative intervals add nothing: addBusy skips them, unionLength filters them and the outside cap check skips them",
+    "where": "server/activity-heatmap.js:384:7 end <= start -> false"
   },
   "s74n479wqs": {
     "reason": "equivalent: with 0 or 1 week buckets the baseline (all but the last bucket) is empty, so the next guard returns null anyway",
     "where": "client/src/utils/heatmap.js:397:7 weeks.length < 2 -> false"
   },
+  "sbog1j61fq": {
+    "reason": "equivalent: ''.split('\\n') is [''], whose last element is '', the same question as the [] branch gives",
+    "where": "server/choice-prompt.js:177:18 text -> true"
+  },
+  "sdj0sniqdi": {
+    "reason": "equivalent: every consumer of the lines trims them (trimEnd/trim) before matching or returning, so leaving extra trailing whitespace changes nothing",
+    "where": "server/choice-prompt.js:200:57 /\\s+$/ -> /\\s$/"
+  },
   "sgrwg6j4hr": {
     "reason": "equivalent: the placeholder label is always overwritten by bucketLabel before bucketDays returns",
     "where": "client/src/utils/heatmap.js:242:16 '' -> 'Stryker was here!'"
   },
+  "snuizjp633": {
+    "reason": "equivalent: memoisation only; not caching recomputes the same date key",
+    "where": "server/activity-heatmap.js:956:9 dateKeyOfSlot.set(index, date); -> ;"
+  },
+  "stdxn47w9k": {
+    "reason": "equivalent: the targetFile branch above returns early, so state.targetFile is always null here and the comparison is always false",
+    "where": "server/jsonl-watcher.js:144:24 state.targetFile === newestPath -> false"
+  },
   "su1um2enmy": {
     "reason": "equivalent: indexes past the end read undefined, which is neither a turn start, a toolresult nor an assistant, so they are skipped",
     "where": "client/src/utils/working.js:25:16 messages.length - 1 -> messages.length + 1"
+  },
+  "sw4sjo2qqx": {
+    "reason": "equivalent: if statSync throws the entry is gone/broken, so the following readdirSync also throws and the entry is skipped",
+    "where": "server/claude-sessions.js:53:13 { continue; } -> {}"
+  },
+  "t0g14zug7": {
+    "reason": "equivalent: this fallback watcher is only installed when targetFile is set (with no target the same projectPath watch has just failed), and _detectNewFile on a set target ends in _readNewLines",
+    "where": "server/jsonl-watcher.js:184:15 !state.targetFile -> true"
   },
   "t582wwhvls": {
     "reason": "equivalent: a marker starting at index 0 has projectIdx = -1 and never returns, so skipping start = 0 changes nothing",
@@ -538,6 +1314,14 @@
   "t5okwackdb": {
     "reason": "equivalent: lastTimestamp is always a string (set from publish.timestamp || ''), so the || '' fallback in the sort is never taken",
     "where": "client/src/utils/artifacts.js:30:102 '' -> 'Stryker was here!'"
+  },
+  "ti5pzcanyw": {
+    "reason": "equivalent: readFirstLines never rejects for a string path, so the .catch fallback is unreachable",
+    "where": "server/claude-sessions.js:271:70 [] -> [\"Stryker was here!\"]"
+  },
+  "tj449moixd": {
+    "reason": "equivalent: replacing the first '-' (wherever it is) with '/' and then every remaining '-' with '/' yields the same string as anchoring the first replacement",
+    "where": "server/claude-sessions.js:57:36 /^-/ -> /-/"
   },
   "toivh7kb00": {
     "reason": "equivalent: values failing isPaletteIndex are never integers in 0..7, so leaving them in the fixed set never removes a palette index from free",
@@ -551,21 +1335,57 @@
     "reason": "equivalent: every non-array JSON value (object, string, number, boolean, null) has no filter method, so the call throws and the catch returns []",
     "where": "client/src/utils/starredSessions.js:31:12 Array.isArray(raw) -> true"
   },
+  "uqjatt56es": {
+    "reason": "equivalent: entry.prompts is always an array in entries built by refreshDaily",
+    "where": "server/activity-heatmap.js:1004:45 [] -> [\"Stryker was here!\"]"
+  },
   "uyoym35s8o": {
     "reason": "equivalent: the final flush with an empty cluster (no segments) pushes nothing",
     "where": "client/src/utils/calendar.js:94:7 cluster.length > 0 -> cluster.length >= 0"
+  },
+  "v3ihfhv0q8": {
+    "reason": "equivalent: rest 0 gives ratio 0 and sum 0 means every interval is 0, so every share is 0 and skipped by share > 0",
+    "where": "server/activity-heatmap.js:570:9 rest <= 0 || sum <= 0 -> false"
+  },
+  "v68a27jtdg": {
+    "reason": "equivalent: the early return is an optimisation; windows without approved tools are skipped later and {} is returned",
+    "where": "server/activity-heatmap.js:558:28 w.tools.length > 0 -> w.tools.length >= 0"
   },
   "v7cbr33akx": {
     "reason": "equivalent: replacing the earliest offset with an equal offset returns the same value",
     "where": "client/src/utils/calendar.js:290:32 offset < earliest -> offset <= earliest"
   },
+  "v9dch5s9t4": {
+    "reason": "equivalent: addBusy itself adds nothing when to === from",
+    "where": "server/activity-heatmap.js:287:9 to > from -> to >= from"
+  },
+  "vcmzflqreb": {
+    "reason": "equivalent: continue is the last statement of the loop body, so removing it changes nothing",
+    "where": "server/claude-sessions.js:394:13 { continue; } -> {}"
+  },
   "vo3de5pqns": {
     "reason": "equivalent: width only feeds left; whenever width differs, left = viewport.width - margin - width falls below margin and is clamped to margin, the same as the original",
     "where": "client/src/utils/recentPeek.js:5:41 viewport.width - margin * 2 -> viewport.width + margin * 2"
   },
+  "vrsreo9zqi": {
+    "reason": "equivalent: pruning only drops request info no pending/held tool or active request refers to; a lingering entry has endMs reset when its key is reused and its lastResultMs never exceeds a later tool_use time",
+    "where": "server/activity-heatmap.js:406:3 pruneRequests(state); -> ;"
+  },
+  "w1mz97yo1z": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:88:11 n === 1 -> true"
+  },
+  "waz517m0sk": {
+    "reason": "equivalent: without the guard a line with no ☐/☒ produces no items and returns null at the items.length check",
+    "where": "server/choice-prompt.js:62:7 !TAB_RE.test(text) -> false"
+  },
   "whauh8pcl9": {
     "reason": "equivalent: the placeholder string has no cwd, so parseCwd gives an empty project and it is skipped",
     "where": "client/src/utils/sessionSearch.js:58:35 [] -> [\"Stryker was here!\"]"
+  },
+  "wjx3mwkyga": {
+    "reason": "equivalent: the placeholder text for non-array content can never contain the reject phrase checked by toolCountMode",
+    "where": "server/activity-heatmap.js:225:39 '' -> 'Stryker was here!'"
   },
   "wlwnfzn3oh": {
     "reason": "equivalent: with '' the day case goes through bucketDays(days, 'day'), which yields the same per-day metric values",
@@ -575,9 +1395,29 @@
     "reason": "equivalent: for null the property access throws and the catch returns EMPTY_STATE; for a non-object primitive every field falls back to its empty default, so the returned state has the same content (only object identity differs, which no caller relies on)",
     "where": "client/src/utils/tabGroups.js:135:9 !raw || typeof raw !== 'object' -> false"
   },
+  "xd8ffqw4yh": {
+    "reason": "equivalent: blank/whitespace-only lines make JSON.parse throw and the catch skips them",
+    "where": "server/claude-sessions.js:293:9 !line.trim() -> false"
+  },
+  "xi9x2sa2fq": {
+    "reason": "equivalent: when finishRequest runs, every held tool belongs to the request being finished",
+    "where": "server/activity-heatmap.js:361:9 held[0] === request.key -> true"
+  },
+  "xoxnqz9ncs": {
+    "reason": "equivalent: blank lines fail JSON.parse and are skipped by the catch anyway",
+    "where": "server/activity-heatmap.js:647:11 line.trim() -> true"
+  },
   "xoy4ze0gko": {
     "reason": "equivalent: contextOf is only called with ranges from extractUrls; text[start] and text[start+1] are inside the URL or link notation and never a newline, so lastIndexOf finds the same line start",
     "where": "client/src/utils/links.js:120:44 start - 1 -> start + 1"
+  },
+  "xp78ugnzfi": {
+    "reason": "equivalent: settleStaleBusy returns early when held is empty",
+    "where": "server/activity-heatmap.js:764:9 entry.busy.held.length > 0 -> true"
+  },
+  "y3wsoinbnd": {
+    "reason": "equivalent: blank lines fail JSON.parse and are skipped by the catch anyway",
+    "where": "server/activity-heatmap.js:647:11 line.trim() -> line"
   },
   "y7yj4ef5bp": {
     "reason": "equivalent: the placeholder string has no cwd, so parseCwd gives an empty project and it is skipped",
@@ -594,6 +1434,18 @@
   "z00ji2ilrk": {
     "reason": "equivalent: max === 0 is already caught by !max, so <= 0 and < 0 differ on no input",
     "where": "client/src/utils/heatmap.js:305:15 max <= 0 -> max < 0"
+  },
+  "z15m3gkrfv": {
+    "reason": "equivalent: differs only when every line is blank; then line 0 is blank and fails the footer regex, so the result is running with the same body",
+    "where": "server/shell-tasks.js:80:10 last >= 0 -> last > 0"
+  },
+  "z6um1o95or": {
+    "reason": "equivalent: this fallback watcher is only installed when targetFile is set (with no target the same projectPath watch has just failed), so the else branch is always taken",
+    "where": "server/jsonl-watcher.js:184:15 !state.targetFile -> false"
+  },
+  "zdqhrz9iy1": {
+    "reason": "equivalent: for a non-directory entry the following readdirSync throws (ENOTDIR) and the same catch skips it",
+    "where": "server/claude-sessions.js:52:11 !statSync(projectPath).isDirectory() -> false"
   },
   "zfzpccndoe": {
     "reason": "equivalent: tokens starting with 8 digits are neither a family name nor a 1-2 digit version, so dropping them changes nothing",
