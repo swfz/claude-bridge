@@ -1,0 +1,90 @@
+{
+  "14jncac50z": {
+    "reason": "equivalent: when state.groups is missing the extra 'g:undefined' entry in byKey is never reached: groupKeyOf rejects g: keys (no manual groups) and the returned manual list uses its own st.groups || []",
+    "where": "client/src/utils/tabGroups.js:56:32 [] -> [\"Stryker was here!\"]"
+  },
+  "14orevbcdp": {
+    "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
+    "where": "client/src/utils/keys.js:77:40 '' -> 'Stryker was here!'"
+  },
+  "16fiaxayp3g": {
+    "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
+    "where": "client/src/utils/keys.js:76:40 '' -> 'Stryker was here!'"
+  },
+  "18xxspt59a5": {
+    "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
+    "where": "client/src/utils/keys.js:66:38 '' -> 'Stryker was here!'"
+  },
+  "1b0byu6nfze": {
+    "reason": "equivalent: with nothing stored, JSON.parse('') throws and the catch returns EMPTY_STATE, the same value the null branch returns",
+    "where": "client/src/utils/tabGroups.js:134:68 'null' -> ''"
+  },
+  "1djfc4g0h10": {
+    "reason": "equivalent: group keys always start with 'p:' or 'g:', so a collapsed set containing 'Stryker was here!' never matches any group",
+    "where": "client/src/utils/tabGroups.js:54:45 [] -> [\"Stryker was here!\"]"
+  },
+  "1h9b3t97r56": {
+    "reason": "equivalent: the default isHidden result is only negated in filter, and !undefined === !false",
+    "where": "client/src/utils/tabGroups.js:191:57 false -> undefined"
+  },
+  "1k129uql7xl": {
+    "reason": "equivalent: a truthy non-object primitive yields empty defaults for every field, the same content as EMPTY_STATE (only object identity differs, which no caller relies on)",
+    "where": "client/src/utils/tabGroups.js:135:17 typeof raw !== 'object' -> false"
+  },
+  "1mamhd0kgoz": {
+    "reason": "equivalent: for null the property access throws and the catch returns EMPTY_STATE; for a non-object primitive every field falls back to its empty default, so the returned state has the same content (only object identity differs, which no caller relies on)",
+    "where": "client/src/utils/tabGroups.js:135:9 !raw || typeof raw !== 'object' -> (!raw && typeof raw !== 'object')"
+  },
+  "1rszyqlbbvz": {
+    "reason": "equivalent: fallback for a missing e.code; 'Stryker was here!' does not match /^(?:Digit|Numpad)([0-9])$/ any more than '' does",
+    "where": "client/src/utils/keys.js:80:56 '' -> 'Stryker was here!'"
+  },
+  "2fdmx5k57y3": {
+    "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
+    "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
+  },
+  "8mrlkfqera": {
+    "reason": "equivalent: fallback for a missing e.key; VIM_NAV_BY_KEY has no 'stryker was here!' entry, so the lookup is undefined as with '' and the result is null",
+    "where": "client/src/utils/keys.js:58:54 '' -> 'Stryker was here!'"
+  },
+  "box5f11qqk": {
+    "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
+    "where": "client/src/utils/tabGroups.js:145:21 typeof raw.colors === 'object' -> true"
+  },
+  "e1hx4lek3q": {
+    "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
+    "where": "client/src/utils/tabGroups.js:145:7 raw.colors && typeof raw.colors === 'object' -> (raw.colors || typeof raw.colors === 'object')"
+  },
+  "fs23oc78yo": {
+    "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
+    "where": "client/src/utils/keys.js:67:38 '' -> 'Stryker was here!'"
+  },
+  "g372z8uexz": {
+    "reason": "equivalent: the greedy [^/]+ always stops right before '/' or the end of the string, so the lookahead (?=\\/|$) is always satisfied and dropping $ changes no match",
+    "where": "client/src/utils/tabGroups.js:186:23 /^\\/(?:home|Users)\\/[^/]+(?=\\/|$)/ -> /^\\/(?:home|Users)\\/[^/]+(?=\\/|)/"
+  },
+  "hq0b8gesgh": {
+    "reason": "equivalent: parseCwd returns parent null whenever project is empty, so the template also yields 'p:'",
+    "where": "client/src/utils/tabGroups.js:23:7 !project -> false"
+  },
+  "l8a2ybil5f": {
+    "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
+    "where": "client/src/utils/keys.js:27:41 '' -> 'Stryker was here!'"
+  },
+  "lcx0785wpm": {
+    "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
+    "where": "client/src/utils/keys.js:35:41 '' -> 'Stryker was here!'"
+  },
+  "m36xgg0wef": {
+    "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
+    "where": "client/src/utils/keys.js:42:41 '' -> 'Stryker was here!'"
+  },
+  "toivh7kb00": {
+    "reason": "equivalent: values failing isPaletteIndex are never integers in 0..7, so leaving them in the fixed set never removes a palette index from free",
+    "where": "client/src/utils/tabGroups.js:202:25 list.map((g) => colors?.[g.key]).filter(isPaletteIndex) -> list.map((g) => colors?.[g.key])"
+  },
+  "wt8ty3lrmk": {
+    "reason": "equivalent: for null the property access throws and the catch returns EMPTY_STATE; for a non-object primitive every field falls back to its empty default, so the returned state has the same content (only object identity differs, which no caller relies on)",
+    "where": "client/src/utils/tabGroups.js:135:9 !raw || typeof raw !== 'object' -> false"
+  }
+}
