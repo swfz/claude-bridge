@@ -391,6 +391,10 @@ describe('readSessionEntrypoint', () => {
     assert.equal(await readSessionEntrypoint(file), 'cli');
   });
 
+  it('読めないパスなら null を返す', async () => {
+    assert.equal(await readSessionEntrypoint(undefined), null);
+  });
+
   it('文字列でない entrypoint は飛ばして次の行を見る', async () => {
     const dir = await makeTmp('cb-entry-');
     const file = join(dir, 's.jsonl');
