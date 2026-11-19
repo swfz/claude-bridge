@@ -1,6 +1,6 @@
-import { describe, it } from 'vitest';
+import { describe, it, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, mkdir } from 'fs/promises';
+import { mkdtemp, writeFile, mkdir, rm, appendFile, utimes } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -12,6 +12,9 @@ import {
   readSessionSummary,
   readSessionSummaryFor,
   readLastLines,
+  readFirstLines,
+  snippetText,
+  findRelocatedCwd,
 } from '../server/session-summary.js';
 
 const jsonl = (records) => records.map((r) => JSON.stringify(r)).join('\n') + '\n';
@@ -511,5 +514,422 @@ describe('summarizeTail lastAssistantQuestion', () => {
 
   it('is false without any assistant reply', () => {
     assert.equal(summarizeTail(jsonl([userRecord('依頼')]).split('\n')).lastAssistantQuestion, false);
+  });
+});
+
+// ---- ここから下はミューテーションテストで見つかった穴を埋めるもの ----
+
+const createdDirs = [];
+async function tmpJsonl(content, name = 's.jsonl') {
+  const dir = await mkdtemp(join(tmpdir(), 'cb-summary-mut-'));
+  createdDirs.push(dir);
+  const file = join(dir, name);
+  await writeFile(file, content);
+  return file;
+}
+afterEach(async () => {
+  while (createdDirs.length > 0) await rm(createdDirs.pop(), { recursive: true, force: true });
+});
+
+const assistantRecord = (content, extra = {}) => ({
+  type: 'assistant',
+  message: { role: 'assistant', content },
+  ...extra,
+});
+
+describe('readFirstLines', () => {
+  it('1 行が読み込みの塊より長くても、maxLines 行で打ち切る', async () => {
+    // 1 行 100KB（読み込みの塊 64KB より長い）なので、塊単位ではなく行数で止まっているかが分かる
+    const lines = ['a', 'b', 'c', 'd'].map((ch) => JSON.stringify({ type: ch, pad: ch.repeat(100 * 1024) }));
+    const file = await tmpJsonl(lines.join('\n') + '\n');
+    const read = await readFirstLines(file, 2);
+    assert.deepEqual(read, lines.slice(0, 2));
+  });
+
+  it('存在しないファイルは空配列', async () => {
+    assert.deepEqual(await readFirstLines(join(tmpdir(), 'cb-nope-first.jsonl'), 5), []);
+  });
+
+  it('マルチバイト文字を壊さずに読む', async () => {
+    const line = JSON.stringify({ text: 'あいうえお'.repeat(20000) });
+    const file = await tmpJsonl(line + '\n');
+    assert.deepEqual(await readFirstLines(file, 1), [line]);
+  });
+});
+
+describe('readLastLines (境界)', () => {
+  it('末尾 maxBytes だけを読み、それより前の行は返さない', async () => {
+    const records = Array.from({ length: 50 }, (_, i) => ({ type: 'x', i }));
+    const content = jsonl(records);
+    const file = await tmpJsonl(content);
+    const lastTwo = jsonl(records.slice(-2));
+    // 最後の 2 行 + 2 文字（直前の行の末尾が欠けた行として捨てられる）
+    const lines = await readLastLines(file, Buffer.byteLength(content), Buffer.byteLength(lastTwo) + 2);
+    assert.deepEqual(
+      lines.map((l) => JSON.parse(l).i),
+      [48, 49],
+    );
+  });
+
+  it('読み込みの塊をまたぐマルチバイト文字の行も壊さずつなぐ', async () => {
+    const records = Array.from({ length: 40 }, (_, i) => ({ i, text: 'あ'.repeat(3000 + i) }));
+    const content = jsonl(records);
+    const file = await tmpJsonl(content);
+    const lines = await readLastLines(file, Buffer.byteLength(content), 1024 * 1024);
+    assert.deepEqual(lines, content.split('\n').filter(Boolean));
+  });
+
+  it('存在しないファイルは空配列', async () => {
+    assert.deepEqual(await readLastLines(join(tmpdir(), 'cb-nope-last.jsonl'), 100), []);
+  });
+});
+
+describe('snippetText', () => {
+  it('タグを空白に置き換え、連続する空白を 1 つに均して前後を落とす', () => {
+    assert.equal(snippetText('  <teammate-message id="x">中身</teammate-message>\n\n  続き  '), '中身 続き');
+    assert.equal(snippetText('a<b>c'), 'a c');
+  });
+});
+
+describe('userPrompt', () => {
+  it('人が打った user の本文だけを返す', () => {
+    assert.equal(userPrompt(userRecord('  普通の\n指示  ')), '普通の 指示');
+    assert.equal(userPrompt({ type: 'assistant', message: { content: [{ type: 'text', text: '応答' }] } }), '');
+    assert.equal(userPrompt(userRecord('meta', { isMeta: true })), '');
+    assert.equal(userPrompt(userRecord('要約', { isCompactSummary: true })), '');
+    assert.equal(userPrompt(userRecord('<command-name>/x</command-name>')), '');
+    assert.equal(userPrompt(userRecord('Another Claude session sent a message: 報告')), '');
+    assert.equal(userPrompt(userRecord('   ')), '');
+  });
+});
+
+describe('summarizeHead (境界)', () => {
+  it('ai-title・ブランチ・cwd は最初に現れたものを使う', () => {
+    const lines = jsonl([
+      { type: 'ai-title', aiTitle: '最初のタイトル' },
+      { type: 'ai-title', aiTitle: '後のタイトル' },
+      userRecord('依頼', { gitBranch: 'feature/a', cwd: '/repo/a' }),
+      userRecord('次の依頼', { gitBranch: 'feature/b', cwd: '/repo/b' }),
+    ]).split('\n');
+    const head = summarizeHead(lines);
+    assert.equal(head.title, '最初のタイトル');
+    assert.equal(head.firstUserMessage, '依頼');
+    assert.equal(head.gitBranch, 'feature/a');
+    assert.equal(head.cwd, '/repo/a');
+  });
+
+  it('文字列でない cwd は使わない', () => {
+    const lines = jsonl([userRecord('依頼', { cwd: 42 }), { type: 'mode', cwd: '/repo/ok' }]).split('\n');
+    assert.equal(summarizeHead(lines).cwd, '/repo/ok');
+  });
+
+  it('指示が無ければ最初の last-prompt を冒頭の依頼・タイトルにする', () => {
+    const lines = jsonl([
+      { type: 'last-prompt', lastPrompt: '  前回の\n指示  ' },
+      { type: 'last-prompt', lastPrompt: '別の指示' },
+    ]).split('\n');
+    assert.deepEqual(summarizeHead(lines), {
+      title: '前回の 指示',
+      firstUserMessage: '前回の 指示',
+      gitBranch: '',
+      cwd: '',
+    });
+  });
+
+  it('空の ai-title・last-prompt は飛ばす', () => {
+    const lines = jsonl([
+      { type: 'ai-title', aiTitle: '' },
+      { type: 'last-prompt', lastPrompt: '' },
+      { type: 'ai-title', aiTitle: '中身のあるタイトル' },
+      { type: 'last-prompt', lastPrompt: '中身のある指示' },
+    ]).split('\n');
+    const head = summarizeHead(lines);
+    assert.equal(head.title, '中身のあるタイトル');
+    assert.equal(head.firstUserMessage, '中身のある指示');
+  });
+
+  it('タイトルは 100 文字、冒頭の依頼は 180 文字で切る', () => {
+    const lines = jsonl([{ type: 'ai-title', aiTitle: 'た'.repeat(150) }, userRecord('い'.repeat(300))]).split('\n');
+    const head = summarizeHead(lines);
+    assert.equal(head.title, 'た'.repeat(100));
+    assert.equal(head.firstUserMessage, 'い'.repeat(180));
+  });
+
+  it('ai-title のタグ・改行は均してタイトルにする', () => {
+    const lines = jsonl([{ type: 'ai-title', aiTitle: '<b>強調</b>\n  タイトル' }]).split('\n');
+    assert.equal(summarizeHead(lines).title, '強調 タイトル');
+  });
+});
+
+describe('summarizeTail (境界)', () => {
+  it('各項目を別々のレコードから拾う（どれか 1 つで探索を打ち切らない）', () => {
+    const lines = jsonl([
+      userRecord('古い依頼'),
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: '前の応答ですか？' }],
+          usage: { input_tokens: 3 },
+        },
+      },
+      userRecord('最後の依頼'),
+      assistantRecord([{ type: 'tool_use', id: 't', name: 'Read', input: {} }]),
+      { type: 'system', subtype: 'informational', timestamp: '2026-10-05T00:00:00.000Z' },
+    ]).split('\n');
+    const tail = summarizeTail(lines);
+    assert.equal(tail.lastTimestamp, '2026-10-05T00:00:00.000Z');
+    assert.equal(tail.lastUserMessage, '最後の依頼');
+    // tool_use だけの直近の応答は本文が空なので、その前の本文のある応答を使う
+    assert.equal(tail.lastAssistantMessage, '前の応答ですか？');
+    assert.equal(tail.lastAssistantQuestion, true);
+    assert.equal(tail.contextUsage.contextTokens, 3);
+  });
+
+  it('直近の依頼と応答は 180 文字で切る', () => {
+    const lines = jsonl([
+      userRecord('依'.repeat(200)),
+      assistantRecord([{ type: 'text', text: '応'.repeat(200) }]),
+    ]).split('\n');
+    const tail = summarizeTail(lines);
+    assert.equal(tail.lastUserMessage, '依'.repeat(180));
+    assert.equal(tail.lastAssistantMessage, '応'.repeat(180));
+  });
+
+  it('空の入力では全項目が既定値', () => {
+    assert.deepEqual(summarizeTail([]), {
+      relocatedCwd: '',
+      lastUserMessage: '',
+      lastAssistantMessage: '',
+      lastAssistantQuestion: false,
+      lastTimestamp: '',
+      contextUsage: null,
+      turnState: null,
+      awaySummary: null,
+    });
+  });
+
+  it('away_summary は直近の 1 件だけを見て、中身が空なら古いものに戻らない', () => {
+    const lines = [
+      { type: 'system', subtype: 'away_summary', content: '古い要約', timestamp: 't1' },
+      { type: 'system', subtype: 'away_summary', content: '  (disable recaps in /config)  ' },
+    ].map((r) => JSON.stringify(r));
+    assert.equal(summarizeTail(lines).awaySummary, null);
+  });
+
+  it('away_summary の content が文字列でなければ飛ばし、timestamp が無ければ空文字', () => {
+    const lines = [
+      { type: 'system', subtype: 'away_summary', content: '有効な要約' },
+      { type: 'system', subtype: 'away_summary', content: { text: 'x' }, timestamp: 't2' },
+      { type: 'user', subtype: 'away_summary', content: 'user の要約' },
+    ].map((r) => JSON.stringify(r));
+    assert.deepEqual(summarizeTail(lines).awaySummary, { text: '有効な要約', timestamp: '' });
+  });
+
+  it('away_summary は 300 文字で切り、末尾以外の (disable recaps in /config) は残す', () => {
+    const long = '要'.repeat(400);
+    assert.equal(
+      summarizeTail([JSON.stringify({ type: 'system', subtype: 'away_summary', content: long })]).awaySummary.text,
+      '要'.repeat(300),
+    );
+    const middle = summarizeTail([
+      JSON.stringify({ type: 'system', subtype: 'away_summary', content: 'A (disable recaps in /config) B' }),
+    ]).awaySummary.text;
+    assert.equal(middle, 'A (disable recaps in /config) B');
+  });
+});
+
+describe('endsWithQuestion (境界)', () => {
+  it('末尾の句点・感嘆符を剥がしてから言い回しを見る', () => {
+    assert.equal(endsWithQuestion('進めますか.'), true);
+    assert.equal(endsWithQuestion('進めますか！'), true);
+    assert.equal(endsWithQuestion('進めますか．'), true);
+    assert.equal(endsWithQuestion('進めますか!'), true);
+    assert.equal(endsWithQuestion('**進めますか**。'), true);
+  });
+
+  it('疑問符の後ろの句点は剥がさない（疑問符で終わる判定は装飾だけ剥がす）', () => {
+    assert.equal(endsWithQuestion('これでいい?。'), false);
+  });
+
+  it('疑問符の後ろの強調・コード・括弧は剥がす', () => {
+    assert.equal(endsWithQuestion('どれ?*'), true);
+    assert.equal(endsWithQuestion('どれ?_'), true);
+    assert.equal(endsWithQuestion('どれ?`'), true);
+    assert.equal(endsWithQuestion('（どれ？）'), true);
+    assert.equal(endsWithQuestion('(どれ?)'), true);
+    assert.equal(endsWithQuestion('[どれ?]'), true);
+  });
+
+  it('タグだけの本文は質問ではない', () => {
+    assert.equal(endsWithQuestion('<b></b>'), false);
+  });
+
+  it('各言い回しで終わる文を質問とみなす', () => {
+    for (const s of [
+      '決めてください',
+      '選んでください',
+      '指定してください',
+      'どちらにしますか',
+      'どうしますか',
+      'どれにしますか',
+      'これでよいですか',
+      'これでいいですか',
+      'よろしいですか',
+      'でしょうか',
+      'ますか',
+      '進めましょうか',
+    ]) {
+      assert.equal(endsWithQuestion(`前置き。${s}`), true, s);
+    }
+  });
+
+  it('言い回しが文の途中にあるだけなら質問ではない', () => {
+    assert.equal(endsWithQuestion('どうしますか、と聞かれたので実装しました'), false);
+  });
+});
+
+describe('detectTurnState (境界)', () => {
+  const prompt = (text = 'お願い') => ({ type: 'user', message: { role: 'user', content: text } });
+  const toolUse = () => assistantRecord([{ type: 'tool_use', id: 't', name: 'Bash', input: {} }]);
+  const toolResult = () => ({
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: 'ok' }] },
+  });
+  const turnEnd = { type: 'system', subtype: 'turn_duration', durationMs: 1 };
+
+  it('turn_duration の後なら tool_use の応答・tool_result でも ended', () => {
+    assert.equal(detectTurnState([prompt(), toolUse(), turnEnd]), 'ended');
+    assert.equal(detectTurnState([prompt(), toolUse(), toolResult(), turnEnd]), 'ended');
+  });
+
+  it('turn_duration 以外の system レコードはターンの終わりとみなさない', () => {
+    assert.equal(detectTurnState([prompt(), toolUse(), { type: 'system', subtype: 'away_summary' }]), 'midway');
+    assert.equal(detectTurnState([prompt(), { type: 'system', subtype: 'informational' }]), 'prompt');
+  });
+
+  it('turn_duration だけなら ended', () => {
+    assert.equal(detectTurnState([turnEnd]), 'ended');
+  });
+
+  it('本文が文字列の中断も interrupted、meta の中断文は無視する', () => {
+    assert.equal(
+      detectTurnState([prompt(), toolUse(), prompt('[Request interrupted by user for tool use]')]),
+      'interrupted',
+    );
+    const metaInterrupt = { ...prompt('[Request interrupted by user]'), isMeta: true };
+    assert.equal(detectTurnState([prompt(), toolUse(), metaInterrupt]), 'midway');
+  });
+
+  it('content が配列でない assistant は tool_use を持たないものとして ended', () => {
+    assert.equal(
+      detectTurnState([prompt(), { type: 'assistant', message: { role: 'assistant', content: 'text' } }]),
+      'ended',
+    );
+  });
+
+  it('isApiErrorMessage が付いていれば本文に関わらず error', () => {
+    assert.equal(detectTurnState([prompt(), { ...toolUse(), isApiErrorMessage: true }]), 'error');
+  });
+
+  it('API Error を途中に含むだけの応答は error にしない', () => {
+    assert.equal(
+      detectTurnState([prompt(), assistantRecord([{ type: 'text', text: 'ログに API Error が出ていました' }])]),
+      'ended',
+    );
+  });
+});
+
+describe('findRelocatedCwd', () => {
+  it('空・文字列でない relocatedCwd は飛ばして前の relocated を使う', () => {
+    assert.equal(
+      findRelocatedCwd([
+        { type: 'relocated', relocatedCwd: '/repo-ok' },
+        { type: 'relocated', relocatedCwd: '' },
+        { type: 'relocated', relocatedCwd: 42 },
+      ]),
+      '/repo-ok',
+    );
+  });
+
+  it('relocated 以外のレコードの relocatedCwd は見ない', () => {
+    assert.equal(findRelocatedCwd([{ type: 'user', relocatedCwd: '/nope' }]), '');
+  });
+
+  it('worktree-state は最後の有効な originalCwd を使い、他の type は見ない', () => {
+    assert.equal(
+      findRelocatedCwd([
+        { type: 'worktree-state', worktreeSession: { originalCwd: '/repo-old' } },
+        { type: 'worktree-state', worktreeSession: { originalCwd: '/repo-new' } },
+        { type: 'worktree-state', worktreeSession: { originalCwd: '' } },
+        { type: 'other', worktreeSession: { originalCwd: '/nope' } },
+      ]),
+      '/repo-new',
+    );
+  });
+});
+
+describe('readSessionSummary (キャッシュと既定値)', () => {
+  const EMPTY = {
+    title: '',
+    firstUserMessage: '',
+    gitBranch: '',
+    cwd: '',
+    relocatedCwd: '',
+    lastUserMessage: '',
+    lastAssistantMessage: '',
+    lastAssistantQuestion: false,
+    lastTimestamp: '',
+    contextUsage: null,
+    turnState: null,
+    awaySummary: null,
+    artifacts: [],
+  };
+
+  it('読めないファイルは全項目が既定値のサマリを返す', async () => {
+    assert.deepEqual(await readSessionSummary(join(tmpdir(), 'cb-nope-summary.jsonl')), EMPTY);
+    assert.deepEqual(await readSessionSummaryFor('', 'sid'), EMPTY);
+    assert.deepEqual(await readSessionSummaryFor('/home/me', ''), EMPTY);
+  });
+
+  it('mtime が変わらなければキャッシュを返し、変われば読み直す', async () => {
+    const file = await tmpJsonl(jsonl([userRecord('最初の依頼')]));
+    const mtime = new Date('2026-10-01T00:00:00.000Z');
+    await utimes(file, mtime, mtime);
+    const first = await readSessionSummary(file);
+    assert.equal(await readSessionSummary(file), first);
+
+    await appendFile(file, jsonl([userRecord('追加の依頼')]));
+    // mtime を戻すとキャッシュのまま
+    await utimes(file, mtime, mtime);
+    assert.equal((await readSessionSummary(file)).lastUserMessage, '');
+
+    const later = new Date(mtime.getTime() + 5000);
+    await utimes(file, later, later);
+    assert.equal((await readSessionSummary(file)).lastUserMessage, '追加の依頼');
+  });
+
+  it('先頭に指示もタイトルも無ければ、直近の指示をタイトルにする', async () => {
+    // 先頭の読み込み（読み込みの塊 1 つ分）には入らない位置に指示を置く
+    const padding = Array.from({ length: 45 }, (_, i) => ({ type: 'progress', i, pad: 'p'.repeat(10 * 1024) }));
+    const file = await tmpJsonl(jsonl([...padding, userRecord('た'.repeat(150))]));
+    const summary = await readSessionSummary(file);
+    assert.equal(summary.firstUserMessage, '');
+    assert.equal(summary.title, 'た'.repeat(100));
+    assert.equal(summary.lastUserMessage, 'た'.repeat(150));
+  });
+
+  it('/rename のタイトルは均して 100 文字で切る', async () => {
+    const file = await tmpJsonl(
+      jsonl([{ type: 'custom-title', customTitle: `<b>名前</b>\n${'長'.repeat(150)}` }, userRecord('依頼')]),
+    );
+    assert.equal((await readSessionSummary(file)).title, `名前 ${'長'.repeat(97)}`);
+  });
+
+  it('直近の依頼が冒頭と違えばそのまま出す', async () => {
+    const file = await tmpJsonl(jsonl([userRecord('最初'), userRecord('最後')]));
+    const summary = await readSessionSummary(file);
+    assert.equal(summary.firstUserMessage, '最初');
+    assert.equal(summary.lastUserMessage, '最後');
   });
 });

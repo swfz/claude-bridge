@@ -1,6 +1,6 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, appendFile } from 'fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, utimes, stat, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { listSubagentTasks, readSubagentTranscript } from '../server/subagent-tasks.js';
@@ -389,5 +389,193 @@ describe('parseHistoryLines (loadSessionHistory との共通化)', () => {
 
   it('loadSessionHistory returns [] for a missing file', async () => {
     assert.deepEqual(await loadSessionHistory('no-such-session', '-no-such-project'), []);
+  });
+});
+
+// ---- ここから下はミューテーションテストで見つかった穴を埋めるもの ----
+
+describe('listSubagentTasks (境界)', () => {
+  const list = (projectsDir, extra = {}) =>
+    listSubagentTasks({ projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir, ...extra });
+  const finalAnswer = {
+    type: 'assistant',
+    message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: '完了' }] },
+  };
+
+  it('projectDir・claudeSessionId が不正なら読まずに空配列', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'v1', { description: 'x' });
+    assert.equal((await list(projectsDir)).length, 1);
+    assert.deepEqual(await list(projectsDir, { projectDir: '' }), []);
+    assert.deepEqual(await list(projectsDir, { projectDir: 42 }), []);
+    assert.deepEqual(await list(projectsDir, { claudeSessionId: '../x' }), []);
+    assert.deepEqual(await list(projectsDir, { claudeSessionId: 123 }), []);
+    assert.deepEqual(await listSubagentTasks(), []);
+  });
+
+  it('agent-*.meta.json 以外のファイルと壊れた meta は無視する', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'ok', { agentType: 'Explore', description: '正しい' });
+    await writeFile(join(subagents, 'other.meta.json'), JSON.stringify({ description: 'agent- で始まらない' }));
+    await writeFile(join(subagents, 'agent-x.meta.json.bak'), JSON.stringify({ description: '拡張子違い' }));
+    await writeFile(join(subagents, 'agent-broken.meta.json'), '{ broken');
+    const tasks = await list(projectsDir);
+    assert.deepEqual(
+      tasks.map((t) => t.agentId),
+      ['ok'],
+    );
+  });
+
+  it('agentType・description が無ければ空文字', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'bare', {});
+    const [task] = await list(projectsDir);
+    assert.equal(task.agentType, '');
+    assert.equal(task.description, '');
+    assert.equal(task.status, 'completed');
+  });
+
+  it('更新時刻・サイズはトランスクリプトから、無ければ meta の更新時刻とサイズ 0', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 't1', { description: 'トランスクリプトあり' }, agentRecords);
+    await writeFile(join(subagents, 'agent-t2.meta.json'), JSON.stringify({ description: 'meta だけ' }));
+    const transcriptTime = new Date('2026-08-18T10:00:00.000Z');
+    const metaTime = new Date('2026-08-17T10:00:00.000Z');
+    await utimes(join(subagents, 'agent-t1.jsonl'), transcriptTime, transcriptTime);
+    await utimes(join(subagents, 'agent-t1.meta.json'), metaTime, metaTime);
+    await utimes(join(subagents, 'agent-t2.meta.json'), metaTime, metaTime);
+
+    const tasks = await list(projectsDir);
+    const byId = Object.fromEntries(tasks.map((t) => [t.agentId, t]));
+    assert.equal(byId.t1.updatedAt, transcriptTime.toISOString());
+    assert.equal(byId.t1.size, (await stat(join(subagents, 'agent-t1.jsonl'))).size);
+    assert.equal(byId.t2.updatedAt, metaTime.toISOString());
+    assert.equal(byId.t2.size, 0);
+  });
+
+  it('同じ状態の中では更新の新しい順に並べる', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    const ids = ['old', 'new', 'mid'];
+    const times = { old: '2026-08-01T00:00:00Z', new: '2026-08-03T00:00:00Z', mid: '2026-08-02T00:00:00Z' };
+    for (const id of ids) {
+      await writeAgent(subagents, `r-${id}`, { description: id, toolUseId: `toolu_${id}` }, agentRecords);
+      await writeAgent(subagents, `c-${id}`, { description: id }, agentRecords);
+      const t = new Date(times[id]);
+      await utimes(join(subagents, `agent-r-${id}.jsonl`), t, t);
+      await utimes(join(subagents, `agent-c-${id}.jsonl`), t, t);
+    }
+    const tasks = await list(projectsDir);
+    assert.deepEqual(
+      tasks.map((t) => t.agentId),
+      ['r-new', 'r-mid', 'r-old', 'c-new', 'c-mid', 'c-old'],
+    );
+  });
+
+  it('親 JSONL が無ければ実行中のまま（トランスクリプトの最後で判定する）', async () => {
+    const { projectsDir, subagents, parentJsonl } = await setupProject();
+    await rm(parentJsonl);
+    await writeAgent(subagents, 'np', { toolUseId: 'toolu_np' }, agentRecords);
+    assert.equal((await list(projectsDir))[0].status, 'running');
+  });
+
+  it('親 JSONL の書きかけの行は改行が付くまで取り込まない', async () => {
+    const { projectsDir, subagents, parentJsonl } = await setupProject({
+      parentRecords: [{ type: 'assistant', message: { role: 'assistant', content: '作業中' } }],
+    });
+    await writeAgent(subagents, 'w1', { toolUseId: 'toolu_partial' }, agentRecords);
+    await appendFile(parentJsonl, JSON.stringify(toolResult('toolu_partial')));
+    assert.equal((await list(projectsDir))[0].status, 'running');
+    await appendFile(parentJsonl, '\n');
+    assert.equal((await list(projectsDir))[0].status, 'completed');
+  });
+
+  it('改行の無い 1 行だけの親 JSONL も、改行が付けば読む', async () => {
+    const { projectsDir, subagents, parentJsonl } = await setupProject();
+    await writeFile(parentJsonl, JSON.stringify(toolResult('toolu_single')));
+    await writeAgent(subagents, 's1', { toolUseId: 'toolu_single' }, agentRecords);
+    assert.equal((await list(projectsDir))[0].status, 'running');
+    await appendFile(parentJsonl, '\n');
+    assert.equal((await list(projectsDir))[0].status, 'completed');
+  });
+
+  it('親 JSONL が縮んだら先頭から読み直し、前の結果を捨てる', async () => {
+    const { projectsDir, subagents, parentJsonl } = await setupProject({
+      parentRecords: [toolResult('toolu_gone'), toolResult('toolu_other')],
+    });
+    await writeAgent(subagents, 'sh', { toolUseId: 'toolu_gone' }, agentRecords);
+    assert.equal((await list(projectsDir))[0].status, 'completed');
+    await writeFile(parentJsonl, jsonl([toolResult('x')]));
+    assert.equal((await list(projectsDir))[0].status, 'running');
+  });
+
+  it('tool_use_id のコロンの前後に空白があっても拾う', async () => {
+    const { projectsDir, subagents, parentJsonl } = await setupProject();
+    await writeFile(parentJsonl, '{"type":"user","tool_use_id" :  "toolu_spaced"}\n');
+    await writeAgent(subagents, 'sp', { toolUseId: 'toolu_spaced' }, agentRecords);
+    assert.equal((await list(projectsDir))[0].status, 'completed');
+  });
+
+  it('end_turn の判定は最後の非空行だけで見る（壊れた行・end_turn 以外・assistant 以外は実行中）', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'blank', { toolUseId: 'toolu_blank' });
+    await writeFile(join(subagents, 'agent-blank.jsonl'), jsonl([...agentRecords, finalAnswer]) + '\n\n  \n');
+    await writeAgent(subagents, 'broken', { toolUseId: 'toolu_broken' });
+    await writeFile(join(subagents, 'agent-broken.jsonl'), jsonl([finalAnswer]) + '{ broken\n');
+    await writeAgent(subagents, 'tooluse', { toolUseId: 'toolu_tooluse' }, [
+      { ...finalAnswer, message: { ...finalAnswer.message, stop_reason: 'tool_use' } },
+    ]);
+    await writeAgent(subagents, 'user', { toolUseId: 'toolu_user' }, [
+      { type: 'user', message: { role: 'user', stop_reason: 'end_turn', content: 'x' } },
+    ]);
+    await writeAgent(subagents, 'nomsg', { toolUseId: 'toolu_nomsg' }, [{ type: 'assistant' }]);
+    await writeAgent(subagents, 'empty', { toolUseId: 'toolu_empty' }, []);
+    await writeFile(join(subagents, 'agent-empty.jsonl'), '');
+    await writeFile(join(subagents, 'agent-notranscript.meta.json'), JSON.stringify({ toolUseId: 'toolu_nt' }));
+
+    const tasks = await list(projectsDir);
+    const byId = Object.fromEntries(tasks.map((t) => [t.agentId, t.status]));
+    assert.deepEqual(byId, {
+      blank: 'completed',
+      broken: 'running',
+      tooluse: 'running',
+      user: 'running',
+      nomsg: 'running',
+      empty: 'running',
+      notranscript: 'running',
+    });
+  });
+
+  it('トランスクリプトが 64KB を超えても末尾の最終回答で完了と判定する', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    const big = {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'x'.repeat(100 * 1024) }] },
+    };
+    await writeAgent(subagents, 'big', { toolUseId: 'toolu_big' }, [big, finalAnswer]);
+    await writeAgent(subagents, 'bigtail', { toolUseId: 'toolu_bigtail' }, [finalAnswer, big]);
+    const tasks = await list(projectsDir);
+    const byId = Object.fromEntries(tasks.map((t) => [t.agentId, t.status]));
+    assert.deepEqual(byId, { big: 'completed', bigtail: 'running' });
+  });
+
+  it('トランスクリプトに最終回答が追記されたら完了に変わる', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'grow', { toolUseId: 'toolu_grow' }, agentRecords);
+    assert.equal((await list(projectsDir))[0].status, 'running');
+    await appendFile(join(subagents, 'agent-grow.jsonl'), jsonl([finalAnswer]));
+    assert.equal((await list(projectsDir))[0].status, 'completed');
+  });
+});
+
+describe('readSubagentTranscript (境界)', () => {
+  it('projectDir・claudeSessionId が不正なら null', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'ok', {}, agentRecords);
+    const base = { projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, agentId: 'ok', projectsDir };
+    assert.equal((await readSubagentTranscript(base)).length, 2);
+    assert.equal(await readSubagentTranscript({ ...base, projectDir: '' }), null);
+    assert.equal(await readSubagentTranscript({ ...base, claudeSessionId: 'a/b' }), null);
+    assert.equal(await readSubagentTranscript({ ...base, agentId: 42 }), null);
+    assert.equal(await readSubagentTranscript(), null);
   });
 });

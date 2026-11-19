@@ -1,6 +1,6 @@
-import { describe, it, afterAll } from 'vitest';
+import { describe, it, afterAll, afterEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { spawn } from 'child_process';
@@ -145,6 +145,117 @@ describe('readRateLimits', () => {
     const file = writeJson('no-rate-limits.json', { ts: Date.now() });
     const result = await readRateLimits({ filePath: file });
     assert.deepEqual(result, { ok: false, reason: 'empty' });
+  });
+});
+
+describe('normalizeUsage (境界)', () => {
+  it('seven_day だけ有効でも null にせず返す', () => {
+    const usage = normalizeUsage({ seven_day: { used_percentage: 0 } });
+    assert.deepEqual(usage, {
+      fiveHour: { utilization: null, resetsAt: null },
+      sevenDay: { utilization: 0, resetsAt: null },
+      extras: [],
+    });
+  });
+
+  it('five_hour だけ有効でも null にせず返す', () => {
+    const usage = normalizeUsage({ five_hour: { used_percentage: 12 } });
+    assert.equal(usage.fiveHour.utilization, 12);
+    assert.equal(usage.sevenDay.utilization, null);
+  });
+
+  it('数値の文字列の used_percentage は数として読み、Infinity は無効にする', () => {
+    const usage = normalizeUsage({
+      five_hour: { used_percentage: '42.5' },
+      seven_day: { used_percentage: Infinity },
+    });
+    assert.equal(usage.fiveHour.utilization, 42.5);
+    assert.equal(usage.sevenDay.utilization, null);
+  });
+
+  it('空文字・非有限数・数でも文字列でもない resets_at は null', () => {
+    const usage = normalizeUsage({
+      five_hour: { used_percentage: 1, resets_at: '' },
+      seven_day: { used_percentage: 2, resets_at: Infinity },
+      seven_day_sonnet: { used_percentage: 3, resets_at: { at: 1 } },
+      seven_day_opus: { used_percentage: 4, resets_at: true },
+    });
+    assert.equal(usage.fiveHour.resetsAt, null);
+    assert.equal(usage.sevenDay.resetsAt, null);
+    assert.equal(usage.extras[0].resetsAt, null);
+    assert.equal(usage.extras[1].resetsAt, null);
+  });
+
+  it('オブジェクトでない rate_limits は null', () => {
+    assert.equal(normalizeUsage('five_hour'), null);
+    assert.equal(normalizeUsage(42), null);
+  });
+
+  it('片方のモデル別枠だけあれば、その 1 件だけを extras に出す', () => {
+    const usage = normalizeUsage({
+      five_hour: { used_percentage: 1 },
+      seven_day_opus: { used_percentage: 9, resets_at: '2026-08-18T10:00:00Z' },
+    });
+    assert.deepEqual(usage.extras, [
+      { key: 'seven_day_opus', label: '7d Opus', utilization: 9, resetsAt: '2026-08-18T10:00:00Z' },
+    ]);
+  });
+});
+
+describe('readRateLimits (fetchedAt)', () => {
+  it('ts が無ければファイルの更新時刻をそのまま fetchedAt にする', async () => {
+    const file = writeJson('mtime.json', { rate_limits: { seven_day: { used_percentage: 5 } } });
+    const result = await readRateLimits({ filePath: file });
+    assert.equal(result.fetchedAt, statSync(file).mtimeMs);
+  });
+
+  it('数値として読める ts は数に直して使う', async () => {
+    const file = writeJson('ts-string.json', {
+      rate_limits: { five_hour: { used_percentage: 5 } },
+      ts: '1700000000123',
+    });
+    const result = await readRateLimits({ filePath: file });
+    assert.equal(result.fetchedAt, 1700000000123);
+  });
+
+  it('JSON が null でも例外にせず empty を返す', async () => {
+    const file = join(TMP, 'null.json');
+    writeFileSync(file, 'null');
+    assert.deepEqual(await readRateLimits({ filePath: file }), { ok: false, reason: 'empty' });
+  });
+});
+
+describe('RATE_LIMITS_FILE', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('CLAUDE_BRIDGE_DIR 配下の rate-limits.json を既定の読み先にする', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'bridge-rate-limits-env-'));
+    try {
+      writeFileSync(
+        join(dataDir, 'rate-limits.json'),
+        JSON.stringify({ rate_limits: { five_hour: { used_percentage: 77 } }, ts: 1 }),
+      );
+      vi.stubEnv('CLAUDE_BRIDGE_DIR', dataDir);
+      vi.resetModules();
+      const mod = await import('../server/rate-limits.js');
+      assert.equal(mod.RATE_LIMITS_FILE, join(dataDir, 'rate-limits.json'));
+      const result = await mod.readRateLimits();
+      assert.equal(result.ok, true);
+      assert.equal(result.usage.fiveHour.utilization, 77);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('CLAUDE_BRIDGE_DIR が無ければホームの .claude-bridge を指す', async () => {
+    vi.stubEnv('CLAUDE_BRIDGE_DIR', '');
+    vi.resetModules();
+    const os = await import('os');
+    const mod = await import('../server/rate-limits.js');
+    assert.equal(mod.RATE_LIMITS_FILE, join(os.homedir(), '.claude-bridge', 'rate-limits.json'));
   });
 });
 
