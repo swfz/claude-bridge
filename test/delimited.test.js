@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { MAX_TABLE_ROWS, delimiterFor, parseDelimited } from '../client/src/utils/delimited.js';
 

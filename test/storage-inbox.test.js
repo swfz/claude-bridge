@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'fs';
 import { join } from 'path';
@@ -12,10 +12,10 @@ const { Storage } = await import('../server/storage.js');
 
 describe('Storage.appendInbox', () => {
   let storage;
-  before(() => {
+  beforeAll(() => {
     storage = new Storage();
   });
-  after(() => {
+  afterAll(() => {
     rmSync(TMP, { recursive: true, force: true });
   });
 

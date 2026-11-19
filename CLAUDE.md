@@ -12,8 +12,8 @@ Claude Code セッションをブラウザから操作する Web ブリッジ。
 pnpm dev          # ビルド + サーバー起動 (http://localhost:3000)
 pnpm start        # サーバーのみ起動（ビルド済み前提）
 pnpm build        # クライアントビルド
-pnpm test         # テスト実行
-pnpm test:coverage # テスト + カバレッジ計測(server/ と client/src/utils/ の lines 90% 未満で失敗。CI はこちらを実行)
+pnpm test         # テスト実行（Vitest）
+pnpm test:coverage # テスト + カバレッジ計測(Vitest + v8。server/ と client/src/utils/ の lines 90% 未満で失敗。CI はこちらを実行)
 pnpm test:e2e     # Playwright による E2E スモークテスト（ビルド→fixture サーバーで実行）
 pnpm install:all  # 全依存インストール
 pnpm setup:hooks       # inbox 配信フック（閲覧タブからの送信の受信側）を ~/.claude/settings.json に登録
@@ -29,7 +29,7 @@ pnpm run format:check  # Prettier の整形チェック（CI でも実行）。�
 
 - **Node.js 24+** -- バージョンはリポジトリ直下の `.node-version` が正（CI も参照）。pnpm は `package.json` の `packageManager` に合わせる（`corepack enable` 等）
 - **gcc / g++ / make** -- `node-pty` のネイティブビルドに必須。`pnpm install` でビルドされる。Node を上げた後などに `node-pty` の読み込みで落ちたら `pnpm rebuild node-pty`
-- **tmux** -- 任意。tmux ペイン接続・「tmux で再開」を使うときだけ必要（テストは `mock.module` でモックするので不要）
+- **tmux** -- 任意。tmux ペイン接続・「tmux で再開」を使うときだけ必要（テストは `vi.mock` でモックするので不要）
 - **`claude` CLI** -- 任意。セッションの起動・resume（実行時）にだけ必要で、テスト・E2E では使わない
 - **`gh`** -- 任意。ホームのやり残し判定で PR のマージ状態を引くのに使う。無い・未ログインなら判定は `unknown`（完了扱い）に倒れる
 
@@ -52,7 +52,7 @@ pnpm run format:check  # Prettier の整形チェック（CI でも実行）。�
 
 - `server/` -- Node.js (ESM)。Express + ws で WebSocket サーバーを提供
 - `client/` -- React + Vite。ビルド成果物は `client/dist/` に出力され、サーバーが配信
-- `test/` -- `node:test` によるテスト。`--experimental-test-module-mocks` 使用
+- `test/` -- Vitest によるテスト（設定は `vitest.config.js`）
 
 ### サーバーのモジュール構成
 
@@ -73,7 +73,7 @@ pnpm run format:check  # Prettier の整形チェック（CI でも実行）。�
 - `session-artifacts.js` -- ホームのカード／行に出す「そのセッションで公開した Artifact」の生リスト `readSessionArtifacts(filePath, fileStat?)` → `[{url, title, path, timestamp}]`（出現順・重複排除なし）。publish のレコードは JSONL のどこにでも現れるので全文を見るしかなく、差分走査は `jsonl-incremental.js` に任せる。JSON.parse の前に `line.includes('"toolUseResult"') && line.includes('claude.ai')` の安価なプリフィルタを通す。判定自体は `jsonl-utils.js` の `extractArtifactPublish()` と共通。**同じ走査で `/rename` のタイトル（`{type: 'custom-title', customTitle}`。会話の途中に書かれるので head/tail に入らない）も拾い**、`readSessionCustomTitle()` が最後のものを返す（数十 MB を二度読まないため 1 つの reader に同居）
 - `jsonl-incremental.js` -- JSONL の「どこにでも現れ得るレコード」を拾う差分走査の共通部品 `createIncrementalReader({prefilter, collect, createValue})` → `{read(filePath, fileStat?), clear()}`。起動中一覧はホーム表示中 5 秒間隔でポーリングし JSONL は数十 MB になり得るので、**前回オフセット以降だけを読み足す**（`Map<filePath, {mtimeMs, size, offset, value, inFlight}>`。stat が前回と同じならキャッシュ返し、縮んでいたら先頭から読み直す、同じファイルの並行走査は Promise を共有）。オフセットはバイト数なのでストリームは encoding を付けず Buffer で受け、`indexOf(0x0a)` で切ってから `toString('utf-8')` する（末尾の書きかけ行は取り込まない）。`session-artifacts.js` と `session-completion.js` が使う
 - `session-completion.js` -- ホームのやり残し判定のうち「編集したファイルがコミット済みか」。`readSessionEditedFiles()` が本体＋サブエージェントの JSONL から Edit / MultiEdit / Write / NotebookEdit の絶対パスを差分走査で集め、`getGitState(cwd)` が `git rev-parse --show-toplevel` と `git status --porcelain -z --untracked-files=all` をリポジトリごとに 1 回だけ走らせて 15 秒キャッシュ、`readSessionCompletion({filePath, cwd})` が突き合わせて `{edited, git: 'none'|'clean'|'dirty'|'unknown', uncommitted（先頭 20 件）, uncommittedCount, pushed, prCount, hasRemote, prs}` を返す（`hasRemote` は `git remote` が空でないか。`git: 'none'` / `'unknown'` では null。`prs` はこのセッションの `pr-link` の URL を**新しい順に最大 5 件** `pr-state.js` に通した `[{url, state}]` で、編集の有無に関わらず見る＝編集なしで ship だけしたセッションも PR の状態で判定するため。PR の状態は `prState` 引数で差し替えられる）。**`pushed` / `prCount` は「このセッションで push（または PR 作成）したか」で、git（リモートとの差分）には聞かず本体＋サブエージェントの JSONL だけを証拠にする**（同じリポジトリの別セッションの push と混ざらないため）。編集と同じく差分走査で、Bash の tool_use のうち `hasGitPush(command)` が真のもの（`parseCommitSubjects()` と同じ流儀で、コマンド位置の `git [グローバルオプション] push` だけを数え、ヒアドキュメント本文・コメント・引用符の中・`--dry-run` / `-n` は除く）から、tool_result が `is_error: true` で返ったものを引き、`pr-link` レコードがあれば PR 作成として `pushed` に含める。**cwd 全体の git status にしないのは、同じリポジトリで並行している別セッションの変更を巻き込まないため**。Claude が書くパスは cwd 表記、git のルートは実体パス（macOS の `/tmp` → `/private/tmp`）なので、`toRepoRelative()` で cwd の前置きを実体パスに置き換えてから比べる。cwd が消えている（worktree 削除済み）・git 管理外は `unknown`
-- `pr-state.js` -- やり残し判定で「PR がマージされたか」を確かめる。`createPrStateReader({run, ttlMs, concurrency})` → `{get(url), clear()}` と既定インスタンスの `getPrState(url)` / `clearPrStateCache()`。既定の `run` は `execFile('gh', ['pr', 'view', url, '--json', 'state,mergedAt'])`（シェル非経由・10 秒 timeout）で、`merged` / `open` / `closed` / `unknown` に直す。URL は `/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/` で検証し、合わなければ gh を呼ばず `unknown`。**キャッシュは `merged` / `closed` が終端なので永続、`open` / `unknown` は 5 分で取り直す**。同じ URL の並行呼び出しは Promise を共有し、同時実行は 4 本まで（ホーム初回表示で数十件が一斉に来るため）。**gh のアカウントが合わず読めない PR・gh 未ログインは `unknown` になり、判定側は完了に倒す**。`CLAUDE_BRIDGE_DISABLE_GH=1` で常に `unknown`（E2E が設定する）。`child_process` は名前空間 import で、`execFile` は呼び出し時に引く（`exec` だけを `mock.module` する tmux 系テストが間接 import で落ちないように）
+- `pr-state.js` -- やり残し判定で「PR がマージされたか」を確かめる。`createPrStateReader({run, ttlMs, concurrency})` → `{get(url), clear()}` と既定インスタンスの `getPrState(url)` / `clearPrStateCache()`。既定の `run` は `execFile('gh', ['pr', 'view', url, '--json', 'state,mergedAt'])`（シェル非経由・10 秒 timeout）で、`merged` / `open` / `closed` / `unknown` に直す。URL は `/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/` で検証し、合わなければ gh を呼ばず `unknown`。**キャッシュは `merged` / `closed` が終端なので永続、`open` / `unknown` は 5 分で取り直す**。同じ URL の並行呼び出しは Promise を共有し、同時実行は 4 本まで（ホーム初回表示で数十件が一斉に来るため）。**gh のアカウントが合わず読めない PR・gh 未ログインは `unknown` になり、判定側は完了に倒す**。`CLAUDE_BRIDGE_DISABLE_GH=1` で常に `unknown`（E2E が設定する）。`child_process` は名前空間 import で、`execFile` は呼び出し時に引く（`exec` だけを `vi.mock` する tmux 系テストが間接 import で落ちないように）
 - `session-turns.js` -- ホームの「セッション詳細」に出すターン詳細 `readSessionTurns(filePath, {cwd})` → `{turns: [{startedAt, prompt, durationMs, tokens, contextUsage, commits: [{subject, hash}], prs, editedFiles}], totals}`。**ユーザーの指示 1 件を 1 ターン**とし、区切りは `turnPrompt()`（普通の指示に加え、`<command-name>` で書かれるスラッシュコマンドを `/ship` のように取り出す。中断・meta・tool_result・タグ注入は区切りにしない）。**トークンは `message.id` ごとに 1 回だけ数える**（1 つの応答が content ブロックごとに複数レコードへ分割され、同じ usage が繰り返し書かれるため）。所要時間は `turn_duration` の `durationMs`、PR は `pr-link` レコード（URL で重複排除）。**コミットは Bash の `git commit` コマンドから件名を取り（`parseCommitSubjects()`。`-m` とヒアドキュメントの 1 行目、1 コマンドに複数可、`--amend` は除外、コメント・文字列・他のヒアドキュメント本文の中の `git commit` は拾わない）、`git log --all --since=<最初のターン - 1h> --format=%h%x09%s` と件名で突き合わせてハッシュを引く**（出力からハッシュを拾うのはフックの出力が混ざる・出力を絞って実行していることがあり当てにならないため）。引けなければ件名だけ。JSONL を全文読むのでパネルを開いたときだけ呼ぶ
 - `session-recent.js` -- ホームの行リストの「直近のやりとり」ポップオーバーに出す直近 N 往復 `readRecentExchanges(filePath, {limit = 3, textMax = 1000})` → `{exchanges: [{prompt, promptAt, reply, replyAt, toolCount, promptTruncated, replyTruncated}]}`（古い順）。**JSONL の末尾 1MB だけ読む**（途中から読んだら先頭の欠けた行は捨てる。足りなければ取れた分だけ返し、全文は読まない）。1 往復の区切りは `session-turns.js` の `turnPrompt()`（ターン詳細と同じ。注入・meta・中断・tool_result は区切りにしない）。prompt は改行を保った本文（スラッシュコマンドだけ `turnPrompt()` の `/ship` 形式）、reply はそのターンで本文のある最後の assistant のテキスト、toolCount はそのターンの tool_use 数。`textMax` を超えたら切って `*Truncated`。組み立ては純粋関数 `buildRecentExchanges(records)`、読み込みは mtime+size でキャッシュ（`clearSessionRecentCache()`）
 - `storage.js` -- `~/.claude-bridge/` への永続化。`appendInbox()` で閲覧タブからの送信を inbox に書き込む。レビュー下書き（`review-<key>.json`）・ピン（`pins-<key>.json`）もここ
@@ -390,7 +390,7 @@ PTY を持たない閲覧タブ（readonly）からセッションへ送る仕�
 - `execSync` は使わない。非同期 (`execAsync = promisify(exec)`) を使用
 - 重複コードは `jsonl-utils.js` 等の共通モジュールに集約する
 - React フック: 条件分岐やリターンより前に呼ぶ (Rules of Hooks)
-- テストは `node:test` の `describe`/`it` を使用。外部テストランナー不要
+- テストは Vitest の `describe`/`it` を `vitest` から import して使う（globals は使わない）。アサーションは `node:assert` のまま
 
 ## セキュリティ
 
@@ -409,10 +409,12 @@ PTY を持たない閲覧タブ（readonly）からセッションへ送る仕�
 pnpm test
 ```
 
-テストファイルは `test/` 配下。tmux コマンドのモックには `mock.module()` (experimental) を使用。
+テストファイルは `test/` 配下。tmux コマンドのモックには `vi.mock()` を使用（`vi.mock` はファイル先頭へ巻き上げられる。モック対象を読み込むモジュールは、ファクトリが参照する変数を宣言した後に `await import()` する）。
+
+カバレッジは v8 で `server/index.js`（テストから読み込まないエントリポイント）を母数から外している。
 
 テスト追加時:
 
-- ユニットテストは純粋関数から。外部依存は `mock.module` でモック
+- ユニットテストは純粋関数から。外部依存は `vi.mock` でモック
 - ファイル監視のテストは `tmpdir` + 実ファイル書き込みで
 - WebSocket テストは `ws` ライブラリで軽量サーバーを立てて結合テスト

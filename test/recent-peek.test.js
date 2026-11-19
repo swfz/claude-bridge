@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { peekPosition } from '../client/src/utils/recentPeek.js';
 

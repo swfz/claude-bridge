@@ -1,4 +1,4 @@
-import { describe, it, after } from 'node:test';
+import { describe, it, afterAll } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, statSync } from 'fs';
 import { tmpdir } from 'os';
@@ -43,7 +43,7 @@ function livePane(
 }
 
 describe('open-tabs: 保存と読み込み', () => {
-  after(() => rmSync(dataDir, { recursive: true, force: true }));
+  afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 
   it('ファイルが無ければ空', () => {
     assert.deepEqual(loadOpenTabs(join(dataDir, 'none.json')), { tabs: [], panes: [], pending: [] });

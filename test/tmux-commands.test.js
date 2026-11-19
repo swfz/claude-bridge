@@ -1,22 +1,20 @@
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
 // child_process.exec をモック（1回だけ設定）
 const execCalls = [];
 let execError = null;
 
-mock.module('child_process', {
-  namedExports: {
-    exec: (cmd, cb) => {
-      execCalls.push(cmd);
-      if (execError) {
-        cb(execError);
-      } else {
-        cb(null, { stdout: execCalls._mockStdout || '', stderr: '' });
-      }
-    },
+vi.mock('child_process', () => ({
+  exec: (cmd, cb) => {
+    execCalls.push(cmd);
+    if (execError) {
+      cb(execError);
+    } else {
+      cb(null, { stdout: execCalls._mockStdout || '', stderr: '' });
+    }
   },
-});
+}));
 
 // モック後に import
 const { listClaudeTmuxPanes, sendKeysToPane, validateSessionName, ensureInsertMode, TmuxSession } =

@@ -1,4 +1,4 @@
-import { describe, it, after } from 'node:test';
+import { describe, it, afterAll } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import { normalizeUsage, readRateLimits } from '../server/rate-limits.js';
 
 const TMP = mkdtempSync(join(tmpdir(), 'bridge-rate-limits-'));
-after(() => {
+afterAll(() => {
   rmSync(TMP, { recursive: true, force: true });
 });
 

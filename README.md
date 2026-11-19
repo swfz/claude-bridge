@@ -115,7 +115,7 @@ client/
       useWebSocket.js  WebSocket 接続管理（自動再接続）
       useChatParser.js チャットメッセージパーサー
 
-test/                  node:test によるユニット・統合テスト
+test/                  Vitest によるユニット・統合テスト
 ```
 
 ## メッセージプロトコル (WebSocket)
@@ -152,7 +152,7 @@ test/                  node:test によるユニット・統合テスト
 pnpm test
 ```
 
-`node:test` を使用。`--experimental-test-module-mocks` で tmux コマンドのモックテストを実行。
+Vitest を使用。tmux コマンドは `vi.mock` でモックする。
 
 ## セキュリティ
 

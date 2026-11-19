@@ -9,8 +9,8 @@
     "dev:client": "pnpm --filter ./client run dev",
     "build": "pnpm --filter ./client run build",
     "start": "node server/index.js",
-    "test": "node --experimental-test-module-mocks --test 'test/**/*.test.js'",
-    "test:coverage": "node --experimental-test-module-mocks --experimental-test-coverage --test-coverage-include='server/**/*.js' --test-coverage-include='client/src/utils/**/*.js' --test-coverage-lines=90 --test 'test/**/*.test.js'",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "pnpm run build && playwright test",
     "install:all": "pnpm install",
     "setup:hooks": "node scripts/setup-hooks.js",
@@ -29,12 +29,14 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.65.0",
+    "@vitest/coverage-v8": "5.1.0",
     "eslint": "10.14.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.14.0",
     "lefthook": "2.2.2",
-    "prettier": "3.10.0"
+    "prettier": "3.10.0",
+    "vitest": "5.1.0"
   },
   "engines": {
     "node": ">=24"

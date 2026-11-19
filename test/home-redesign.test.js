@@ -1,6 +1,6 @@
 // ホーム・トップバーのリデザインで足した純粋関数のテスト
 // （ディレクトリ色・プロジェクトの件数順・共有モードの非表示件数・使用量メーター）
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { dirColorOf, groupColorMap, shownTabGroups } from '../client/src/utils/tabGroups.js';
 import { rankProjects } from '../client/src/utils/sessionSearch.js';

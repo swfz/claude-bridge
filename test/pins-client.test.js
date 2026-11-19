@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { pinExcerpt, pinnedUuidSet, resolvePins, sortPins } from '../client/src/utils/pins.js';
 
