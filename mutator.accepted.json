@@ -35,6 +35,10 @@
     "reason": "equivalent: when state.groups is missing the extra 'g:undefined' entry in byKey is never reached: groupKeyOf rejects g: keys (no manual groups) and the returned manual list uses its own st.groups || []",
     "where": "client/src/utils/tabGroups.js:56:32 [] -> [\"Stryker was here!\"]"
   },
+  "14l7xgysbd5": {
+    "reason": "equivalent: TAB_RE is only an early-out guard; the item regex itself needs a ☐/☒ followed by a non-empty label, so lines rejected or admitted differently by the inverted class still end with items empty and return null",
+    "where": "server/choice-prompt.js:28:16 /[☐☒]/ -> /[^☐☒]/"
+  },
   "14orevbcdp": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:77:40 '' -> 'Stryker was here!'"
@@ -58,6 +62,22 @@
   "16fiaxayp3g": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:76:40 '' -> 'Stryker was here!'"
+  },
+  "16ntpd15nk": {
+    "reason": "equivalent: when out is empty out[-1] is undefined, which is not '', so the trailing-blank loop stops without popping",
+    "where": "server/choice-prompt.js:169:10 out.length > 0 -> true"
+  },
+  "17944cbcj81": {
+    "reason": "equivalent: an oversized buffer is filled only up to bytesRead, and only buf.subarray(0, bytesRead) is used",
+    "where": "server/shell-tasks.js:192:20 fileStat.size - entry.offset -> fileStat.size + entry.offset"
+  },
+  "17nnwz525w5": {
+    "reason": "equivalent: every caller of isRule passes an already trimmed string (collectDescription, collectQuestion and extractPermissionDetail all trim first)",
+    "where": "server/choice-prompt.js:48:39 line.trim() -> line"
+  },
+  "17spegl43b3": {
+    "reason": "equivalent: the extra non-option element sits at found[0]; it has no index so it is never the start, and the block is built only from entries after the start",
+    "where": "server/choice-prompt.js:81:17 [] -> [\"Stryker was here!\"]"
   },
   "18bqajqyich": {
     "reason": "equivalent: the final flush with an empty cluster (no segments) pushes nothing",
@@ -87,6 +107,10 @@
     "reason": "equivalent: with nothing stored, JSON.parse('') throws and the catch returns EMPTY_STATE, the same value the null branch returns",
     "where": "client/src/utils/tabGroups.js:134:68 'null' -> ''"
   },
+  "1bcejfkf51f": {
+    "reason": "equivalent: the text of a non-string/non-array tool_result is only searched for the background-ID marker, which neither '' nor the placeholder contains",
+    "where": "server/shell-tasks.js:166:10 '' -> 'Stryker was here!'"
+  },
   "1bemfwq5vla": {
     "reason": "equivalent: ms === 0 is already caught by !ms, so <= 0 and < 0 differ on no input that reaches the check",
     "where": "client/src/utils/sessionTurns.js:7:14 ms <= 0 -> ms < 0"
@@ -114,6 +138,10 @@
   "1dnlie1wne4": {
     "reason": "equivalent: an empty array maps to an empty points list and joins to '' without the guard",
     "where": "client/src/utils/heatmap.js:430:18 values.length === 0 -> false"
+  },
+  "1dp6iegm990": {
+    "reason": "equivalent: when size === offset the read is zero-length, finds no newline and returns without changing the entry",
+    "where": "server/shell-tasks.js:187:7 fileStat.size === entry.offset -> false"
   },
   "1ecc7cyj4nl": {
     "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクト（文字列・数値・真偽値）なら result.agentId は undefined で、次の typeof result.agentId !== 'string' で同じく return する",
@@ -231,6 +259,10 @@
     "reason": "equivalent: JSON.parse('') throws and the catch returns [], the same as parsing '[]'",
     "where": "client/src/utils/filerRoots.js:72:76 '[]' -> ''"
   },
+  "1qnjz0hebvw": {
+    "reason": "equivalent: the substring check is only a JSON.parse prefilter; a JSONL line written by Claude Code (JSON.stringify) that has a tool_use/tool_result block always contains the literal type string, so parsing every line records the same blocks",
+    "where": "server/shell-tasks.js:206:24 '\"tool_use\"' -> ''"
+  },
   "1riwol4zvs6": {
     "reason": "equivalent: the fallback edit is a string; its ?.old_string/?.new_string are undefined so lineDiffStats adds 0/0",
     "where": "client/src/utils/toolLines.js:62:67 [] -> [\"Stryker was here!\"]"
@@ -242,6 +274,10 @@
   "1rszyqlbbvz": {
     "reason": "equivalent: fallback for a missing e.code; 'Stryker was here!' does not match /^(?:Digit|Numpad)([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:56 '' -> 'Stryker was here!'"
+  },
+  "1rvb9nc4tb2": {
+    "reason": "equivalent: a zero-length FileHandle.read returns bytesRead 0, so an empty file still yields { text: '', truncated: false }",
+    "where": "server/shell-tasks.js:57:7 length <= 0 -> false"
   },
   "1rxv7jr3xih": {
     "reason": "equivalent: with sessions missing, the placeholder string has no alive/id, so it is filtered out of aliveIds and skipped in the loop exactly like an empty list",
@@ -282,6 +318,10 @@
   "1vxqg1rlwip": {
     "reason": "equivalent: content が無いときの [] を文字列 1 要素の配列にしても、文字列には type が無いので tool_use / tool_result として拾われない",
     "where": "server/jsonl-utils.js:158:86 [] -> [\"Stryker was here!\"]"
+  },
+  "1vzbnixf54o": {
+    "reason": "equivalent: a chunk whose only newline is at index 0 holds no complete record; not advancing the offset just re-reads that blank line next time",
+    "where": "server/shell-tasks.js:197:9 lastNewline < 0 -> lastNewline <= 0"
   },
   "1w3fyjlr77a": {
     "reason": "equivalent: Object.values of a JSON array is its elements in order, the same as the array itself",
@@ -335,6 +375,10 @@
     "reason": "equivalent: the placeholder summary matches none of the Monitor/Agent/Background patterns, so the kind is 'other' just like for ''",
     "where": "client/src/utils/taskNotifications.js:8:36 '' -> 'Stryker was here!'"
   },
+  "21pm1w91hdk": {
+    "reason": "equivalent: after trim() the label has no trailing whitespace, so /\\s+$/ never matches and the replacement string is never inserted",
+    "where": "server/choice-prompt.js:67:47 '' -> 'Stryker was here!'"
+  },
   "22w9o6qr67r": {
     "reason": "equivalent: the placeholder text for null has no NUL and no U+FFFD, so looksBinary returns false just like for ''",
     "where": "client/src/utils/binaryText.js:14:31 '' -> 'Stryker was here!'"
@@ -383,6 +427,14 @@
     "reason": "equivalent: the placeholder string has no alive flag and is skipped, the same as iterating an empty list",
     "where": "client/src/utils/notifications.js:9:28 [] -> [\"Stryker was here!\"]"
   },
+  "25lrerc3sx7": {
+    "reason": "equivalent: with no options found the backwards search leaves start at -1 and the function returns null at the next check",
+    "where": "server/choice-prompt.js:86:7 found.length === 0 -> false"
+  },
+  "25m8idkkjlw": {
+    "reason": "equivalent: length is never negative; for 0 the zero-length read returns the same { text: '', truncated: false }",
+    "where": "server/shell-tasks.js:57:7 length <= 0 -> length < 0"
+  },
   "25qd7ayohbs": {
     "reason": "equivalent: leading/trailing whitespace only produces '' terms, which filter(Boolean) drops",
     "where": "client/src/utils/recentDirs.js:25:17 (query || '').trim() -> (query || '')"
@@ -390,6 +442,14 @@
   "26j5skqqnv3": {
     "reason": "equivalent: Date.parse('Stryker was here!') and Date.parse('') are both NaN, so timeOf returns null either way",
     "where": "client/src/utils/working.js:11:40 '' -> 'Stryker was here!'"
+  },
+  "26mlw3yev7v": {
+    "reason": "equivalent: the substring check is only a JSON.parse prefilter; a JSONL line written by Claude Code (JSON.stringify) that has a tool_use/tool_result block always contains the literal type string, so parsing every line records the same blocks",
+    "where": "server/shell-tasks.js:206:56 '\"tool_result\"' -> ''"
+  },
+  "26q0jrpgk8r": {
+    "reason": "equivalent: for the last option the description range starts at blockEnd + 1, so ending it at blockEnd - 1 or blockEnd + 1 is an empty range either way",
+    "where": "server/choice-prompt.js:225:65 blockEnd + 1 -> blockEnd - 1"
   },
   "27owr5xz11d": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
@@ -459,6 +519,10 @@
     "reason": "equivalent: ms = 0 is already caught by !ms, so <= 0 and < 0 differ for no input",
     "where": "client/src/utils/calendar.js:256:14 ms <= 0 -> ms < 0"
   },
+  "2ezznkratn": {
+    "reason": "equivalent: the preceding greedy \\s* consumes all whitespace, so m[2] never starts with whitespace, and trailing whitespace is removed by the following replace",
+    "where": "server/choice-prompt.js:67:19 m[2].trim() -> m[2]"
+  },
   "2fdmx5k57y3": {
     "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
@@ -466,6 +530,10 @@
   "2fgur0spfhd": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> false"
+  },
+  "2fjsd6zzlht": {
+    "reason": "equivalent: trailing whitespace is already stripped from every line in parseChoicePrompt, and leading whitespace is absorbed by ^(\\s*) in OPTION_RE",
+    "where": "server/choice-prompt.js:51:33 trimEnd -> trimStart"
   },
   "2fpywxil4wc": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
@@ -478,6 +546,10 @@
   "2gb1iqdlgg7": {
     "reason": "equivalent: the fallback string does not start with '/', so normalizeRootInput returns null either way",
     "where": "client/src/utils/filerRoots.js:15:31 '' -> 'Stryker was here!'"
+  },
+  "2gff6zqjstp": {
+    "reason": "equivalent: with no newline the chunk becomes '' and the offset advances by 0, so nothing is recorded either way",
+    "where": "server/shell-tasks.js:197:9 lastNewline < 0 -> false"
   },
   "2jj4n004l6": {
     "reason": "equivalent: pos = found + 1 never exceeds length; at pos === length indexOf finds only an empty needle, which is returned early",
@@ -495,9 +567,17 @@
     "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
     "where": "client/src/utils/sensitiveSessions.js:33:12 Array.isArray(raw) -> true"
   },
+  "3uempgj671": {
+    "reason": "equivalent: taskToToolUse is only set for ids already in bashUses and both are reset together, so the lookup is never undefined",
+    "where": "server/shell-tasks.js:312:47 ?. -> ."
+  },
   "3uhswbi9jw": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:78:73 false -> true"
+  },
+  "438bniwlgl": {
+    "reason": "equivalent: with 3+ spaces the unanchored \\s{2} still matches the last two spaces before the box; test() gives the same boolean and the leftover space is removed by the label trim()",
+    "where": "server/choice-prompt.js:36:24 /\\s{2,}[┌│└├╭╰].*$/ -> /\\s{2}[┌│└├╭╰].*$/"
   },
   "43e0a5gs6y": {
     "reason": "equivalent: the placeholder string has no sessionId, so filter(Boolean) removes it and runningIds stays empty",
@@ -506,6 +586,10 @@
   "4p7ljk15ti": {
     "reason": "equivalent: letting value 0 through adds 0 to the day total",
     "where": "client/src/utils/calendar.js:232:11 value <= 0 -> value < 0"
+  },
+  "4r2cr457uu": {
+    "reason": "equivalent: when out is empty out[-1] is undefined, which is not '', so the trailing-blank loop stops without popping",
+    "where": "server/choice-prompt.js:169:10 out.length > 0 -> out.length >= 0"
   },
   "59l0xrtzbo": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
@@ -526,6 +610,10 @@
   "701c6s0p4f": {
     "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
     "where": "client/src/utils/tabOrder.js:50:67 '[]' -> ''"
+  },
+  "76k04kcnbq": {
+    "reason": "equivalent: record is declared per iteration, so on a parse failure it stays undefined and the following record?.message?.content check continues anyway",
+    "where": "server/shell-tasks.js:210:13 { continue; } -> {}"
   },
   "7722c1rmgp": {
     "reason": "equivalent: draft が null/undefined なら .items が TypeError になり catch で同じ { items: [] } を返す",
@@ -558,6 +646,10 @@
   "93n31vq41k": {
     "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:66:29 [] -> [\"Stryker was here!\"]"
+  },
+  "9atkq5ibee": {
+    "reason": "equivalent: after trim() the label has no trailing whitespace, so the replace is a no-op either way",
+    "where": "server/choice-prompt.js:67:39 /\\s+$/ -> /\\s$/"
   },
   "9mcdojeoyi": {
     "reason": "equivalent: width only feeds left; whenever width differs, left = viewport.width - margin - width falls below margin and is clamped to margin, the same as the original",
@@ -631,6 +723,10 @@
     "reason": "equivalent: parseCwd returns parent null whenever project is empty, so the template also yields 'p:'",
     "where": "client/src/utils/tabGroups.js:23:7 !project -> false"
   },
+  "hys8elgst8": {
+    "reason": "equivalent: with no foreground running task pairs is 0 and the loop assigns nothing",
+    "where": "server/shell-tasks.js:317:7 foregroundRunning.length === 0 -> false"
+  },
   "iytu4kbcvj": {
     "reason": "equivalent: raw is trimmed and non-empty, so path === '' is never true and '~' still expands to home via the other branch and trailing-slash removal",
     "where": "client/src/utils/filerRoots.js:19:21 '~' -> ''"
@@ -703,13 +799,29 @@
     "reason": "equivalent: endsWith('') is always true; dropping a last character that is not a newline does not change the line count",
     "where": "client/src/utils/toolLines.js:29:30 '\\n' -> ''"
   },
+  "q1myd3h2xr": {
+    "reason": "equivalent: the substring check is only a JSON.parse prefilter; a JSONL line written by Claude Code (JSON.stringify) that has a tool_use/tool_result block always contains the literal type string, so parsing every line records the same blocks",
+    "where": "server/shell-tasks.js:206:9 !line.includes('\"tool_use\"') && !line.includes('\"tool_resul… -> false"
+  },
   "rfdm28ktj7": {
     "reason": "equivalent: lastTimestamp is always a string (set from publish.timestamp || ''), so the || '' fallback in the sort is never taken",
     "where": "client/src/utils/artifacts.js:30:65 '' -> 'Stryker was here!'"
   },
+  "rstkbxt9yg": {
+    "reason": "equivalent: a line that passes the prefilter contains a string literal, so JSON.parse can never return null/undefined for it",
+    "where": "server/shell-tasks.js:213:27 ?. -> ."
+  },
   "s74n479wqs": {
     "reason": "equivalent: with 0 or 1 week buckets the baseline (all but the last bucket) is empty, so the next guard returns null anyway",
     "where": "client/src/utils/heatmap.js:397:7 weeks.length < 2 -> false"
+  },
+  "sbog1j61fq": {
+    "reason": "equivalent: ''.split('\\n') is [''], whose last element is '', the same question as the [] branch gives",
+    "where": "server/choice-prompt.js:177:18 text -> true"
+  },
+  "sdj0sniqdi": {
+    "reason": "equivalent: every consumer of the lines trims them (trimEnd/trim) before matching or returning, so leaving extra trailing whitespace changes nothing",
+    "where": "server/choice-prompt.js:200:57 /\\s+$/ -> /\\s$/"
   },
   "sgrwg6j4hr": {
     "reason": "equivalent: the placeholder label is always overwritten by bucketLabel before bucketDays returns",
@@ -755,6 +867,10 @@
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:88:11 n === 1 -> true"
   },
+  "waz517m0sk": {
+    "reason": "equivalent: without the guard a line with no ☐/☒ produces no items and returns null at the items.length check",
+    "where": "server/choice-prompt.js:62:7 !TAB_RE.test(text) -> false"
+  },
   "whauh8pcl9": {
     "reason": "equivalent: the placeholder string has no cwd, so parseCwd gives an empty project and it is skipped",
     "where": "client/src/utils/sessionSearch.js:58:35 [] -> [\"Stryker was here!\"]"
@@ -786,6 +902,10 @@
   "z00ji2ilrk": {
     "reason": "equivalent: max === 0 is already caught by !max, so <= 0 and < 0 differ on no input",
     "where": "client/src/utils/heatmap.js:305:15 max <= 0 -> max < 0"
+  },
+  "z15m3gkrfv": {
+    "reason": "equivalent: differs only when every line is blank; then line 0 is blank and fails the footer regex, so the result is running with the same body",
+    "where": "server/shell-tasks.js:80:10 last >= 0 -> last > 0"
   },
   "zfzpccndoe": {
     "reason": "equivalent: tokens starting with 8 digits are neither a family name nor a 1-2 digit version, so dropping them changes nothing",
