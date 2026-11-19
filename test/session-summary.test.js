@@ -1,4 +1,4 @@
-import { describe, it, afterEach } from 'vitest';
+import { describe, it, afterEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, rm, appendFile, utimes } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -888,8 +888,9 @@ describe('readSessionSummary (キャッシュと既定値)', () => {
 
   it('読めないファイルは全項目が既定値のサマリを返す', async () => {
     assert.deepEqual(await readSessionSummary(join(tmpdir(), 'cb-nope-summary.jsonl')), EMPTY);
-    assert.deepEqual(await readSessionSummaryFor('', 'sid'), EMPTY);
-    assert.deepEqual(await readSessionSummaryFor('/home/me', ''), EMPTY);
+    const projects = join(tmpdir(), 'cb-nope-projects');
+    assert.deepEqual(await readSessionSummaryFor('', 'sid', projects), EMPTY);
+    assert.deepEqual(await readSessionSummaryFor('/home/me', '', projects), EMPTY);
   });
 
   it('mtime が変わらなければキャッシュを返し、変われば読み直す', async () => {
@@ -931,5 +932,171 @@ describe('readSessionSummary (キャッシュと既定値)', () => {
     const summary = await readSessionSummary(file);
     assert.equal(summary.firstUserMessage, '最初');
     assert.equal(summary.lastUserMessage, '最後');
+  });
+});
+
+describe('userPrompt・detectTurnState (前後の空白)', () => {
+  it('前に空白があってもタグ注入・他セッションからの送信は指示にしない', () => {
+    assert.equal(userPrompt(userRecord('  <command-name>/x</command-name>')), '');
+    assert.equal(userPrompt(userRecord('\nAnother Claude session sent a message: 報告')), '');
+  });
+
+  it('前に空白のある API Error・中断も見分ける', () => {
+    const prompt = { type: 'user', message: { role: 'user', content: 'お願い' } };
+    assert.equal(detectTurnState([prompt, assistantRecord([{ type: 'text', text: '  API Error: 500' }])]), 'error');
+    assert.equal(
+      detectTurnState([
+        prompt,
+        { type: 'user', message: { role: 'user', content: '  [Request interrupted by user]' } },
+      ]),
+      'interrupted',
+    );
+  });
+});
+
+describe('detectTurnState (レコードの種類)', () => {
+  const prompt = (text = 'お願い') => ({ type: 'user', message: { role: 'user', content: text } });
+  const toolResult = () => ({
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: 'ok' }] },
+  });
+  const turnEnd = { type: 'system', subtype: 'turn_duration', durationMs: 1 };
+
+  it('本文と tool_use の両方を持つ応答で止まっていれば midway', () => {
+    const reply = assistantRecord([
+      { type: 'text', text: '読みます' },
+      { type: 'tool_use', id: 't', name: 'Read', input: {} },
+    ]);
+    assert.equal(detectTurnState([prompt(), reply]), 'midway');
+  });
+
+  it('指示の直後の tool_result で止まっていれば midway（その前の指示までは遡らない）', () => {
+    assert.equal(detectTurnState([prompt(), toolResult()]), 'midway');
+  });
+
+  it('turn_duration の後の指示は ended', () => {
+    assert.equal(detectTurnState([prompt(), turnEnd]), 'ended');
+  });
+
+  it('user・assistant・system 以外のレコードは判定に使わない', () => {
+    const progress = { type: 'progress', message: { role: 'user', content: [{ type: 'tool_result', content: 'x' }] } };
+    const reply = assistantRecord([{ type: 'text', text: '終わりました' }]);
+    assert.equal(detectTurnState([prompt(), reply, progress]), 'ended');
+    const attachment = { type: 'attachment', message: { role: 'user', content: '[Request interrupted by user]' } };
+    assert.equal(detectTurnState([prompt(), reply, attachment]), 'ended');
+  });
+});
+
+describe('summarizeHead・summarizeTail・findRelocatedCwd (種類と型の確認)', () => {
+  it('ai-title・last-prompt 以外のレコードの aiTitle・lastPrompt は見ない', () => {
+    const lines = jsonl([
+      { type: 'mode', aiTitle: '偽のタイトル', lastPrompt: '偽の指示' },
+      { type: 'last-prompt', lastPrompt: '本当の指示' },
+    ]).split('\n');
+    const head = summarizeHead(lines);
+    assert.equal(head.title, '本当の指示');
+    assert.equal(head.firstUserMessage, '本当の指示');
+  });
+
+  it('文字列でない originalCwd は飛ばす', () => {
+    assert.equal(
+      findRelocatedCwd([
+        { type: 'worktree-state', worktreeSession: { originalCwd: '/repo' } },
+        { type: 'worktree-state', worktreeSession: { originalCwd: 42 } },
+      ]),
+      '/repo',
+    );
+  });
+
+  it('空白だけの応答は質問判定に使わず、その前の本文で見る', () => {
+    const lines = jsonl([
+      userRecord('相談'),
+      assistantRecord([{ type: 'text', text: 'どうしますか？' }]),
+      assistantRecord([{ type: 'text', text: '   ' }]),
+    ]).split('\n');
+    assert.equal(summarizeTail(lines).lastAssistantQuestion, true);
+  });
+
+  it('away_summary 以外の system レコードの content は要約にしない', () => {
+    const lines = [
+      { type: 'system', subtype: 'away_summary', content: '本当の要約' },
+      { type: 'system', subtype: 'informational', content: '別の system' },
+    ].map((r) => JSON.stringify(r));
+    assert.equal(summarizeTail(lines).awaySummary.text, '本当の要約');
+  });
+
+  it('直近の応答に時刻と usage があっても、それより前の依頼まで遡る', () => {
+    const lines = jsonl([
+      userRecord('依頼', { timestamp: '2026-10-05T00:00:00.000Z' }),
+      {
+        type: 'assistant',
+        timestamp: '2026-10-05T00:01:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'text', text: '応答' }], usage: { input_tokens: 7 } },
+      },
+    ]).split('\n');
+    const tail = summarizeTail(lines);
+    assert.equal(tail.lastUserMessage, '依頼');
+    assert.equal(tail.lastAssistantMessage, '応答');
+    assert.equal(tail.contextUsage.contextTokens, 7);
+  });
+
+  it('タグだけの直近の応答は抜粋にならないので、その前の応答まで遡る', () => {
+    const lines = jsonl([
+      assistantRecord([{ type: 'text', text: '古い応答' }]),
+      userRecord('依頼', { timestamp: '2026-10-05T00:00:00.000Z' }),
+      {
+        type: 'assistant',
+        timestamp: '2026-10-05T00:01:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'text', text: '<b></b>' }], usage: { input_tokens: 7 } },
+      },
+    ]).split('\n');
+    assert.equal(summarizeTail(lines).lastAssistantMessage, '古い応答');
+  });
+});
+
+describe('readSessionSummaryFor (引数の確認)', () => {
+  it('cwd・sessionId のどちらかが空なら、そのパスにファイルがあっても読まない', async () => {
+    const projects = await mkdtemp(join(tmpdir(), 'cb-projects-'));
+    createdDirs.push(projects);
+    // cwd が空なら <projects>/<sessionId>.jsonl、sessionId が空なら <projects>/-home-me/.jsonl に解決される
+    await writeFile(join(projects, 'sid.jsonl'), jsonl([{ type: 'ai-title', aiTitle: '読まれてはいけない' }]));
+    await mkdir(join(projects, '-home-me'));
+    await writeFile(join(projects, '-home-me', '.jsonl'), jsonl([{ type: 'ai-title', aiTitle: '読まれてはいけない' }]));
+    assert.equal((await readSessionSummaryFor('', 'sid', projects)).title, '');
+    assert.equal((await readSessionSummaryFor('/home/me', '', projects)).title, '');
+  });
+});
+
+describe('readSessionSummary (キャッシュの上限)', () => {
+  afterEach(() => {
+    vi.resetModules();
+  });
+
+  it('500 件を超えて読むと一度キャッシュを捨てる', async () => {
+    vi.resetModules();
+    const mod = await import('../server/session-summary.js');
+    const dir = await mkdtemp(join(tmpdir(), 'cb-summary-cache-'));
+    createdDirs.push(dir);
+    const fixed = new Date('2026-10-01T00:00:00.000Z');
+    const target = join(dir, 'target.jsonl');
+    await writeFile(target, jsonl([userRecord('指示A')]));
+    await utimes(target, fixed, fixed);
+    assert.equal((await mod.readSessionSummary(target)).title, '指示A');
+    // 同じサイズ・同じ mtime で書き換える（キャッシュが残っていれば古い内容が返る）
+    await writeFile(target, jsonl([userRecord('指示B')]));
+    await utimes(target, fixed, fixed);
+
+    const others = [];
+    for (let i = 0; i < 500; i++) {
+      const file = join(dir, `s${i}.jsonl`);
+      await writeFile(file, jsonl([userRecord(`作業 ${i}`)]));
+      others.push(file);
+    }
+    // target を含めて 500 件まではキャッシュに残る
+    for (const file of others.slice(0, 499)) await mod.readSessionSummary(file);
+    assert.equal((await mod.readSessionSummary(target)).title, '指示A');
+    // 501 件目を足すときに捨てる
+    await mod.readSessionSummary(others[499]);
+    assert.equal((await mod.readSessionSummary(target)).title, '指示B');
   });
 });

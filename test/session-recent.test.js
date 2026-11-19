@@ -210,6 +210,22 @@ describe('buildRecentExchanges (境界)', () => {
     assert.equal(ex.replyAt, '2026-10-04T01:00:05.000Z');
   });
 
+  it('message の無い assistant は飛ばす', () => {
+    const [ex] = buildRecentExchanges([prompt('指示'), assistant([text('応答')]), { type: 'assistant' }]);
+    assert.equal(ex.reply, '応答');
+  });
+
+  it('区切りにならない user の配列本文は応答として扱わない', () => {
+    const records = [
+      prompt('指示'),
+      assistant([text('本当の応答')]),
+      { type: 'user', isMeta: true, message: { role: 'user', content: [text('meta の本文'), toolUse('x')] } },
+    ];
+    const [ex] = buildRecentExchanges(records);
+    assert.equal(ex.reply, '本当の応答');
+    assert.equal(ex.toolCount, 0);
+  });
+
   it('limit で返す往復の数を変えられる', () => {
     const records = [prompt('1'), prompt('2'), prompt('3'), prompt('4')];
     assert.deepEqual(
@@ -248,6 +264,29 @@ describe('readRecentExchanges (末尾の読み方とキャッシュ)', () => {
     const file = await writeRaw(brokenLineWithPromptTail(1536 * 1024));
     const { exchanges } = await readRecentExchanges(file);
     assert.deepEqual(exchanges, []);
+  });
+
+  it('末尾に改行の無い 1MB 超のファイルも最後の行を読む', async () => {
+    const filler = JSON.stringify(assistant([text('x'.repeat(1200 * 1024))]));
+    const file = await writeRaw(filler + '\n' + JSON.stringify(prompt('改行なしの最後の指示')));
+    const { exchanges } = await readRecentExchanges(file);
+    assert.deepEqual(
+      exchanges.map((e) => e.prompt),
+      ['改行なしの最後の指示'],
+    );
+  });
+
+  it('clearSessionRecentCache の後は同じ stat でも読み直す', async () => {
+    const file = await writeJsonl([prompt('指示A')]);
+    const { utimes } = await import('fs/promises');
+    const fixed = new Date('2026-10-01T00:00:00.000Z');
+    await utimes(file, fixed, fixed);
+    assert.equal((await readRecentExchanges(file)).exchanges[0].prompt, '指示A');
+    await writeFile(file, JSON.stringify(prompt('指示B')) + '\n');
+    await utimes(file, fixed, fixed);
+    assert.equal((await readRecentExchanges(file)).exchanges[0].prompt, '指示A');
+    clearSessionRecentCache();
+    assert.equal((await readRecentExchanges(file)).exchanges[0].prompt, '指示B');
   });
 
   it('1MB 以下のファイルは先頭行も読む', async () => {
@@ -297,6 +336,26 @@ describe('readRecentExchanges (末尾の読み方とキャッシュ)', () => {
     assert.deepEqual(
       exchanges.map((e) => e.prompt),
       ['指示A', '指示B'],
+    );
+  });
+});
+
+describe('readRecentExchanges (読み始めがちょうど改行のとき)', () => {
+  beforeEach(() => clearSessionRecentCache());
+
+  it('末尾 1MB の先頭が改行なら、その次の行から全部読む', async () => {
+    const TAIL = 1024 * 1024;
+    const base = JSON.stringify({ ...prompt('境界の指示'), pad: '' });
+    // 最後の行（改行込み）をちょうど 1MB - 1 バイトにすると、読み始めが直前の行末の改行になる
+    const last = JSON.stringify({ ...prompt('境界の指示'), pad: 'p'.repeat(TAIL - 1 - 1 - Buffer.byteLength(base)) });
+    assert.equal(Buffer.byteLength(last) + 1, TAIL - 1);
+    const dir = await mkdtemp(join(tmpdir(), 'session-recent-'));
+    const file = join(dir, 'session.jsonl');
+    await writeFile(file, JSON.stringify(prompt('古い指示')) + '\n' + last + '\n');
+    const { exchanges } = await readRecentExchanges(file);
+    assert.deepEqual(
+      exchanges.map((e) => e.prompt),
+      ['境界の指示'],
     );
   });
 });

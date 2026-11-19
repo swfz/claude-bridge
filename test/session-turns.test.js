@@ -598,3 +598,110 @@ describe('readSessionTurns (git との突き合わせ)', () => {
     assert.equal(totals.prompts, 1);
   });
 });
+
+describe('parseCommitSubjects (空白と終端)', () => {
+  it('git と commit の間・オプションの前後の空白が複数でも数える', () => {
+    assert.deepEqual(parseCommitSubjects('git  commit -m "a"'), ['a']);
+    assert.deepEqual(parseCommitSubjects('git -C  /repo commit -m "b"'), ['b']);
+    assert.deepEqual(parseCommitSubjects('git -C /repo  commit -m "c"'), ['c']);
+    assert.deepEqual(parseCommitSubjects('git commit -m  "d"'), ['d']);
+  });
+
+  it('終端の無いヒアドキュメントは最後の行まで読む', () => {
+    assert.deepEqual(parseCommitSubjects("git commit -F - <<'EOF'\nfeat: 終端なし"), ['feat: 終端なし']);
+    assert.deepEqual(parseCommitSubjects('cat <<\'EOF\'\ngit commit -m "中"'), []);
+  });
+});
+
+describe('turnPrompt・buildTurns (欠けたレコード)', () => {
+  it('message の無い user・assistant レコードでも落ちない', () => {
+    assert.equal(turnPrompt({ type: 'user' }), '');
+    const turns = buildTurns([{ type: 'user' }, prompt('作業'), { type: 'assistant' }, { type: 'user' }]);
+    assert.equal(turns.length, 1);
+    assert.equal(turns[0].tokens.total, 0);
+  });
+
+  it('本文の中の null ブロックや input の無いツール呼び出しは飛ばす', () => {
+    const turns = buildTurns([
+      prompt('作業'),
+      assistant('m1', [
+        null,
+        { type: 'tool_use', id: 'e', name: 'Edit' },
+        { type: 'tool_use', id: 'b', name: 'Bash' },
+        { type: 'tool_use', id: 'w', name: 'Write', input: { file_path: '/r/w.js' } },
+      ]),
+      { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'b' }] } },
+    ]);
+    assert.deepEqual(turns[0].editedFiles, ['/r/w.js']);
+    assert.deepEqual(turns[0].commits, []);
+  });
+
+  it('Bash 以外のツールの command はコミットとして読まない', () => {
+    const turns = buildTurns([
+      prompt('見張って'),
+      assistant('m1', [{ type: 'tool_use', id: 'mon', name: 'Monitor', input: { command: 'git commit -m "x"' } }]),
+      result('mon'),
+    ]);
+    assert.deepEqual(turns[0].commits, []);
+  });
+
+  it('tool_use 以外のブロックはツール名を持っていても編集に数えない', () => {
+    const turns = buildTurns([
+      prompt('作業'),
+      assistant('m1', [{ type: 'server_tool_use', id: 's', name: 'Edit', input: { file_path: '/r/x.js' } }]),
+    ]);
+    assert.deepEqual(turns[0].editedFiles, []);
+  });
+
+  it('system 以外の turn_duration・pr-link 以外の prUrl は数えない', () => {
+    const turns = buildTurns([
+      prompt('作業'),
+      { type: 'progress', subtype: 'turn_duration', durationMs: 100 },
+      { type: 'progress', prUrl: 'https://github.com/o/r/pull/9', prNumber: 9 },
+    ]);
+    assert.equal(turns[0].durationMs, 0);
+    assert.deepEqual(turns[0].prs, []);
+  });
+});
+
+describe('attachCommitHashes (タブで始まる行)', () => {
+  it('タブで始まる行は後の同じ件名の行を邪魔しない', () => {
+    const turns = [{ commits: [{ subject: 'a', hash: null }] }];
+    attachCommitHashes(turns, '\ta\nabc123\ta\n');
+    assert.deepEqual(turns[0].commits, [{ subject: 'a', hash: 'abc123' }]);
+  });
+});
+
+describe('readSessionTurns (コミットのあるターンが途中にある場合)', () => {
+  const createdDirs = [];
+  afterEach(async () => {
+    while (createdDirs.length > 0) await rm(createdDirs.pop(), { recursive: true, force: true });
+  });
+
+  it('最初のターンにコミットが無くても、後のターンのコミットのハッシュを引く', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'cb-turns-repo-'));
+    createdDirs.push(repo);
+    const env = { ...process.env, GIT_AUTHOR_DATE: '2026-10-04T10:30:00Z', GIT_COMMITTER_DATE: '2026-10-04T10:30:00Z' };
+    await execAsync('git init -q -b main', { cwd: repo });
+    await writeFile(join(repo, 'f.txt'), 'x\n');
+    await execAsync('git add .', { cwd: repo, env });
+    await execAsync('git -c user.email=t@example.com -c user.name=t commit -q -m "feat: 後のターン"', {
+      cwd: repo,
+      env,
+    });
+    const { stdout } = await execAsync('git log -1 --format=%h', { cwd: repo });
+
+    const dir = await mkdtemp(join(tmpdir(), 'cb-turns-'));
+    createdDirs.push(dir);
+    const file = join(dir, 's.jsonl');
+    const records = [
+      prompt('相談', '2026-10-04T10:00:00.000Z'),
+      prompt('コミットして', '2026-10-04T10:20:00.000Z'),
+      assistant('m1', [bash('c1', 'git commit -m "feat: 後のターン"')]),
+      result('c1'),
+    ];
+    await writeFile(file, records.map((r) => JSON.stringify(r)).join('\n') + '\n');
+    const { turns } = await readSessionTurns(file, { cwd: repo });
+    assert.deepEqual(turns[1].commits, [{ subject: 'feat: 後のターン', hash: stdout.trim() }]);
+  });
+});

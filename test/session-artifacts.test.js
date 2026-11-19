@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, appendFile, truncate } from 'fs/promises';
+import { mkdtemp, writeFile, appendFile, truncate, utimes } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -249,11 +249,13 @@ describe('readSessionCustomTitle', () => {
     assert.equal(await readSessionCustomTitle(file), '付け直した名前');
   });
 
-  it('customTitle が文字列でない custom-title は無視して前の名前を残す', async () => {
+  it('customTitle が文字列でない custom-title は無視して前の名前を残し、後続も読む', async () => {
     const file = await tmpFile();
     await writeFile(
       file,
-      line({ type: 'custom-title', customTitle: '有効な名前' }) + line({ type: 'custom-title', customTitle: 42 }),
+      line({ type: 'custom-title', customTitle: 42 }) +
+        line({ type: 'custom-title', customTitle: '有効な名前' }) +
+        line({ type: 'custom-title', customTitle: null }),
     );
     assert.equal(await readSessionCustomTitle(file), '有効な名前');
   });
@@ -277,6 +279,23 @@ describe('readSessionCustomTitle', () => {
     await writeFile(file, fillerBlock(3));
     assert.equal(await readSessionCustomTitle(file), '');
     assert.equal(await readSessionCustomTitle(join(tmpdir(), 'cb-nope-title.jsonl')), '');
+  });
+});
+
+describe('clearSessionArtifactsCache', () => {
+  it('捨てた後は同じ stat のファイルでも読み直す', async () => {
+    const file = await tmpFile();
+    const fixed = new Date('2026-10-01T00:00:00.000Z');
+    await writeFile(file, line({ type: 'custom-title', customTitle: '名前A' }));
+    await utimes(file, fixed, fixed);
+    assert.equal(await readSessionCustomTitle(file), '名前A');
+
+    // 同じサイズ・同じ mtime で書き換える（キャッシュのままなら古い名前が返る）
+    await writeFile(file, line({ type: 'custom-title', customTitle: '名前B' }));
+    await utimes(file, fixed, fixed);
+    assert.equal(await readSessionCustomTitle(file), '名前A');
+    clearSessionArtifactsCache();
+    assert.equal(await readSessionCustomTitle(file), '名前B');
   });
 });
 

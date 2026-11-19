@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+import { describe, it, afterEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, appendFile, utimes, stat, rm } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -577,5 +577,136 @@ describe('readSubagentTranscript (境界)', () => {
     assert.equal(await readSubagentTranscript({ ...base, claudeSessionId: 'a/b' }), null);
     assert.equal(await readSubagentTranscript({ ...base, agentId: 42 }), null);
     assert.equal(await readSubagentTranscript(), null);
+  });
+});
+
+describe('ID の検証（正規化すると実在するパスを指す場合）', () => {
+  it('claudeSessionId は全体が英数字・_・- でなければ、正規化で実在するパスになっても読まない', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'v1', { description: 'x' }, agentRecords);
+    const base = { projectDir: PROJECT_DIR, projectsDir };
+    // join すると <SESSION_ID>/subagents に解決されるが、ID としては不正
+    assert.deepEqual(await listSubagentTasks({ ...base, claudeSessionId: `x/../${SESSION_ID}` }), []);
+    assert.deepEqual(await listSubagentTasks({ ...base, claudeSessionId: `${SESSION_ID}/.` }), []);
+    assert.equal(await readSubagentTranscript({ ...base, claudeSessionId: `x/../${SESSION_ID}`, agentId: 'v1' }), null);
+  });
+
+  it('空の projectDir は projectsDir 直下に解決されても読まない', async () => {
+    const projectsDir = await mkdtemp(join(tmpdir(), 'subagent-tasks-'));
+    const subagents = join(projectsDir, SESSION_ID, 'subagents');
+    await mkdir(subagents, { recursive: true });
+    await writeAgent(subagents, 'e1', { description: '直下' }, agentRecords);
+    assert.deepEqual(await listSubagentTasks({ projectDir: '', claudeSessionId: SESSION_ID, projectsDir }), []);
+    assert.equal(
+      await readSubagentTranscript({ projectDir: '', claudeSessionId: SESSION_ID, agentId: 'e1', projectsDir }),
+      null,
+    );
+  });
+
+  it('agentId は文字列で、全体が英数字・_・- のものだけを読む', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    const base = { projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir };
+    // 数値の ID や、正規化すると実在するファイルを指す ID
+    await writeFile(join(subagents, 'agent-42.jsonl'), jsonl(agentRecords));
+    await writeFile(join(subagents, 'ok.jsonl'), jsonl(agentRecords));
+    assert.equal(await readSubagentTranscript({ ...base, agentId: 42 }), null);
+    assert.equal(await readSubagentTranscript({ ...base, agentId: 'ok/../ok' }), null);
+    assert.equal((await readSubagentTranscript({ ...base, agentId: '42' })).length, 2);
+  });
+
+  it('parentAgentId が途中までしか ID として正しくなければ本体の JSONL で判定する', async () => {
+    const { projectsDir, subagents } = await setupProject({ parentRecords: [toolResult('toolu_partial_parent')] });
+    await writeAgent(subagents, 'pp', { toolUseId: 'toolu_partial_parent', parentAgentId: 'aimpl/x' }, agentRecords);
+    const tasks = await listSubagentTasks({ projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir });
+    assert.equal(tasks[0].status, 'completed');
+  });
+});
+
+describe('listSubagentTasks (並び順と最終回答のキャッシュ)', () => {
+  const list = (projectsDir) =>
+    listSubagentTasks({ projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir });
+  const finalAnswer = {
+    type: 'assistant',
+    message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: '完了' }] },
+  };
+  // finalAnswer と同じバイト数で、最後が tool_use の応答
+  const midwayAnswer = {
+    type: 'assistant',
+    message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'text', text: '途中' }] },
+  };
+
+  it('実行中のものは名前の並びに関わらず完了より前に出す', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'a-run', { toolUseId: 'toolu_a_run' }, agentRecords);
+    await writeAgent(subagents, 'b-done', {}, agentRecords);
+    const t = new Date('2026-08-01T00:00:00Z');
+    await utimes(join(subagents, 'agent-a-run.jsonl'), t, t);
+    assert.deepEqual(
+      (await list(projectsDir)).map((task) => task.agentId),
+      ['a-run', 'b-done'],
+    );
+  });
+
+  it('1 行だけのトランスクリプトでも最終回答なら完了', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'one', { toolUseId: 'toolu_one' }, [finalAnswer]);
+    assert.equal((await list(projectsDir))[0].status, 'completed');
+  });
+
+  it('同じサイズのまま書き換わって mtime が変われば最終回答を見直す', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    // stop_reason（tool_use / end_turn）も本文も同じバイト数なので、書き換えてもサイズは変わらない
+    const midway = jsonl([midwayAnswer]);
+    const doneSameSize = jsonl([finalAnswer]);
+    assert.equal(Buffer.byteLength(doneSameSize), Buffer.byteLength(midway));
+    const transcript = join(subagents, 'agent-same.jsonl');
+    await writeAgent(subagents, 'same', { toolUseId: 'toolu_same' });
+    await writeFile(transcript, midway);
+    const t1 = new Date('2026-08-01T00:00:00Z');
+    await utimes(transcript, t1, t1);
+    assert.equal((await list(projectsDir))[0].status, 'running');
+
+    await writeFile(transcript, doneSameSize);
+    const t2 = new Date('2026-08-01T00:01:00Z');
+    await utimes(transcript, t2, t2);
+    assert.equal((await list(projectsDir))[0].status, 'completed');
+  });
+
+  it('mtime が同じでもサイズが変われば最終回答を見直す', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    const transcript = join(subagents, 'agent-grow2.jsonl');
+    await writeAgent(subagents, 'grow2', { toolUseId: 'toolu_grow2' }, agentRecords);
+    const t = new Date('2026-08-01T00:00:00Z');
+    await utimes(transcript, t, t);
+    assert.equal((await list(projectsDir))[0].status, 'running');
+    await appendFile(transcript, jsonl([finalAnswer]));
+    await utimes(transcript, t, t);
+    assert.equal((await list(projectsDir))[0].status, 'completed');
+  });
+});
+
+describe('listSubagentTasks (更新時刻が取れないとき)', () => {
+  afterEach(() => {
+    vi.doUnmock('fs');
+    vi.resetModules();
+  });
+
+  it('トランスクリプトも meta も stat できなければ更新時刻は空文字', async () => {
+    const { projectsDir, subagents } = await setupProject();
+    await writeAgent(subagents, 'nostat', { description: 'stat できない' }, agentRecords);
+    vi.resetModules();
+    vi.doMock('fs', async (importOriginal) => {
+      const actual = await importOriginal();
+      const statSync = (p, ...rest) => {
+        if (String(p).includes('agent-nostat')) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+        return actual.statSync(p, ...rest);
+      };
+      return { ...actual, statSync, default: { ...actual, statSync } };
+    });
+    const mod = await import('../server/subagent-tasks.js');
+    const [task] = await mod.listSubagentTasks({ projectDir: PROJECT_DIR, claudeSessionId: SESSION_ID, projectsDir });
+    assert.equal(task.agentId, 'nostat');
+    assert.equal(task.updatedAt, '');
+    assert.equal(task.size, 0);
   });
 });

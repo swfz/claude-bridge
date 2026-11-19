@@ -87,6 +87,16 @@ describe('createIncrementalReader', () => {
     assert.equal(calls.prefilter, 3);
   });
 
+  it('読み込みの塊（64KB）をまたぐ長い行もつないで 1 行として読む', async () => {
+    const file = await tmpFile();
+    await writeFile(
+      file,
+      line({ kind: 'keep', n: 1, pad: 'a'.repeat(200 * 1024) }) + line({ kind: 'keep', n: 2, pad: 'b'.repeat(100) }),
+    );
+    const { reader } = makeReader();
+    assert.deepEqual(await reader.read(file), [1, 2]);
+  });
+
   it('マルチバイト文字の後でも次の開始位置がずれない', async () => {
     const file = await tmpFile();
     await writeFile(file, line({ kind: 'keep', n: 1, text: 'あいうえお'.repeat(50) }));

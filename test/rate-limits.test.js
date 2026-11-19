@@ -259,6 +259,31 @@ describe('RATE_LIMITS_FILE', () => {
   });
 });
 
+describe('readRateLimits (更新時刻も取れないとき)', () => {
+  afterEach(() => {
+    vi.doUnmock('fs/promises');
+    vi.resetModules();
+    vi.useRealTimers();
+  });
+
+  it('ts が無く stat もできなければ今の時刻を fetchedAt にする', async () => {
+    const file = writeJson('no-stat.json', { rate_limits: { five_hour: { used_percentage: 5 } } });
+    vi.useFakeTimers({ now: 1234567890000, toFake: ['Date'] });
+    vi.resetModules();
+    vi.doMock('fs/promises', async (importOriginal) => {
+      const actual = await importOriginal();
+      const stat = async () => {
+        throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+      };
+      return { ...actual, stat, default: { ...actual, stat } };
+    });
+    const mod = await import('../server/rate-limits.js');
+    const result = await mod.readRateLimits({ filePath: file });
+    assert.equal(result.ok, true);
+    assert.equal(result.fetchedAt, 1234567890000);
+  });
+});
+
 describe('bridge-statusline-tee.js (integration)', () => {
   const wrapperPath = fileURLToPath(new URL('../scripts/statusline/bridge-statusline-tee.js', import.meta.url));
 
