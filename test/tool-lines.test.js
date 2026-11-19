@@ -249,3 +249,91 @@ describe('extractToolResultFlags', () => {
     assert.deepEqual(extractToolResultFlags(null), []);
   });
 });
+
+describe('toolLines: 欠けた入力と境界', () => {
+  it('Write / Edit / MultiEdit もファイルを扱うツールとしてパスを返す', () => {
+    for (const name of ['Write', 'Edit', 'MultiEdit']) {
+      assert.equal(toolFilePath(tool('t', name, { file_path: '/r/a.js' })), '/r/a.js');
+    }
+  });
+
+  it('input が無い・パスが文字列でないファイルツールはパス無し', () => {
+    assert.equal(toolFilePath({ id: 't', name: 'Read' }), null);
+    assert.equal(toolFilePath(tool('t', 'Read', { file_path: 123 })), null);
+  });
+
+  it('splitFilePath: パスが無ければ空、ルート直下・連続スラッシュの cwd も扱える', () => {
+    assert.deepEqual(splitFilePath(null), { dir: '', name: '' });
+    assert.deepEqual(splitFilePath('/a.js'), { dir: '/', name: 'a.js' });
+    assert.deepEqual(splitFilePath('/r/src/a.js', '/r//'), { dir: 'src/', name: 'a.js' });
+  });
+
+  it('lineDiffStats: 末尾の改行の有無だけの違いは差分にしない', () => {
+    assert.deepEqual(lineDiffStats('a\nb\n', 'a\nb'), { added: 0, removed: 0 });
+    assert.deepEqual(lineDiffStats('a', 'a\n'), { added: 0, removed: 0 });
+  });
+
+  it('Edit の old_string が無ければ追加だけ数える', () => {
+    assert.deepEqual(toolDiffStats(tool('t', 'Edit', { new_string: 'x\ny' })), {
+      added: 2,
+      removed: 0,
+      created: false,
+    });
+  });
+
+  it('MultiEdit の edits に欠けた要素があっても数えられる', () => {
+    const t = tool('t', 'MultiEdit', { edits: [null, { old_string: 'a', new_string: 'b' }] });
+    assert.deepEqual(toolDiffStats(t), { added: 1, removed: 1, created: false });
+  });
+
+  it('buildToolResultIndex は toolresult 以外のメッセージと欠けた要素を無視する', () => {
+    const index = buildToolResultIndex([
+      null,
+      { role: 'assistant', results: [{ id: 'x', error: true }] },
+      { role: 'toolresult', results: [{ id: 'y', error: true }] },
+    ]);
+    assert.deepEqual([...index.keys()], ['y']);
+  });
+
+  it('toolFlagsKey は欠けたツールを飛ばし、フックの失敗だけのツールに新規作成の印を付けない', () => {
+    const index = new Map([['t1', { hookError: { name: 'h' } }]]);
+    const key = toolFlagsKey([null, { id: 't1' }], index);
+    assert.equal(key, `h:t1:${encodeURIComponent(JSON.stringify({ name: 'h' }))}`);
+    assert.deepEqual([...parseToolFlagsKey(key)], [['t1', { hookError: { name: 'h' } }]]);
+  });
+
+  it('parseToolFlagsKey: キーが無ければ空、id の無いフック・壊れた中身は捨てる', () => {
+    assert.equal(parseToolFlagsKey(null).size, 0);
+    assert.equal(parseToolFlagsKey(undefined).size, 0);
+    assert.equal(parseToolFlagsKey('h::%7B%7D').size, 0);
+    assert.equal(parseToolFlagsKey('h:123').size, 0);
+    assert.equal(parseToolFlagsKey('h:t1:%7Bbroken').size, 0);
+  });
+
+  it('hookErrorText: フックが無ければ空、名前が無ければ hook と出す', () => {
+    assert.equal(hookErrorText(null), '');
+    assert.equal(hookErrorText({}), 'hook が失敗');
+  });
+
+  it('isToolOnlyMessage: 空白だけの本文はツールだけ扱い、assistant 以外・null は対象外', () => {
+    assert.equal(isToolOnlyMessage({ role: 'assistant', content: '  \n', toolUses: [{ id: 't' }] }), true);
+    assert.equal(isToolOnlyMessage({ role: 'human', content: '', toolUses: [{ id: 't' }] }), false);
+    assert.equal(isToolOnlyMessage(null), false);
+  });
+
+  it('toolDescription: 何も手がかりが無ければ空文字', () => {
+    assert.equal(toolDescription({ input: {} }), '');
+  });
+
+  it('summarizeToolRun: 印の索引が無い・欠けたツールがあっても数える', () => {
+    const tools = [null, tool('w', 'Write', { content: 'a\nb' })];
+    assert.deepEqual(summarizeToolRun(tools), { count: 2, failed: 0, hookFailed: 0, added: 2, removed: 0 });
+    assert.deepEqual(summarizeToolRun(tools, new Map([['w', { error: true }]])), {
+      count: 2,
+      failed: 1,
+      hookFailed: 0,
+      added: 2,
+      removed: 0,
+    });
+  });
+});

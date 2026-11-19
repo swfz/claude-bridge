@@ -130,6 +130,73 @@ describe('numberPick: keyToPickAction', () => {
     assert.equal(keyToPickAction(ev({ key: 'ArrowUp', altKey: true })), null);
   });
   it('対象外のキーは null', () => assert.equal(keyToPickAction(ev({ key: 'a' })), null));
+  it('数字で始まる・終わるだけの複数文字のキーは数字扱いしない', () => {
+    assert.equal(keyToPickAction(ev({ key: 'F1' })), null);
+    assert.equal(keyToPickAction(ev({ key: '1a' })), null);
+  });
+});
+
+describe('pickReducer: 境界と不正な入力', () => {
+  it('初期 state はピックしていない空の状態', () => {
+    assert.deepEqual(INITIAL_PICK_STATE, { active: false, buffer: '', sub: null });
+    assert.deepEqual(pickReducer(undefined, { type: 'unknown' }), { active: false, buffer: '', sub: null });
+  });
+  it('action が無ければ state をそのまま返す', () => {
+    const s = one('3');
+    assert.equal(pickReducer(s, undefined), s);
+  });
+  it('1 文字の数字以外の digit は無視する', () => {
+    const s = one('1');
+    assert.equal(pickReducer(s, { type: 'digit', digit: 'x' }), s);
+    assert.equal(pickReducer(s, { type: 'digit', digit: 'a1' }), s);
+    assert.equal(pickReducer(s, { type: 'digit', digit: '1a' }), s);
+    assert.equal(pickReducer(s, { type: 'digit', digit: '12' }), s);
+  });
+  it('桁数の上限に達していてもピック中になる（数字は増えない）', () => {
+    const s = { active: false, buffer: '123456', sub: null };
+    assert.deepEqual(pickReducer(s, { type: 'digit', digit: '7' }), { active: true, buffer: '123456', sub: null });
+  });
+  it('空の 1 段目で Backspace しても同じ state を返す（再描画させない）', () => {
+    const s = one('');
+    assert.equal(pickReducer(s, { type: 'backspace' }), s);
+  });
+  it('Backspace は末尾の 1 桁だけ消す', () => {
+    assert.equal(pickReducer(one('123'), { type: 'backspace' }).buffer, '12');
+  });
+  it('step は max が 1 でも 1 に着地する', () => {
+    assert.equal(pickReducer(one(''), { type: 'step', delta: 1, max: 1 }).buffer, '1');
+  });
+  it('未入力からの step は移動量に関わらず 1 に着地する', () => {
+    assert.equal(pickReducer(one(''), { type: 'step', delta: 3, max: 9 }).buffer, '1');
+    assert.equal(pickReducer(two('2', ''), { type: 'step', delta: 3, max: 9 }).sub, '1');
+  });
+  it('step はピックしていない state からでもピック中にする', () => {
+    assert.deepEqual(pickReducer({ active: false, buffer: '2', sub: null }, { type: 'step', delta: 1, max: 9 }), {
+      active: true,
+      buffer: '3',
+      sub: null,
+    });
+  });
+  it('set は max が 1 なら 1 に丸める', () => {
+    assert.equal(pickReducer(one(''), { type: 'set', value: 5, max: 1 }).buffer, '1');
+  });
+  it('set はピックしていない state からでもピック中にする（1 段目・2 段目とも）', () => {
+    assert.deepEqual(pickReducer({ active: false, buffer: '', sub: null }, { type: 'set', value: 4, max: 9 }), {
+      active: true,
+      buffer: '4',
+      sub: null,
+    });
+    assert.deepEqual(pickReducer({ active: false, buffer: '2', sub: '1' }, { type: 'set', value: 4, max: 9 }), {
+      active: true,
+      buffer: '2',
+      sub: '4',
+    });
+  });
+});
+
+describe('resolveTarget: 境界と不正な入力', () => {
+  it('max が 1 なら 1 に丸める', () => assert.equal(resolveTarget('3', 1), 1));
+  it('数値にならない入力は null', () => assert.equal(resolveTarget('abc', 5), null));
 });
 
 describe('keys: isPickModeShortcut', () => {

@@ -14,6 +14,7 @@ describe('humanSenderLabel', () => {
 
   it('peer・タスク通知・その他の注入', () => {
     assert.equal(humanSenderLabel({ kind: 'peer', name: 'reviewer' }), 'Agent · reviewer');
+    assert.equal(humanSenderLabel({ kind: 'peer' }), 'Agent');
     assert.equal(humanSenderLabel({ kind: 'task-notification' }), 'Task');
     assert.equal(humanSenderLabel({ kind: 'system' }), 'System');
     assert.equal(humanSenderLabel({ kind: 'compact' }), 'Compact');

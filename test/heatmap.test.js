@@ -603,3 +603,217 @@ describe('sparklinePoints / recentValues', () => {
     assert.deepEqual(recentValues(undefined, 'messages'), []);
   });
 });
+
+describe('view and granularity tables', () => {
+  it('keys each view and explains it in the title', () => {
+    assert.deepEqual(
+      ACTIVITY_VIEWS.map((v) => v.key),
+      ['heatmap', 'bars', 'weekday', 'calendar'],
+    );
+    const titles = Object.fromEntries(ACTIVITY_VIEWS.map((v) => [v.key, v.title]));
+    assert.match(titles.heatmap, /1 列 = 1 週/);
+    assert.match(titles.bars, /1 本 = 1 日 \/ 1 週 \/ 1 月/);
+    assert.match(titles.weekday, /曜日ごとの合計/);
+    assert.match(titles.calendar, /時刻 × 曜日/);
+    assert.equal(normalizeActivityView('heatmap').view, 'heatmap');
+    assert.equal(normalizeActivityView('weekday').view, 'weekday');
+  });
+
+  it('keys each bar granularity and explains it in the title', () => {
+    assert.deepEqual(
+      BAR_GRANULARITIES.map((g) => [g.key, g.title]),
+      [
+        ['day', '1 本 = 1 日'],
+        ['week', '1 本 = 1 週（月曜始まり）'],
+        ['month', '1 本 = 1 月'],
+      ],
+    );
+    assert.equal(normalizeGranularity('day'), 'day');
+  });
+
+  it('starts the busy time explanation with what is counted', () => {
+    assert.ok(ACTIVE_TIME_TITLE.startsWith('AI 稼働時間: 推論とツール実行の時間を呼び出しごとに足したもの。'));
+  });
+});
+
+describe('computeThresholds with unsorted and zero values', () => {
+  it('sorts the values numerically before taking the quartiles', () => {
+    assert.deepEqual(computeThresholds([16, 4, 12, 8]), [8, 12, 16]);
+    // 文字列順に並べると 10 < 100 < 2 < 9 になってしまう
+    assert.deepEqual(computeThresholds([9, 100, 2, 10]), [9, 10, 100]);
+  });
+
+  it('leaves the days without activity out of the quartiles', () => {
+    assert.deepEqual(computeThresholds([0, 0, 0, 0, 4, 8, 12, 16]), [8, 12, 16]);
+  });
+});
+
+describe('levelOf boundaries', () => {
+  it('puts a value equal to a threshold into the lower band', () => {
+    const thresholds = [2, 4, 6];
+    assert.deepEqual(
+      [1, 2, 3, 4, 5, 6, 7].map((v) => levelOf(v, thresholds)),
+      [1, 1, 2, 2, 3, 3, 4],
+    );
+  });
+});
+
+describe('unit boundaries', () => {
+  it('switches the token unit exactly at 1M and 1B', () => {
+    assert.equal(formatTokens(1e6), '1.0M');
+    assert.equal(formatTokens(1e9), '1.00B');
+  });
+
+  it('drops the decimal exactly at 100 hours', () => {
+    assert.equal(formatDuration(100 * HOUR), '100h');
+  });
+});
+
+describe('tooltip text', () => {
+  const busyDay = day('2026-09-01', {
+    prompts: 2,
+    replies: 3,
+    messages: 5,
+    tokens: 4500,
+    inputTokens: 1000,
+    outputTokens: 2000,
+    cacheCreationTokens: 500,
+    cacheReadTokens: 1000,
+    activeMs: 2 * HOUR,
+  });
+  const breakdown = [
+    'メッセージ 5（あなた 2 / Claude 3）',
+    'トークン 4.5K',
+    '  入力 1.0K / 出力 2.0K',
+    '  キャッシュ作成 500 / 読み 1.0K',
+    'AI 稼働 2.0h',
+  ];
+
+  it('lists the date and the full breakdown line by line', () => {
+    assert.equal(cellTooltip(busyDay), ['9/1（火）', ...breakdown].join('\n'));
+  });
+
+  it('puts the date on the first line of an empty day', () => {
+    assert.equal(cellTooltip(day('2026-09-01')), '9/1（火）\n活動なし');
+  });
+
+  it('sums every field into the week bucket and lists it with the active days', () => {
+    const [bucket] = bucketDays([busyDay, day('2026-09-02')], 'week');
+    assert.equal(bucketTooltip(bucket, 'week'), ['9/1〜9/2（2 日）', ...breakdown, '稼働 1 日'].join('\n'));
+  });
+
+  it('says nothing happened on separate lines for an empty period', () => {
+    const [bucket] = bucketDays(range('2026-09-07', 2), 'month');
+    assert.equal(bucketTooltip(bucket, 'month'), '2026年9月（2 日）\n活動なし');
+  });
+
+  it('treats a bucket as a day when no granularity is given', () => {
+    assert.equal(bucketTooltip(bucketDays([busyDay])[0]), cellTooltip(busyDay));
+  });
+
+  it('is empty without a bucket', () => {
+    assert.equal(bucketTooltip(null, 'week'), '');
+    assert.equal(bucketTooltip(undefined), '');
+  });
+});
+
+describe('weekdayTotals active days', () => {
+  it('counts only the days with messages as active', () => {
+    const days = range('2026-08-31', 14).map((d) => ({ ...d, messages: 5 }));
+    const monday = weekdayTotals(days, 'messages')[0];
+    assert.equal(monday.activeDays, 2);
+  });
+});
+
+describe('periodEquals and barRatio edge cases', () => {
+  it('needs both ends to match', () => {
+    assert.ok(!periodEquals({ from: 'a', to: 'b' }, { from: 'x', to: 'b' }));
+  });
+
+  it('stays at zero for a negative max', () => {
+    assert.equal(barRatio(-5, -5), 0);
+  });
+});
+
+describe('monthLabels with an empty column', () => {
+  it('leaves a column without any day unlabeled', () => {
+    const weeks = [new Array(7).fill(null), ...buildWeeks(range('2026-08-30', 14))];
+    assert.deepEqual(monthLabels(weeks), [null, '8月', '9月']);
+  });
+});
+
+describe('legendTooltip wording', () => {
+  const days = [day('2026-01-05', { messages: 3, tokens: 1000 }), day('2026-01-06', { messages: 7, tokens: 5000 })];
+  const footer = '棒・升目のクリックでその期間に一覧を絞り込む';
+
+  it('describes the single-metric bars line by line', () => {
+    assert.equal(
+      legendTooltip({ view: 'bars', metric: 'messages', granularity: 'day', days }),
+      ['高さ: メッセージ（最大値に対する線形）', '最大 7 / 日', footer].join('\n'),
+    );
+  });
+
+  it('defaults to daily, non-stacked bars', () => {
+    assert.equal(
+      legendTooltip({ view: 'bars', metric: 'messages', days }),
+      ['高さ: メッセージ（最大値に対する線形）', '最大 7 / 日', footer].join('\n'),
+    );
+  });
+
+  it('uses the month unit for monthly bars', () => {
+    assert.match(legendTooltip({ view: 'bars', metric: 'messages', granularity: 'month', days }), /最大 10 \/ 月/);
+  });
+
+  it('adds only the footer for the calendar view', () => {
+    assert.equal(legendTooltip({ view: 'calendar', metric: 'messages', days }), footer);
+  });
+
+  it('explains the stacked bars once, with the busy time note, and buckets them by week', () => {
+    const text = legendTooltip({ view: 'bars', metric: 'messages', granularity: 'week', days, stacked: true });
+    assert.equal(
+      text,
+      [
+        '高さ: 段ごとに、その指標の最大値に対する線形（同じ列は同じ期間）',
+        'メッセージ: 最大 10 / 週',
+        'トークン: 最大 6.0K / 週',
+        '稼働時間: 最大 0m / 週',
+        ACTIVE_TIME_TITLE,
+        footer,
+      ].join('\n'),
+    );
+    const busy = legendTooltip({ view: 'bars', metric: 'activeMs', days, stacked: true });
+    assert.equal(busy.split(ACTIVE_TIME_TITLE).length - 1, 1);
+  });
+
+  it('adds the busy time note only when the busy time metric is shown', () => {
+    assert.ok(!legendTooltip({ view: 'heatmap', metric: 'messages', days }).includes(ACTIVE_TIME_TITLE));
+    assert.ok(!legendTooltip({ view: 'bars', metric: 'tokens', days }).includes(ACTIVE_TIME_TITLE));
+    assert.ok(legendTooltip({ view: 'heatmap', metric: 'activeMs', days, stacked: true }).includes(ACTIVE_TIME_TITLE));
+    assert.ok(legendTooltip({ view: 'bars', metric: 'activeMs', days }).includes(ACTIVE_TIME_TITLE));
+  });
+});
+
+describe('fetchedAtLabel without a time', () => {
+  it('treats null and 0 as unknown', () => {
+    assert.equal(fetchedAtLabel(null), '集計し直す');
+    assert.equal(fetchedAtLabel(0), '集計し直す');
+  });
+});
+
+describe('weeklyOutlier with few weeks or a partial first week', () => {
+  it('compares this week with a single full previous week', () => {
+    const days = range('2026-01-05', 8);
+    days[0].messages = 10;
+    days[7].messages = 25;
+    assert.equal(weeklyOutlier(days, 'messages').ratio, 2.5);
+  });
+
+  it('leaves a busy partial first week out of the baseline', () => {
+    // 2026-01-07（水）始まり: 欠けた週 → 完全な週 → 今週
+    const days = range('2026-01-07', 5 + 7 + 1);
+    days[0].messages = 100;
+    days[5].messages = 10;
+    days[12].messages = 25;
+    assert.equal(weeklyOutlier(days, 'messages').average, 10);
+  });
+});

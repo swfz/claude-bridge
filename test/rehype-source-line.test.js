@@ -50,11 +50,13 @@ describe('rehypeSourceLine', () => {
         { type: 'element', tagName: 'div', properties: {}, children: [] },
         { type: 'text', value: 'hello', position: pos(2) },
         { type: 'element', tagName: 'span', position: { start: {} }, children: [] },
+        { type: 'element', tagName: 'em', position: {}, children: [] },
       ],
     });
     assert.equal(tree.properties, undefined);
     assert.deepEqual(tree.children[0].properties, {});
     assert.equal(tree.children[1].properties, undefined);
     assert.equal(tree.children[2].properties, undefined);
+    assert.equal(tree.children[3].properties, undefined);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+import { afterEach, describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   assignTabToGroup,
@@ -8,12 +8,15 @@ import {
   createGroup,
   deleteGroup,
   flattenTabGroups,
+  GROUP_PALETTE_NAMES,
+  GROUP_PALETTE_SIZE,
   groupColorIndexMap,
   groupColorMap,
   groupKeyOf,
   loadTabGroups,
   renameGroup,
   representativeDirOf,
+  saveTabGroups,
   setGroupColor,
   shouldShowDir,
   toggleGroupCollapsed,
@@ -223,5 +226,239 @@ describe('group colors', () => {
     } finally {
       delete globalThis.localStorage;
     }
+  });
+});
+
+// localStorage の代わり。テストの終わりで消す
+function useFakeStorage() {
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => store.get(k) ?? null,
+    setItem: (k, v) => store.set(k, v),
+  };
+  return store;
+}
+const EMPTY = { groups: [], assign: {}, collapsed: [], colors: {} };
+
+describe('palette names', () => {
+  it('names each palette color in the --cal-N order', () => {
+    assert.equal(GROUP_PALETTE_NAMES.length, GROUP_PALETTE_SIZE);
+    assert.deepEqual(GROUP_PALETTE_NAMES, ['紫', '青', '青緑', '砂', '藤', 'オリーブ', '鼠青', '煉瓦']);
+  });
+});
+
+describe('autoGroupKeyOf edge cases', () => {
+  it('returns p: for a missing session', () => {
+    assert.equal(autoGroupKeyOf(undefined), 'p:');
+  });
+  it('omits the parent for a top-level directory', () => {
+    assert.equal(autoGroupKeyOf(s('a', '/app')), 'p:app');
+  });
+});
+
+describe('groupKeyOf edge cases', () => {
+  it('falls back to the project group without state or assignments', () => {
+    assert.equal(groupKeyOf(s('a', '/x/one'), undefined), 'p:x/one');
+    assert.equal(groupKeyOf(s('a', '/x/one'), { groups: [] }), 'p:x/one');
+  });
+  it('ignores an assignment to a manual group when no manual groups exist', () => {
+    assert.equal(groupKeyOf(s('a', '/x/one'), { assign: { a: 'g:undefined' } }), 'p:x/one');
+  });
+  it('does not pick up the assignment of a tab whose id is the string "undefined"', () => {
+    const st = { groups: [], assign: { undefined: 'p:x/two' } };
+    assert.equal(groupKeyOf(s('b', '/x/one'), st), 'p:x/one');
+  });
+});
+
+describe('buildTabGroups edge cases', () => {
+  it('works without state and without tabs', () => {
+    assert.deepEqual(
+      buildTabGroups([s('a', '/x/one')], null).map((g) => [g.key, g.manual, g.collapsed]),
+      [['p:x/one', false, false]],
+    );
+    assert.deepEqual(buildTabGroups(undefined, empty), []);
+  });
+  it('creates no manual groups when state has no groups', () => {
+    assert.deepEqual(
+      buildTabGroups([s('a', '/x/one')], { assign: {} }).map((g) => g.key),
+      ['p:x/one'],
+    );
+  });
+});
+
+describe('assignTabToGroup edge cases', () => {
+  it('leaves the state untouched for a tab without any id', () => {
+    const st = createGroup(empty, 'g', 'g1');
+    assert.equal(assignTabToGroup(st, { cwd: '/x/one' }, 'g:g1'), st);
+  });
+  it('keeps the assignments of other tabs', () => {
+    const st = { ...empty, assign: { other: 'p:x/two' } };
+    assert.deepEqual(assignTabToGroup(st, s('a', '/x/one', 'c1'), 'p:x/three').assign, {
+      other: 'p:x/two',
+      c1: 'p:x/three',
+    });
+    assert.deepEqual(assignTabToGroup(st, s('a', '/x/one', 'c1'), 'p:x/one').assign, { other: 'p:x/two' });
+  });
+  it('works on a state without assign', () => {
+    assert.deepEqual(assignTabToGroup({}, s('a', '/x/one'), 'p:x/two').assign, { a: 'p:x/two' });
+  });
+  it('does not drop the assignment of a tab whose id is the string "undefined"', () => {
+    const st = { ...empty, assign: { undefined: 'p:x/two' } };
+    assert.deepEqual(assignTabToGroup(st, s('b', '/x/one'), 'p:x/three').assign, {
+      undefined: 'p:x/two',
+      b: 'p:x/three',
+    });
+  });
+});
+
+describe('createGroup / renameGroup edge cases', () => {
+  it('generates distinct alphanumeric ids when none is given', () => {
+    const a = createGroup(empty, 'a').groups[0].id;
+    const b = createGroup(empty, 'b').groups[0].id;
+    assert.match(a, /^[0-9a-z]+$/);
+    assert.notEqual(a, b);
+  });
+  it('rejects a missing name', () => {
+    assert.equal(createGroup(empty, undefined), empty);
+    assert.equal(createGroup(empty, null), empty);
+  });
+  it('works on a state without groups', () => {
+    assert.deepEqual(createGroup({}, 'a', 'g1').groups, [{ id: 'g1', name: 'a' }]);
+    assert.deepEqual(renameGroup({}, 'g1', 'b').groups, []);
+  });
+  it('trims the new name and renames only the matching group', () => {
+    let st = createGroup(empty, 'a', 'g1');
+    st = createGroup(st, 'b', 'g2');
+    assert.deepEqual(renameGroup(st, 'g1', '  c  ').groups, [
+      { id: 'g1', name: 'c' },
+      { id: 'g2', name: 'b' },
+    ]);
+  });
+});
+
+describe('deleteGroup', () => {
+  it('removes only the deleted group and what refers to it', () => {
+    const st = {
+      groups: [
+        { id: 'g1', name: 'a' },
+        { id: 'g2', name: 'b' },
+      ],
+      assign: { t1: 'g:g1', t2: 'g:g2', t3: 'p:x/one' },
+      collapsed: ['g:g1', 'p:x/one'],
+      colors: { 'g:g1': 1, 'g:g2': 2 },
+    };
+    assert.deepEqual(deleteGroup(st, 'g1'), {
+      groups: [{ id: 'g2', name: 'b' }],
+      assign: { t2: 'g:g2', t3: 'p:x/one' },
+      collapsed: ['p:x/one'],
+      colors: { 'g:g2': 2 },
+    });
+  });
+  it('works on an empty state object', () => {
+    assert.deepEqual(deleteGroup({}, 'g1'), EMPTY);
+  });
+});
+
+describe('setGroupColor / toggleGroupCollapsed edge cases', () => {
+  it('keeps the colors of other groups', () => {
+    const st = setGroupColor({ colors: { a: 1 } }, 'b', 2);
+    assert.deepEqual(st.colors, { a: 1, b: 2 });
+    assert.deepEqual(setGroupColor(st, 'b', null).colors, { a: 1 });
+  });
+  it('collapses on a state without collapsed and expands only the toggled group', () => {
+    assert.deepEqual(toggleGroupCollapsed({}, 'k').collapsed, ['k']);
+    assert.deepEqual(toggleGroupCollapsed({ collapsed: ['a', 'k'] }, 'k').collapsed, ['a']);
+  });
+});
+
+describe('loadTabGroups / saveTabGroups', () => {
+  afterEach(() => {
+    delete globalThis.localStorage;
+  });
+
+  it('returns an empty state when nothing is saved, the JSON is broken, or storage is unavailable', () => {
+    const store = useFakeStorage();
+    assert.deepEqual(loadTabGroups(), EMPTY);
+    store.set('sidebarTabGroups', '{broken');
+    assert.deepEqual(loadTabGroups(), EMPTY);
+    delete globalThis.localStorage;
+    assert.deepEqual(loadTabGroups(), EMPTY);
+  });
+
+  it('keeps only valid groups, assignments and collapsed keys', () => {
+    const store = useFakeStorage();
+    store.set(
+      'sidebarTabGroups',
+      JSON.stringify({
+        groups: [{ id: 'g1', name: 'a' }, null, { id: 1, name: 'x' }, { id: 'g2' }, { id: 'g3', name: 3 }],
+        assign: { t1: 'g:g1', t2: 1 },
+        collapsed: ['g:g1', 2],
+      }),
+    );
+    assert.deepEqual(loadTabGroups(), {
+      groups: [{ id: 'g1', name: 'a' }],
+      assign: { t1: 'g:g1' },
+      collapsed: ['g:g1'],
+      colors: {},
+    });
+  });
+
+  it('drops fields of the wrong type', () => {
+    const store = useFakeStorage();
+    store.set('sidebarTabGroups', JSON.stringify({ groups: 'x', assign: 'abc', collapsed: 'x', colors: 'abc' }));
+    assert.deepEqual(loadTabGroups(), EMPTY);
+  });
+
+  it('round-trips a saved state', () => {
+    useFakeStorage();
+    const st = {
+      groups: [{ id: 'g1', name: 'a' }],
+      assign: { t1: 'g:g1' },
+      collapsed: ['p:x/one'],
+      colors: { 'g:g1': 3 },
+    };
+    saveTabGroups(st);
+    assert.deepEqual(loadTabGroups(), st);
+  });
+
+  it('saves an empty state for null', () => {
+    const store = useFakeStorage();
+    saveTabGroups(null);
+    assert.deepEqual(JSON.parse(store.get('sidebarTabGroups')), EMPTY);
+  });
+
+  it('does not throw when storage is unavailable', () => {
+    assert.doesNotThrow(() => saveTabGroups(EMPTY));
+  });
+});
+
+describe('representativeDirOf edge cases', () => {
+  it('returns null for a group without sessions', () => {
+    assert.equal(representativeDirOf({ key: 'p:x/app', manual: false }), null);
+  });
+  it('finds the repository root at the start of the path', () => {
+    assert.equal(representativeDirOf({ key: 'p:app', sessions: [s('a', '/app/.claude/worktrees/wt')] }), '/app');
+  });
+  it('ignores repeated trailing slashes even when the worktree has the repository name', () => {
+    assert.equal(
+      representativeDirOf({ key: 'p:x/app', sessions: [s('a', '/x/app/.claude/worktrees/app//')] }),
+      '/x/app',
+    );
+  });
+  it('folds /home/<user> only when it is at the start of the path', () => {
+    assert.equal(representativeDirOf({ key: 'p:gh/app', sessions: [s('a', '/home/alice/gh/app')] }), '~/gh/app');
+    assert.equal(representativeDirOf({ key: 'p:u/app', sessions: [s('a', '/srv/home/u/app')] }), '/srv/home/u/app');
+  });
+});
+
+describe('groupColorIndexMap edge cases', () => {
+  it('rotates colors when no pins are given', () => {
+    assert.deepEqual(
+      [...groupColorIndexMap([{ key: 'a' }, { key: 'b' }], null)],
+      [
+        ['a', 0],
+        ['b', 1],
+      ],
+    );
   });
 });

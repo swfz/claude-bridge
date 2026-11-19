@@ -73,4 +73,39 @@ describe('codeLines: buildCodeLinesHtml', () => {
   it('空文字でも 1 行分の要素を返す', () => {
     assert.equal(buildCodeLinesHtml('', null), '<span class="drawer-code-line" data-line="1"></span>');
   });
+
+  it('null も空の 1 行として扱う', () => {
+    assert.equal(buildCodeLinesHtml(null, null), '<span class="drawer-code-line" data-line="1"></span>');
+  });
+
+  it('行数の合うハイライトはそのまま行要素の中に入れる', () => {
+    const html = buildCodeLinesHtml('/* a\nb */', '<span class="hljs-comment">/* a\nb */</span>');
+    assert.equal(
+      html,
+      '<span class="drawer-code-line" data-line="1"><span class="hljs-comment">/* a</span></span>\n' +
+        '<span class="drawer-code-line" data-line="2"><span class="hljs-comment">b */</span></span>',
+    );
+  });
+});
+
+describe('codeLines: 境界', () => {
+  it('escapeHtml は null・undefined を空文字にする', () => {
+    assert.equal(escapeHtml(null), '');
+    assert.equal(escapeHtml(undefined), '');
+  });
+
+  it('閉じタグの空白は無視してタグ名を照合する', () => {
+    assert.deepEqual(splitHighlightedLines('<span class="a">x</span >\ny'), ['<span class="a">x</span >', 'y']);
+  });
+
+  it('入れ子の外側が先に閉じられても、閉じたタグだけを開き直しから外す', () => {
+    assert.deepEqual(splitHighlightedLines('<b><i>x</b>\ny</i>'), ['<b><i>x</b></i>', '<i>y</i>']);
+  });
+
+  it('自己終了タグは開き直さない', () => {
+    assert.deepEqual(splitHighlightedLines('<span class="a"><br/>x\ny</span>'), [
+      '<span class="a"><br/>x</span>',
+      '<span class="a">y</span>',
+    ]);
+  });
 });

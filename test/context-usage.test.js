@@ -79,3 +79,14 @@ describe('contextColorFor', () => {
     assert.equal(contextColorFor(80), 'var(--danger)');
   });
 });
+
+describe('contextUsage（境界）', () => {
+  it('latestContextUsage は先頭のメッセージの値も拾い、null の要素は飛ばす', () => {
+    assert.deepEqual(latestContextUsage([{ role: 'assistant', contextUsage: usage(1000) }, null]), usage(1000));
+  });
+
+  it('contextPercent はトークン数が数でなければ 0', () => {
+    assert.equal(contextPercent({ contextTokens: NaN, contextWindow: 1000 }), 0);
+    assert.equal(contextPercent({ contextTokens: Infinity, contextWindow: 1000 }), 0);
+  });
+});
