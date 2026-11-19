@@ -1,12 +1,13 @@
-import { describe, it, beforeEach } from 'vitest';
+import { describe, it, beforeEach, afterEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { mkdtemp, mkdir, writeFile, appendFile, rm } from 'fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, rm, utimes } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
   clearSessionCompletionCache,
+  getGitState,
   hasGitPush,
   parsePorcelainZ,
   readSessionCompletion,
@@ -14,6 +15,17 @@ import {
   readSessionPushes,
   toRepoRelative,
 } from '../server/session-completion.js';
+
+// 既定の PR 状態の取得（gh pr view）は本物の gh を呼ばないよう execFile だけ差し替える。
+// git を走らせる exec は本物のまま
+const gh = vi.hoisted(() => ({ stdout: '{"state":"OPEN"}', calls: 0 }));
+vi.mock('child_process', async (importOriginal) => ({
+  ...(await importOriginal()),
+  execFile: (cmd, args, opts, cb) => {
+    gh.calls++;
+    cb(null, { stdout: gh.stdout, stderr: '' });
+  },
+}));
 
 // PR の状態は各テストで prState を差し替える。差し替え忘れても gh を走らせない
 process.env.CLAUDE_BRIDGE_DISABLE_GH = '1';
@@ -39,8 +51,15 @@ const toolResult = (id, { isError = false } = {}) => ({
   },
 });
 
+// テストが作った一時ディレクトリ（afterEach で消す）
+const madeDirs = [];
+afterEach(async () => {
+  for (const dir of madeDirs.splice(0)) await rm(dir, { recursive: true, force: true });
+});
+
 async function makeSession(records, { subagents = {} } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'cb-completion-'));
+  madeDirs.push(dir);
   const filePath = join(dir, 's1.jsonl');
   await writeFile(filePath, jsonl(records));
   for (const [name, recs] of Object.entries(subagents)) {
@@ -53,6 +72,7 @@ async function makeSession(records, { subagents = {} } = {}) {
 // 1 コミット済みのリポジトリを作る
 async function makeRepo() {
   const repo = await mkdtemp(join(tmpdir(), 'cb-repo-'));
+  madeDirs.push(repo);
   const git = (cmd) => execAsync(`git ${cmd}`, { cwd: repo });
   await git('init -q');
   await git('config user.email t@example.com');
@@ -336,5 +356,308 @@ describe('readSessionCompletion', () => {
     const filePath = await makeSession([toolUse('Edit', { file_path: join(repo, 'committed.txt') })]);
     await rm(repo, { recursive: true, force: true });
     assert.equal((await readSessionCompletion({ filePath, cwd: repo })).hasRemote, null);
+  });
+
+  it("returns the whole 'unknown' result when the cwd is not given", async () => {
+    const filePath = await makeSession([toolUse('Edit', { file_path: '/r/a.js' })]);
+    const result = await readSessionCompletion({ filePath, cwd: undefined });
+    assert.deepEqual(result, {
+      edited: 1,
+      git: 'unknown',
+      uncommitted: [],
+      uncommittedCount: 0,
+      pushed: false,
+      prCount: 0,
+      hasRemote: null,
+      prs: [],
+    });
+  });
+
+  it('lists uncommitted files in path order, at most 20, with the full count', async () => {
+    const { repo } = await makeRepo();
+    const names = Array.from({ length: 21 }, (_, i) => `f${String(i).padStart(2, '0')}.txt`);
+    for (const name of names) await writeFile(join(repo, name), 'x\n');
+    // 編集した順（逆順）ではなくパス順に並べる
+    const filePath = await makeSession(
+      [...names].reverse().map((name) => toolUse('Write', { file_path: join(repo, name) })),
+    );
+    const result = await readSessionCompletion({ filePath, cwd: repo });
+    assert.equal(result.git, 'dirty');
+    assert.equal(result.uncommittedCount, 21);
+    assert.deepEqual(result.uncommitted, names.slice(0, 20));
+  });
+
+  it('uses gh for PR states by default and forgets them on clearSessionCompletionCache()', async () => {
+    const saved = process.env.CLAUDE_BRIDGE_DISABLE_GH;
+    delete process.env.CLAUDE_BRIDGE_DISABLE_GH;
+    try {
+      const url = 'https://github.com/o/r/pull/42';
+      const filePath = await makeSession([{ type: 'pr-link', prNumber: 42, prUrl: url }]);
+      gh.stdout = '{"state":"OPEN"}';
+      assert.deepEqual((await readSessionCompletion({ filePath, cwd: '/r' })).prs, [{ url, state: 'open' }]);
+      gh.stdout = '{"state":"MERGED"}';
+      assert.deepEqual((await readSessionCompletion({ filePath, cwd: '/r' })).prs, [{ url, state: 'open' }]);
+      clearSessionCompletionCache();
+      assert.deepEqual((await readSessionCompletion({ filePath, cwd: '/r' })).prs, [{ url, state: 'merged' }]);
+    } finally {
+      process.env.CLAUDE_BRIDGE_DISABLE_GH = saved;
+    }
+  });
+});
+
+describe('readSessionEditedFiles の細部', () => {
+  beforeEach(() => clearSessionCompletionCache());
+
+  it('counts MultiEdit on its own', async () => {
+    const filePath = await makeSession([toolUse('MultiEdit', { file_path: '/r/multi.js', edits: [] })]);
+    assert.deepEqual(await readSessionEditedFiles(filePath), ['/r/multi.js']);
+  });
+
+  it('ignores edit-shaped blocks outside assistant tool_use, and survives odd records', async () => {
+    const editBlock = { type: 'tool_use', id: 'e', name: 'Edit', input: { file_path: '/r/user.js' } };
+    const filePath = await makeSession([
+      // user レコードの中の tool_use は数えない
+      { type: 'user', message: { content: [editBlock] } },
+      // tool_use 以外のブロック（"tool_use" の文字列は行に含む）
+      {
+        type: 'assistant',
+        message: { content: [{ ...editBlock, type: 'text', tool_use: true, input: { file_path: '/r/text.js' } }] },
+      },
+      // message が無い・content が配列でない・null ブロック・input が無い・パスが文字列でない
+      { type: 'assistant', tool_use: true, file_path: '/r/no-message.js' },
+      { type: 'assistant', message: { content: { type: 'tool_use', name: 'Edit', file_path: '/r/obj.js' } } },
+      {
+        type: 'assistant',
+        message: { content: [null, { type: 'tool_use', name: 'Edit', file_path: '/r/no-input.js' }] },
+      },
+      toolUse('Edit', { file_path: ['/r/array.js'] }),
+      toolUse('Edit', { file_path: '/r/ok.js' }),
+    ]);
+    assert.deepEqual(await readSessionEditedFiles(filePath), ['/r/ok.js']);
+  });
+
+  it('reads only *.jsonl files in the subagents directory', async () => {
+    const filePath = await makeSession([toolUse('Edit', { file_path: '/r/main.js' })], {
+      subagents: {
+        'agent-1.meta.json': [toolUse('Edit', { file_path: '/r/meta.js' })],
+        'agent-1.jsonl': [toolUse('Edit', { file_path: '/r/sub.js' })],
+      },
+    });
+    assert.deepEqual((await readSessionEditedFiles(filePath)).sort(), ['/r/main.js', '/r/sub.js']);
+  });
+
+  it('re-reads a rewritten file with the same size and mtime only after clearSessionCompletionCache()', async () => {
+    const filePath = await makeSession([toolUse('Edit', { file_path: '/r/aa.js' })]);
+    await utimes(filePath, 1000, 1000);
+    assert.deepEqual(await readSessionEditedFiles(filePath), ['/r/aa.js']);
+    await writeFile(filePath, jsonl([toolUse('Edit', { file_path: '/r/bb.js' })]));
+    await utimes(filePath, 1000, 1000);
+    assert.deepEqual(await readSessionEditedFiles(filePath), ['/r/aa.js']);
+    clearSessionCompletionCache();
+    assert.deepEqual(await readSessionEditedFiles(filePath), ['/r/bb.js']);
+  });
+});
+
+describe('readSessionPushes の細部', () => {
+  beforeEach(() => clearSessionCompletionCache());
+
+  it('ignores pr-link records without a usable URL', async () => {
+    const filePath = await makeSession([
+      { type: 'pr-link', prNumber: 1, prUrl: '' },
+      { type: 'pr-link', prNumber: 2, prUrl: 123 },
+      { type: 'pr-link', prNumber: 3 },
+    ]);
+    assert.deepEqual(await readSessionPushes(filePath), { pushed: false, prCount: 0, prUrls: [] });
+  });
+
+  it('counts only Bash tool_use blocks with an id in assistant records', async () => {
+    const push = { type: 'tool_use', id: 'p1', name: 'Bash', input: { command: 'git push' } };
+    const filePath = await makeSession([
+      { type: 'user', message: { content: [push] } },
+      { type: 'assistant', message: { content: [{ ...push, type: 'text' }] } },
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', id: 'b0', name: 'Bash', input: { command: 'ls' } },
+            { type: 'tool_use', id: 'p2', name: 'Task', input: { command: 'git push' } },
+          ],
+        },
+      },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'git push' } }] } },
+    ]);
+    assert.equal((await readSessionPushes(filePath)).pushed, false);
+  });
+
+  it('survives records without message, with non-array content, null blocks or no input', async () => {
+    const filePath = await makeSession([
+      { type: 'system', is_error: true },
+      { type: 'user', message: { content: { is_error: true } } },
+      { type: 'user', message: { content: [null, { type: 'tool_result', tool_use_id: 'z', is_error: true }] } },
+      { type: 'assistant', message: { content: [null, { type: 'tool_use', id: 'n', name: 'Bash', note: 'push' }] } },
+      toolUse('Bash', { command: 'git push' }, 'ok'),
+    ]);
+    assert.equal((await readSessionPushes(filePath)).pushed, true);
+  });
+
+  it('treats only error tool_result blocks in user records as failed pushes', async () => {
+    const filePath = await makeSession([
+      toolUse('Bash', { command: 'git push' }, 'p1'),
+      // assistant レコードの tool_result、tool_result 以外のブロックはエラー扱いしない
+      { type: 'assistant', message: { content: [{ type: 'tool_result', tool_use_id: 'p1', is_error: true }] } },
+      { type: 'user', message: { content: [{ type: 'text', tool_use_id: 'p1', is_error: true }] } },
+      // 同じ行に別のエラーがあっても、成功した結果はエラーにしない
+      {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'other', is_error: true, content: 'x' },
+            { type: 'tool_result', tool_use_id: 'p1', content: 'ok' },
+          ],
+        },
+      },
+    ]);
+    assert.equal((await readSessionPushes(filePath)).pushed, true);
+  });
+
+  it('re-reads a rewritten file with the same size and mtime only after clearSessionCompletionCache()', async () => {
+    const records = (errorId) => [
+      toolUse('Bash', { command: 'git push' }, 'aa'),
+      toolResult(errorId, { isError: true }),
+    ];
+    const filePath = await makeSession(records('ab'));
+    await utimes(filePath, 1000, 1000);
+    assert.equal((await readSessionPushes(filePath)).pushed, true);
+    await writeFile(filePath, jsonl(records('aa')));
+    await utimes(filePath, 1000, 1000);
+    assert.equal((await readSessionPushes(filePath)).pushed, true);
+    clearSessionCompletionCache();
+    assert.equal((await readSessionPushes(filePath)).pushed, false);
+  });
+});
+
+describe('parsePorcelainZ の細部', () => {
+  it('accepts the shortest entry and skips the source path of copies', () => {
+    assert.deepEqual([...parsePorcelainZ(' M a')], ['a']);
+    assert.deepEqual([...parsePorcelainZ(['C  copy.js', 'orig.js', ' M b.js', ''].join('\0'))].sort(), [
+      'b.js',
+      'copy.js',
+    ]);
+  });
+});
+
+describe('toRepoRelative の細部', () => {
+  it('maps the root itself to an empty path', () => {
+    assert.equal(toRepoRelative('/repo', { cwd: '/repo', realCwd: '/repo', root: '/repo' }), '');
+    const ctx = { cwd: '/tmp/repo', realCwd: '/private/tmp/repo', root: '/private/tmp/repo' };
+    assert.equal(toRepoRelative('/tmp/repo', ctx), '');
+  });
+
+  it('rewrites only paths under the cwd', () => {
+    // cwd がリポジトリのサブディレクトリで、cwd の外（リポジトリ内）の実体パス
+    const ctx = { cwd: '/tmp/repo/sub', realCwd: '/private/tmp/repo/sub', root: '/private/tmp/repo' };
+    assert.equal(toRepoRelative('/private/tmp/repo/other.js', ctx), 'other.js');
+    assert.equal(toRepoRelative('/tmp/repo/sub/a.js', ctx), 'sub/a.js');
+  });
+
+  it('leaves paths as they are when the real cwd is unknown', () => {
+    assert.equal(toRepoRelative('/repo/a.js', { cwd: '/repo', root: '/repo' }), 'a.js');
+  });
+});
+
+describe('getGitState', () => {
+  beforeEach(() => clearSessionCompletionCache());
+
+  it('returns null outside git', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'cb-nogit-'));
+    madeDirs.push(dir);
+    assert.equal(await getGitState(dir), null);
+  });
+
+  it('reuses the result for 15 seconds per cwd', async () => {
+    const { repo } = await makeRepo();
+    const base = 1_000_000;
+    const first = await getGitState(repo, base);
+    assert.equal(first.dirty.size, 0);
+    await writeFile(join(repo, 'committed.txt'), 'changed\n');
+    assert.equal((await getGitState(repo, base + 14_999)).dirty.size, 0);
+    assert.deepEqual([...(await getGitState(repo, base + 15_000)).dirty], ['committed.txt']);
+  });
+
+  it('keeps entries for other cwds, and drops all of them once 200 are cached', async () => {
+    const { repo } = await makeRepo();
+    const scratch = await mkdtemp(join(tmpdir(), 'cb-gitcache-'));
+    madeDirs.push(scratch);
+    const first = getGitState(repo, 0);
+    await getGitState(join(scratch, 'none-0'), 0);
+    assert.equal(getGitState(repo, 1), first);
+    // repo と合わせて 200 件になるまで埋める（存在しないディレクトリなので git は即失敗する）
+    await Promise.all(Array.from({ length: 198 }, (_, i) => getGitState(join(scratch, `none-${i + 1}`), 0)));
+    assert.equal(getGitState(repo, 2), first);
+    await getGitState(join(scratch, 'none-overflow'), 0);
+    assert.notEqual(getGitState(repo, 3), first);
+  });
+});
+
+describe('hasGitPush の細部', () => {
+  it('区切りの直後・空白なしでも git push を拾う', () => {
+    assert.equal(hasGitPush('make||git push'), true);
+    assert.equal(hasGitPush('make&&git push'), true);
+    assert.equal(hasGitPush('make;git push'), true);
+    assert.equal(hasGitPush('echo x | git push'), true);
+    assert.equal(hasGitPush('  git push'), true);
+    assert.equal(hasGitPush('git   push'), true);
+  });
+
+  it('値を取るグローバルオプションを挟んでも拾う', () => {
+    assert.equal(hasGitPush('git -c push.default=current push'), true);
+    assert.equal(hasGitPush('git -C  /repo  push'), true);
+    assert.equal(hasGitPush('git -C /repo -c a=b push'), true);
+  });
+
+  it('コマンドの位置にない git push は拾わない', () => {
+    assert.equal(hasGitPush('echo git push'), false);
+    assert.equal(hasGitPush('xgit push'), false);
+    assert.equal(hasGitPush('git push-hooks'), false);
+    assert.equal(hasGitPush('git push_x'), false);
+  });
+
+  it('dry-run の判定は同じ git push の引数だけを見る', () => {
+    assert.equal(hasGitPush('git push origin && ls -n'), true);
+    assert.equal(hasGitPush('git push origin || echo -n'), true);
+    assert.equal(hasGitPush('git push origin; ls -n'), true);
+    assert.equal(hasGitPush('git push origin | tee -n'), true);
+    assert.equal(hasGitPush('(git push origin) -n'), true);
+    assert.equal(hasGitPush('git push origin -n'), false);
+    assert.equal(hasGitPush('git push --dry-runx'), true);
+    assert.equal(hasGitPush('git push -nx'), true);
+    assert.equal(hasGitPush('git push x-n'), true);
+  });
+
+  it('コメント行（字下げ・# の直後に区切りがあるものを含む）と引用符の中の区切りを無視する', () => {
+    assert.equal(hasGitPush('#; git push'), false);
+    assert.equal(hasGitPush('# 後で; git push'), false);
+    assert.equal(hasGitPush('   # ; git push'), false);
+    assert.equal(hasGitPush('echo "a; git push"'), false);
+    assert.equal(hasGitPush('echo "esc \\" ; git push"'), false);
+    assert.equal(hasGitPush("echo 'a && git push'"), false);
+    // コメント行の後ろの行は普通に見る
+    assert.equal(hasGitPush('# あとで\ngit push'), true);
+  });
+
+  it('語の途中の # はコメントとみなさない', () => {
+    assert.equal(hasGitPush('ls a#b; git push'), true);
+    assert.equal(hasGitPush('a#b; git push'), true);
+  });
+
+  it('<<- や引用符つきの終端のヒアドキュメントも本文を読み飛ばし、終端の後ろは見る', () => {
+    assert.equal(hasGitPush(['cat <<-EOF', 'git push', '\tEOF'].join('\n')), false);
+    // 字下げした終端で本文が終わり、その後ろの行は見る
+    assert.equal(hasGitPush(['cat <<-EOF', 'echo', '\tEOF  ', 'git push'].join('\n')), true);
+    assert.equal(hasGitPush(['cat << "END"', 'git push', 'END'].join('\n')), false);
+    assert.equal(hasGitPush(['cat <<EOF', 'git push', 'EOF', 'git push'].join('\n')), true);
+    assert.equal(hasGitPush(['cat <<EOF', 'EOFX', 'git push', 'EOF'].join('\n')), false);
+    // 終端の無いヒアドキュメントは最後まで本文
+    assert.equal(hasGitPush(['cat <<EOF', 'echo', 'git push'].join('\n')), false);
   });
 });
