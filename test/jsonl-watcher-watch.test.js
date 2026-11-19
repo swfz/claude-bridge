@@ -376,8 +376,8 @@ describe('JsonlWatcher（CLAUDE_PROJECTS_DIR 配下の監視）', () => {
     const file = writeSession('s1', [makeRecord('user', 'old1'), '   ', makeRecord('user', 'old2')]);
     watcher.startWatching({ bridgeSessionId: 'b', cwd, sessionId: 's1', onMessage });
     appendFileSync(file, makeRecord('user', 'new') + '\n');
-    await wait(500);
-    assert.deepEqual(contents(), ['new']);
+    // fs.watch のイベントは負荷で遅れ得るので、届くまで待つ
+    await vi.waitFor(() => assert.deepEqual(contents(), ['new']), { timeout: 5000 });
     assert.deepEqual(watcher.getSessionMeta('b'), { claudeSessionId: 's1', projectDir: `-work-proj-${seq}` });
   });
 
@@ -385,16 +385,16 @@ describe('JsonlWatcher（CLAUDE_PROJECTS_DIR 配下の監視）', () => {
     const file = writeSession('r1', [makeRecord('user', 'old')]);
     watcher.startWatching({ bridgeSessionId: 'b', cwd, resumeSessionId: 'r1', onMessage });
     appendFileSync(file, makeRecord('user', 'new') + '\n');
-    await wait(500);
-    assert.deepEqual(contents(), ['new']);
+    // fs.watch のイベントは負荷で遅れ得るので、届くまで待つ
+    await vi.waitFor(() => assert.deepEqual(contents(), ['new']), { timeout: 5000 });
   });
 
-  it('fromStart なら既存の行も配る', async () => {
+  it('fromStart なら既存の行も次の更新で配る', async () => {
     const file = writeSession('s1', [makeRecord('user', 'old')]);
     watcher.startWatching({ bridgeSessionId: 'b', cwd, sessionId: 's1', fromStart: true, onMessage });
     appendFileSync(file, makeRecord('user', 'new') + '\n');
-    await wait(500);
-    assert.deepEqual(contents(), ['old', 'new']);
+    // fs.watch のイベントは負荷で遅れ得るので、届くまで待つ
+    await vi.waitFor(() => assert.deepEqual(contents(), ['old', 'new']), { timeout: 5000 });
   });
 
   it('attachExisting は最新のファイルに付き、既存の行を飛ばす（空白だけの行は数えない）', async () => {
@@ -402,8 +402,8 @@ describe('JsonlWatcher（CLAUDE_PROJECTS_DIR 配下の監視）', () => {
     const file = writeSession('latest', [makeRecord('user', 'old1'), '   ', makeRecord('user', 'old2')]);
     watcher.startWatching({ bridgeSessionId: 'b', cwd, attachExisting: true, onMessage });
     appendFileSync(file, makeRecord('user', 'new') + '\n');
-    await wait(500);
-    assert.deepEqual(contents(), ['new']);
+    // fs.watch のイベントは負荷で遅れ得るので、届くまで待つ
+    await vi.waitFor(() => assert.deepEqual(contents(), ['new']), { timeout: 5000 });
     assert.equal(watcher.getSessionMeta('b').claudeSessionId, 'latest');
   });
 
@@ -419,8 +419,8 @@ describe('JsonlWatcher（CLAUDE_PROJECTS_DIR 配下の監視）', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     watcher.startWatching({ bridgeSessionId: 'b', cwd, onMessage });
     const file = writeSession('s1', [makeRecord('user', 'first')]);
-    await wait(500);
-    assert.deepEqual(contents(), ['first']);
+    // fs.watch のイベントは負荷で遅れ得るので、届くまで待つ
+    await vi.waitFor(() => assert.deepEqual(contents(), ['first']), { timeout: 5000 });
 
     watcher.stopWatching('b');
     appendFileSync(file, makeRecord('user', 'after-stop') + '\n');
@@ -433,8 +433,8 @@ describe('JsonlWatcher（CLAUDE_PROJECTS_DIR 配下の監視）', () => {
     mkdirSync(projectPath, { recursive: true });
     watcher.startWatching({ bridgeSessionId: 'b', cwd, sessionId: 's1', onMessage });
     writeSession('s1', [makeRecord('user', 'first')]);
-    await wait(500);
-    assert.deepEqual(contents(), ['first']);
+    // fs.watch のイベントは負荷で遅れ得るので、届くまで待つ
+    await vi.waitFor(() => assert.deepEqual(contents(), ['first']), { timeout: 5000 });
   });
 
   it('sessionId のプロジェクトディレクトリが無いときはポーリングで待ち、見つけた後に停止すれば配らない', async () => {

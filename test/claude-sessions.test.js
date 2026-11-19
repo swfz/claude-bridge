@@ -442,7 +442,8 @@ describe('findClaudeSessions', () => {
     assert.equal((await findClaudeSessions('abcd', { dir, limit: 2 })).length, 2);
   });
 
-  it('読めないプロジェクトディレクトリは飛ばして他を探す', async () => {
+  // root は 0o000 のディレクトリも読めるので確かめられない
+  it.skipIf(process.getuid?.() === 0)('読めないプロジェクトディレクトリは飛ばして他を探す', async () => {
     const dir = await makeProjects([
       { projectDir: '-home-me-locked', sessionId: 'abcd1111' },
       { projectDir: '-home-me-open', sessionId: 'abcd2222' },

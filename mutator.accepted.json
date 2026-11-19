@@ -639,10 +639,6 @@
     "reason": "equivalent: a sentinel string as a session has no slots (session.slots || []), so nothing is added",
     "where": "client/src/utils/calendar.js:229:37 [] -> [\"Stryker was here!\"]"
   },
-  "24hyvrbpxs1": {
-    "reason": "equivalent: memoisation only; not caching just recomputes the same date key",
-    "where": "server/activity-heatmap.js:161:7 cache.set(hourKey, key); -> ;"
-  },
   "24pirhmb26v": {
     "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクトなら result.url は undefined で、次の typeof url 検査で同じく null になる",
     "where": "server/jsonl-utils.js:291:18 typeof result !== 'object' -> false"
@@ -979,10 +975,6 @@
     "reason": "equivalent: readFirstLines never rejects for a string path and summarizeHead does not throw; even if reached, falling through returns the same empty cwd",
     "where": "server/claude-sessions.js:207:11 { return ''; } -> {}"
   },
-  "7rc3hzlzqu": {
-    "reason": "equivalent: memoisation only; recomputing the date key for the same hour gives the same value",
-    "where": "server/activity-heatmap.js:158:9 key === undefined -> true"
-  },
   "80qk4u6wdt": {
     "reason": "equivalent: record が null なら次の行の record.type で同じ TypeError になるので、ここで落ちても外から見た結果は同じ",
     "where": "server/jsonl-utils.js:158:39 ?. -> ."
@@ -1026,10 +1018,6 @@
   "akeixg9vj5": {
     "reason": "equivalent: a window without tools has sum 0 and is skipped by the next guard",
     "where": "server/activity-heatmap.js:566:9 window.tools.length === 0 -> false"
-  },
-  "ako90smsmu": {
-    "reason": "equivalent: readFirstLines resolves (with [] on read errors) for any string path, so this catch is unreachable",
-    "where": "server/claude-sessions.js:102:11 { return null; } -> {}"
   },
   "box5f11qqk": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
