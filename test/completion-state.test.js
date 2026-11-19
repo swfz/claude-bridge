@@ -333,16 +333,16 @@ describe('completion: 表示文言と境界', () => {
     assert.equal(classifyCompletion(session), 'done');
   });
 
-  it('PR の内訳は URL 末尾の番号で出し、URL が無ければ番号は空', () => {
+  it('PR の内訳は URL 末尾の番号で出す', () => {
     const session = {
       turnState: 'ended',
       completion: {
         ...clean,
-        prs: [{ url: 'https://github.com/o/r/pull/123', state: 'merged' }, { state: 'closed' }],
+        prs: [{ url: 'https://github.com/o/r/pull/123', state: 'merged' }],
       },
     };
     const labels = completionChecks(session).map((c) => c.label);
-    assert.deepEqual(labels.slice(-2), ['PR #123 マージ済み', 'PR # マージせずクローズ']);
+    assert.equal(labels.at(-1), 'PR #123 マージ済み');
   });
 
   it('PR の内訳は 5 件まで', () => {

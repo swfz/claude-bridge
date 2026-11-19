@@ -53,6 +53,11 @@ describe('peekPosition（境界）', () => {
     assert.deepEqual(peekPosition(rect(100, 476), pop, viewport), { left: 100, top: 170, placement: 'above' });
   });
 
+  it('アイコンが下端にかかっていても上に入るなら、上の位置を下端の余白で削らない', () => {
+    // above = 799 - 6 - 300 = 493 >= 8。広い側を選ぶ分岐に入ると 800 - 8 - 300 = 492 に頭打ちされる
+    assert.deepEqual(peekPosition(rect(100, 799), pop, viewport), { left: 100, top: 493, placement: 'above' });
+  });
+
   it('右端の余白に食い込むだけでも左へずらす', () => {
     // 680 + 520 = 1200 > 1200 - 8
     assert.equal(peekPosition(rect(680, 100), pop, viewport).left, 672);

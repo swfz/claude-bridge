@@ -527,10 +527,6 @@
     "reason": "equivalent: the placeholder label is always overwritten by bucketLabel before bucketDays returns",
     "where": "client/src/utils/heatmap.js:242:16 '' -> 'Stryker was here!'"
   },
-  "snap8abfpn": {
-    "reason": "equivalent: when the popup does not fit below but fits above, the anchor is in the lower part (roomBelow < top), so the fallback also picks above with the same top",
-    "where": "client/src/utils/recentPeek.js:21:14 above >= margin -> false"
-  },
   "su1um2enmy": {
     "reason": "equivalent: indexes past the end read undefined, which is neither a turn start, a toolresult nor an assistant, so they are skipped",
     "where": "client/src/utils/working.js:25:16 messages.length - 1 -> messages.length + 1"

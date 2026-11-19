@@ -445,7 +445,7 @@ describe('representativeDirOf edge cases', () => {
       '/x/app',
     );
   });
-  it('folds only a leading home directory with a multi-letter user name', () => {
+  it('folds /home/<user> only when it is at the start of the path', () => {
     assert.equal(representativeDirOf({ key: 'p:gh/app', sessions: [s('a', '/home/alice/gh/app')] }), '~/gh/app');
     assert.equal(representativeDirOf({ key: 'p:u/app', sessions: [s('a', '/srv/home/u/app')] }), '/srv/home/u/app');
   });
