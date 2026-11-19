@@ -253,8 +253,8 @@ export class SessionManager {
 }
 
 // claude プロセスを起動せず、既存セッションの JSONL を読むだけの閲覧専用セッション。
-// agent view 等で動いているセッションの会話にコメント/レビューを付けるための入れ物。
-// Claude へは送信できない（write は no-op）。
+// 動いているセッションの会話を閲覧し、レビュー・inbox 経由の送信をするための入れ物。
+// PTY を持たないので write は no-op（送信は inbox 経由）。
 export class ReadonlySession {
   constructor({ id, name, cwd, claudeSessionId, projectDir }) {
     this.id = id;

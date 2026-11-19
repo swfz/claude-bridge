@@ -5,11 +5,9 @@ import './SubagentDrawer.css';
 
 // 実行中のサブエージェントの会話を取り直す間隔
 const TRANSCRIPT_POLL_INTERVAL = 4000;
-// memo した ChatMessage に毎レンダー新しい [] を渡すと比較が外れるので共有の空配列を使う
-const EMPTY = [];
 
 // サブエージェントの会話トランスクリプトを右サイドのドロワーで見せる。
-// 会話の描画は ChatView の ChatMessage を再利用する（readonly 固定）。
+// 会話の描画は ChatView の ChatMessage を再利用する（操作ハンドラを渡さない閲覧専用）。
 export default function SubagentDrawer({
   agentId,
   description,
@@ -72,16 +70,7 @@ export default function SubagentDrawer({
               {status === 'running' ? 'サブエージェントの応答を待っています...' : '会話がありません'}
             </div>
           ) : (
-            items.map((m) => (
-              <ChatMessage
-                key={m.id}
-                message={m}
-                threads={EMPTY}
-                comments={EMPTY}
-                onOpenPreview={onOpenPreview}
-                readonly
-              />
-            ))
+            items.map((m) => <ChatMessage key={m.id} message={m} onOpenPreview={onOpenPreview} />)
           )}
 
           {hasNew && (

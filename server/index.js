@@ -9,7 +9,6 @@ import { fileURLToPath } from 'url';
 import { SessionManager, ReadonlySessionManager } from './session.js';
 import { resolveResumeCwd, isValidProjectDir } from './resume-cwd.js';
 import { Storage, DATA_DIR } from './storage.js';
-import { ThreadStore } from './thread-store.js';
 import {
   findClaudeSessions,
   listClaudeSessions,
@@ -41,7 +40,6 @@ import {
   launchInTmuxWindow,
   TmuxSessionManager,
 } from './tmux-session.js';
-import { listClaudeAgents } from './claude-agents.js';
 import { enrichPanesWithSessionMeta, readStatusByPid } from './claude-session-meta.js';
 import { listRunningSessions } from './running-sessions.js';
 import {
@@ -331,7 +329,6 @@ const storage = new Storage();
 const sessionManager = new SessionManager(storage);
 const tmuxSessionManager = new TmuxSessionManager();
 const readonlySessionManager = new ReadonlySessionManager();
-const threadStore = new ThreadStore(storage);
 const jsonlWatcher = new JsonlWatcher();
 
 // クライアントから来るセッション ID 配列（Star 付きなど）を検証する。
@@ -833,11 +830,10 @@ function resolveClaudeTarget(session) {
   return meta?.claudeSessionId && meta?.projectDir ? meta : null;
 }
 
-// コメント/レビューの保存キーを解決する。claudeSessionId を優先し、無ければ
+// ピン/レビューの保存キーを解決する。claudeSessionId を優先し、無ければ
 // ブリッジ sessionId にフォールバック。ファイル名に使うため形式を検証して不正なら null。
-// クライアントは sessionKey（旧 commentKey）で渡す。
 function sessionKeyOf(msg) {
-  const key = msg.sessionKey || msg.commentKey || msg.sessionId || '';
+  const key = msg.sessionKey || msg.sessionId || '';
   return /^[\w-]+$/.test(key) ? key : null;
 }
 
@@ -1189,147 +1185,6 @@ wss.on('connection', (ws) => {
       case 'remove_past_session': {
         sessionManager.removePastSession(msg.sessionId);
         broadcastSessionList();
-        break;
-      }
-
-      case 'new_thread': {
-        threadStore.createThread(msg.sessionId, {
-          messageId: msg.messageId,
-          selectedText: msg.selectedText,
-        });
-        broadcast({
-          type: 'thread_update',
-          sessionId: msg.sessionId,
-          threads: threadStore.getThreadsForSession(msg.sessionId),
-        });
-        break;
-      }
-
-      case 'thread_reply_batch': {
-        // replies: Array<{ threadId, text }>
-        const replies = Array.isArray(msg.replies) ? msg.replies : [];
-        const accepted = [];
-        for (const r of replies) {
-          const text = typeof r?.text === 'string' ? r.text.trim() : '';
-          if (!text || !r?.threadId) continue;
-          const added = threadStore.addReply(msg.sessionId, r.threadId, {
-            role: 'human',
-            text,
-          });
-          if (added) accepted.push({ threadId: r.threadId, text });
-        }
-
-        if (accepted.length > 0) {
-          const session = findSession(msg.sessionId);
-          if (session) {
-            const allThreads = threadStore.getThreadsForSession(msg.sessionId);
-            const sections = accepted.map(({ threadId, text }) => {
-              const t = allThreads.find((x) => x.id === threadId);
-              const head = t ? t.selectedText : '(不明)';
-              return `## "${head}" への返信\n${text}`;
-            });
-            const prompt =
-              accepted.length === 1
-                ? `[スレッド: "${
-                    allThreads.find((x) => x.id === accepted[0].threadId)?.selectedText ?? ''
-                  }" への返信]\n${accepted[0].text}`
-                : `[スレッド返信 ${accepted.length}件]\n\n${sections.join('\n\n')}`;
-            session.write(prompt + '\r');
-          }
-        }
-
-        broadcast({
-          type: 'thread_update',
-          sessionId: msg.sessionId,
-          threads: threadStore.getThreadsForSession(msg.sessionId),
-        });
-        break;
-      }
-
-      case 'resolve_thread': {
-        threadStore.resolveThread(msg.sessionId, msg.threadId);
-        broadcast({
-          type: 'thread_update',
-          sessionId: msg.sessionId,
-          threads: threadStore.getThreadsForSession(msg.sessionId),
-        });
-        break;
-      }
-
-      case 'delete_thread': {
-        threadStore.deleteThread(msg.sessionId, msg.threadId);
-        broadcast({
-          type: 'thread_update',
-          sessionId: msg.sessionId,
-          threads: threadStore.getThreadsForSession(msg.sessionId),
-        });
-        break;
-      }
-
-      case 'get_threads': {
-        ws.send(
-          JSON.stringify({
-            type: 'thread_update',
-            sessionId: msg.sessionId,
-            threads: threadStore.getThreadsForSession(msg.sessionId),
-          }),
-        );
-        break;
-      }
-
-      case 'save_comment': {
-        // コメントは「送信しない・後で参照するだけ」で、セッションに対して残す。
-        // 保存キーは claudeSessionId を優先し（new/resume/tmux/readonly いずれの
-        // 見え方でも安定する ID）、再オープンをまたいで参照できるようにする。
-        // ファイル名に使うためトラバーサル対策で形式を検証する。
-        const key = sessionKeyOf(msg);
-        if (!key) break;
-        const text = typeof msg.text === 'string' ? msg.text.trim() : '';
-        if (!text) break;
-        const comments = storage.loadComments(key);
-        comments.push({
-          id: `comment-${Date.now()}`,
-          text,
-          // どの箇所に対するコメントか（メッセージ/ファイル＋引用）。無ければセッション全体メモ。
-          anchor: msg.anchor && typeof msg.anchor === 'object' ? msg.anchor : null,
-          timestamp: new Date().toISOString(),
-        });
-        storage.saveComments(key, comments);
-        ws.send(
-          JSON.stringify({
-            type: 'comments_update',
-            // active 照合はブリッジ ID で行うため echo は従来どおり sessionId
-            sessionId: msg.sessionId,
-            comments,
-          }),
-        );
-        break;
-      }
-
-      case 'get_comments': {
-        const key = sessionKeyOf(msg);
-        ws.send(
-          JSON.stringify({
-            type: 'comments_update',
-            sessionId: msg.sessionId,
-            comments: key ? storage.loadComments(key) : [],
-          }),
-        );
-        break;
-      }
-
-      case 'delete_comment': {
-        const key = sessionKeyOf(msg);
-        if (!key) break;
-        const comments = storage.loadComments(key).filter((c) => c.id !== msg.commentId);
-        storage.saveComments(key, comments);
-        ws.send(
-          JSON.stringify({
-            type: 'comments_update',
-            sessionId: msg.sessionId,
-            comments,
-          }),
-        );
         break;
       }
 
@@ -1727,13 +1582,6 @@ wss.on('connection', (ws) => {
         break;
       }
 
-      case 'list_agents': {
-        listClaudeAgents().then((agents) => {
-          ws.send(JSON.stringify({ type: 'agents', agents }));
-        });
-        break;
-      }
-
       case 'attach_tmux_pane': {
         attachTmuxPaneAsSession(ws, {
           paneId: msg.paneId,
@@ -1877,7 +1725,7 @@ wss.on('connection', (ws) => {
 
       case 'open_readonly_session': {
         // claude プロセスを起動せず、既存セッションの JSONL を読むだけのビュー
-        // projectDir 未指定（agent 一覧由来など）なら cwd から導出する
+        // projectDir 未指定なら cwd から導出する
         const roProjectDir = msg.projectDir || cwdToProjectDir(msg.cwd || '');
         const session = openReadonlyTab({
           name: msg.name,

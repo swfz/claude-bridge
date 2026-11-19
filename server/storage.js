@@ -23,35 +23,7 @@ export class Storage {
     }
   }
 
-  saveThreads(sessionId, threads) {
-    const file = join(DATA_DIR, `threads-${sessionId}.json`);
-    writeFileSync(file, JSON.stringify(threads, null, 2));
-  }
-
-  loadThreads(sessionId) {
-    try {
-      const file = join(DATA_DIR, `threads-${sessionId}.json`);
-      return JSON.parse(readFileSync(file, 'utf-8'));
-    } catch {
-      return [];
-    }
-  }
-
-  saveComments(sessionId, comments) {
-    const file = join(DATA_DIR, `comments-${sessionId}.json`);
-    writeFileSync(file, JSON.stringify(comments, null, 2));
-  }
-
-  loadComments(sessionId) {
-    try {
-      const file = join(DATA_DIR, `comments-${sessionId}.json`);
-      return JSON.parse(readFileSync(file, 'utf-8'));
-    } catch {
-      return [];
-    }
-  }
-
-  // ピン留めしたメッセージ（後から見返す用のしおり）。コメントと同じく送信はせず、
+  // ピン留めしたメッセージ（後から見返す用のしおり）。送信はせず、
   // claudeSessionId 単位で保存して再オープン/resume をまたいで参照できるようにする。
   savePins(sessionId, pins) {
     const file = join(DATA_DIR, `pins-${sessionId}.json`);

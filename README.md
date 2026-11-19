@@ -10,8 +10,7 @@ node-pty で新規セッションを起動する方式と、既存の tmux ペ�
 - **Chat ビュー** -- JSONL ファイルからメッセージをパースし Markdown レンダリング
 - **Raw ビュー** -- xterm.js によるターミナル表示
 - **ツール呼び出し表示** -- Bash, Read, Edit 等の実行を折りたたみ表示、Edit は diff + シンタックスハイライト
-- **レビュー / コメント** -- レビュー（指摘を溜めて Claude へ一括送信）と、送信せず残すコメント（参照専用）。プレビューでは該当箇所に 💬 マーカーを表示。スレッドも利用可
-- **agent view 連携** -- `claude agents` のセッションを閲覧し、レビューを inbox 経由で届ける（[agent 連携](#agent-連携レビュー送信--コメント) 参照）
+- **レビュー** -- 指摘を溜めて Claude へ一括送信。閲覧タブからは inbox 経由で届ける（[レビュー送信](#レビュー送信inbox-経由) 参照）
 - **ファイルプレビュー** -- `file://` リンクをサイドドロワーでプレビュー
 - **WebSocket 自動再接続** -- 切断時に 2 秒後に自動再接続、ping/pong による死活監視
 
@@ -54,14 +53,11 @@ pnpm start
 | `pnpm setup:hooks`      | agent 連携フック（レビュー送信の受信側）を `~/.claude/settings.json` に登録 |
 | `pnpm setup:statusline` | レート制限表示用の statusLine tee を `~/.claude/settings.json` に登録       |
 
-## agent 連携（レビュー送信 / コメント）
+## レビュー送信（inbox 経由）
 
-「送る（レビュー）」と「残す（コメント）」は別物として扱う。
-
-- **コメント（残す）** -- 送信されず `~/.claude-bridge/` に保存されるだけの参照用メモ。ブラウザ側だけで完結するため**追加設定は不要**。
 - **レビュー（送る）** -- 溜めた指摘を Submit すると対象セッションへ届く。送信先はセッション種別で自動的に出し分ける。
   - 通常セッション（new / resume / tmux）= PTY に直接入力。
-  - 閲覧 / agent view セッション = **inbox 経由**（`~/.claude-bridge/inbox/<claudeSessionId>.jsonl`）で、対象の Claude 側フックが取り込む。
+  - 閲覧セッション = **inbox 経由**（`~/.claude-bridge/inbox/<claudeSessionId>.jsonl`）で、対象の Claude 側フックが取り込む。
 
 ### inbox 経由のレビューを使うには `setup:hooks` が必要（受信側）
 
@@ -77,7 +73,7 @@ pnpm setup:hooks
   - `bridge-check-inbox.js` -- 応答終了時（Stop hook）に未読 inbox を取り込む（主経路）
   - `bridge-session-start.js` / `bridge-watch.js` -- インタラクティブセッション向けのリアルタイム受信（Monitor）
 - サンドボックス有効時は `setup:hooks` が `~/.claude-bridge` への書き込み許可も追加する。
-- コメント（残す）だけを使う場合は `setup:hooks` は不要。
+- 通常セッション（PTY に直接入力）だけを使う場合は `setup:hooks` は不要。
 
 ## レート制限表示（ヘッダーの 5h/7d メーター）
 
@@ -103,7 +99,6 @@ server/
   jsonl-utils.js       共通ユーティリティ (テキスト抽出, ツール情報抽出)
   claude-sessions.js   Claude セッション一覧・履歴読み込み
   storage.js           ~/.claude-bridge/ への JSON 永続化
-  thread-store.js      スレッドの CRUD
 
 client/
   src/
@@ -112,7 +107,6 @@ client/
       ChatView.jsx     Markdown チャット表示、ツール呼び出し表示
       TerminalView.jsx xterm.js ターミナル
       SessionTabs.jsx  セッションタブ切り替え
-      ThreadPanel.jsx  スレッドサイドパネル（リサイズ可）
       InputBar.jsx     テキスト入力
       NewSessionDialog.jsx  新規/resume/tmux セッション作成
       PreviewDrawer.jsx     ファイルプレビュードロワー

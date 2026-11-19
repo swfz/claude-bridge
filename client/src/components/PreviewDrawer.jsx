@@ -9,7 +9,6 @@ import {
   TbChevronLeft,
   TbChevronRight,
   TbExternalLink,
-  TbMessage,
   TbMoon,
   TbPictureInPicture,
   TbPlus,
@@ -73,9 +72,6 @@ export default function PreviewDrawer({
   reviewMode: _reviewMode,
   onClose,
   onReviewSubmit,
-  onSaveComment,
-  onDeleteComment,
-  fileComments,
   responses,
   onOpenPip,
   pipWindow,
@@ -94,14 +90,8 @@ export default function PreviewDrawer({
     if (reviewItems.length === 0) reviewDrafts.delete(draftKey);
     else reviewDrafts.set(draftKey, reviewItems);
   }, [draftKey, reviewItems]);
-  // このプレビューを開いている間に「残した」コメント（送信せず保存済み・参照用）
-  const [savedComments, setSavedComments] = useState([]);
   const [selectionPopup, setSelectionPopup] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  // 本文左ガターに出すコメント行マーカー [{ line, top, comments:[{id,comment,quote}] }]
-  const [lineMarkers, setLineMarkers] = useState([]);
-  // クリックで開いている行マーカーのポップオーバー
-  const [activeMarker, setActiveMarker] = useState(null);
   // 行ピック中に「ここが対象」と出す行番号バッジ [{ line, top }]（Markdown プレビューのみ）
   const [lineBadges, setLineBadges] = useState([]);
   // ドロワー内のテキスト入力にフォーカスがあるか（数字キーが行ピックに吸われないようにする目印）
@@ -147,7 +137,6 @@ export default function PreviewDrawer({
     fileContent,
     isCodeView,
     showTable,
-    showCode,
     markdownToRender,
     frontmatter,
     markdownBody,
@@ -453,9 +442,9 @@ export default function PreviewDrawer({
   }, [isHtml, filePath, lightMode]);
 
   const addComment = useCallback(
-    (selectedText, location, kind = 'review') => {
+    (selectedText, location) => {
       const id = ++commentIdSeq;
-      setReviewItems((prev) => [...prev, { id, selectedText, location, comment: '', resolved: false, kind }]);
+      setReviewItems((prev) => [...prev, { id, selectedText, location, comment: '', resolved: false }]);
       setEditingId(id);
       setSelectionPopup(null);
       hostWin.getSelection()?.removeAllRanges();
@@ -466,7 +455,7 @@ export default function PreviewDrawer({
   // 選択せずに「送る」項目を追加する（ファイル全体への指摘用）。
   // ReviewDraftPanel の「次の指摘欄を追加」と揃え、毎回マウス選択しなくても複数コメントを書けるようにする。
   const addFreeItem = useCallback(() => {
-    addComment('', null, 'review');
+    addComment('', null);
   }, [addComment]);
 
   // Ctrl/Cmd+Shift+Enter（一括送信）はドロワーが開いていればフォーカス位置を問わず効かせる
@@ -502,28 +491,6 @@ export default function PreviewDrawer({
     };
   }, [isHtml, filePath, hostDoc]);
 
-  // 「コメントに残す」: 送信せずセッションのコメントに保存（ファイルアンカー付き）。
-  // 保存後も、このプレビューを開いている間は右ペインに表示し続ける。
-  const saveComment = useCallback(
-    (id) => {
-      const item = reviewItems.find((i) => i.id === id);
-      if (item && item.comment.trim()) {
-        const text = item.comment.trim();
-        if (onSaveComment) {
-          onSaveComment(text, {
-            selectedText: item.selectedText,
-            label: item.location?.label || null,
-            line: item.location?.line ?? null,
-          });
-        }
-        setSavedComments((s) => [...s, { id, selectedText: item.selectedText, comment: text }]);
-      }
-      setReviewItems((prev) => prev.filter((i) => i.id !== id));
-      if (editingId === id) setEditingId(null);
-    },
-    [reviewItems, editingId, onSaveComment],
-  );
-
   const updateComment = useCallback((id, comment) => {
     setReviewItems((prev) => prev.map((item) => (item.id === id ? { ...item, comment } : item)));
   }, []);
@@ -543,7 +510,7 @@ export default function PreviewDrawer({
   const [submitStatus, setSubmitStatus] = useState(null);
 
   const handleSubmitAll = useCallback(() => {
-    const items = reviewItems.filter((i) => i.kind !== 'save' && i.comment.trim() && !i.resolved);
+    const items = reviewItems.filter((i) => i.comment.trim() && !i.resolved);
     if (items.length === 0 || !onReviewSubmit) return;
 
     const target = filePath || 'preview';
@@ -594,18 +561,19 @@ export default function PreviewDrawer({
     (line) => {
       if (isCodeView) {
         const src = fileContent || '';
-        addComment(
-          quoteForLine(src.split('\n')[line - 1], line),
-          { line, label: `L${line}`, contextBefore: '', contextAfter: '' },
-          'review',
-        );
+        addComment(quoteForLine(src.split('\n')[line - 1], line), {
+          line,
+          label: `L${line}`,
+          contextBefore: '',
+          contextAfter: '',
+        });
         return;
       }
       // Markdown はレンダリング後のブロックから引用を作る（ソース行だと記法が混ざって読みにくい）
       const body = bodyRef.current;
       const el = body ? blockForLine(collectSourceBlocks(body), line) : null;
       const text = el ? el.textContent : (markdownBody || '').split('\n')[line - 1];
-      addComment(quoteForLine(text, line), { line, label: `L${line}` }, 'review');
+      addComment(quoteForLine(text, line), { line, label: `L${line}` });
     },
     [isCodeView, fileContent, markdownBody, addComment],
   );
@@ -744,112 +712,17 @@ export default function PreviewDrawer({
     bodyRef.current?.focus?.({ preventScroll: true });
   }, [hostDoc]);
 
-  // 欄の確定。「残す」は保存、「送る」は溜めたまま本文へ戻るだけ。
+  // 欄の確定。溜めたまま本文へ戻るだけ。
   // Enter の空押しで作った「選択なし」の欄に何も書かなかった場合は、残っても意味がないので消す。
   const confirmItem = useCallback(
     (item) => {
-      if (item.kind === 'save') saveComment(item.id);
-      else if (!item.comment.trim() && !item.selectedText) removeItem(item.id);
+      if (!item.comment.trim() && !item.selectedText) removeItem(item.id);
       blurToBody();
     },
-    [saveComment, removeItem, blurToBody],
+    [removeItem, blurToBody],
   );
 
-  const unresolvedCount = reviewItems.filter((i) => i.kind !== 'save' && !i.resolved && i.comment.trim()).length;
-
-  // 「残したコメント」の表示元: ファイルプレビューは保存済み（filePath 一致）を正にし、
-  // 件数もここに出す。markdown プレビュー等 filePath が無い場合は開いている間の savedComments。
-  // 小窓で別のセッションを見ている間は保存済みが手元に無い（fileComments が undefined）ので、これも savedComments。
-  // 毎レンダーで新配列を作ると行マーカー effect が無限ループするため安定化する
-  const displaySaved = useMemo(
-    () =>
-      filePath && fileComments
-        ? (fileComments || []).map((c) => ({
-            id: c.id,
-            selectedText: c.anchor?.quote || '',
-            comment: c.text,
-            line: c.anchor?.line ?? null,
-            persisted: true,
-          }))
-        : savedComments,
-    [filePath, fileComments, savedComments],
-  );
-
-  // コメントの「行」を本文側に印（💬 ガター）として出す。
-  // 行特定: コメントの引用文字列をソース上で探し、その開始行を求める。
-  // 位置: markdown は data-source-line を持つブロックの位置、コード/テキストは行高から算出。
-  useEffect(() => {
-    const body = bodyRef.current;
-    if (!body) {
-      setLineMarkers([]);
-      return;
-    }
-    // 表モードは pre を描かないので行マーカーは出さない（テキスト表示に切り替えれば出る）
-    const isCode = showCode;
-    const source = markdownToRender ? markdownBody : isCode ? fileContent : null;
-    if (!source || displaySaved.length === 0) {
-      setLineMarkers([]);
-      return;
-    }
-
-    const id = setTimeout(() => {
-      const bodyRect = body.getBoundingClientRect();
-      const topOf = (el) => el.getBoundingClientRect().top - bodyRect.top + body.scrollTop;
-
-      // 行番号 → { top(px), el } を返す関数を用意（el は markdown のとき該当ブロック）
-      let resolve;
-      if (isCode) {
-        const pre = body.querySelector('pre.drawer-text');
-        if (!pre) return;
-        // 行は 1 要素ずつ（.drawer-code-line）なので、その矩形から位置を取る。
-        // 折り返しのある行でも実際の描画位置に合う（行高の掛け算だとズレる）
-        const cs = getComputedStyle(pre);
-        const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
-        const padTop = parseFloat(cs.paddingTop) || 0;
-        const preTop = topOf(pre);
-        resolve = (line) => {
-          const el = pre.querySelector(`[data-line="${line}"]`);
-          // 行要素が無い（範囲外）ときだけ行高からの概算にフォールバックする
-          return { top: el ? topOf(el) : preTop + padTop + (line - 1) * lh, el: null };
-        };
-      } else {
-        const blocks = collectSourceBlocks(body);
-        resolve = (line) => {
-          const el = blockForLine(blocks, line);
-          return { top: el ? topOf(el) : 0, el };
-        };
-      }
-
-      // コメントを行ごとにまとめる。保存済みの anchor.line を最優先で使い、
-      // 無い旧データのみ引用文字列の出現位置から行を推定する。
-      const byLine = new Map();
-      for (const c of displaySaved) {
-        let line = c.line;
-        if (!(line > 0)) {
-          const q = (c.selectedText || '').trim();
-          const idx = q ? source.indexOf(q) : -1;
-          line = idx >= 0 ? source.slice(0, idx).split('\n').length : 1;
-        }
-        if (!byLine.has(line)) byLine.set(line, []);
-        byLine.get(line).push(c);
-      }
-
-      // 以前のブロックハイライトを消してから付け直す
-      body.querySelectorAll('.comment-anchored').forEach((e) => e.classList.remove('comment-anchored'));
-
-      const markers = [...byLine.entries()].map(([line, comments]) => {
-        const { top, el } = resolve(line);
-        // markdown はレンダリング表示で「行」が見えないので、該当ブロックを強調して位置を示す
-        if (el) el.classList.add('comment-anchored');
-        return { line, top: Math.max(0, top), comments };
-      });
-      setLineMarkers(markers);
-    }, 60);
-    return () => {
-      clearTimeout(id);
-      body.querySelectorAll('.comment-anchored').forEach((e) => e.classList.remove('comment-anchored'));
-    };
-  }, [displaySaved, markdownToRender, markdownBody, fileContent, showCode, width, lightMode]);
+  const unresolvedCount = reviewItems.filter((i) => !i.resolved && i.comment.trim()).length;
 
   // 小窓では overlay（背景の暗幕・クリックで閉じる）を持たず、窓いっぱいに広げる。
   // .drawer-overlay を付けないのは、メイン側の「ドロワー表示中」判定（useGlobalKeys / ShortcutHints）と混ざらないようにするため
@@ -858,27 +731,17 @@ export default function PreviewDrawer({
       <div
         ref={drawerRef}
         className={`drawer ${isHtml ? 'drawer-html' : ''} ${
-          reviewItems.length > 0 || displaySaved.length > 0 || (responses && responses.length > 0)
-            ? 'drawer-with-review'
-            : ''
+          reviewItems.length > 0 || (responses && responses.length > 0) ? 'drawer-with-review' : ''
         }`}
         style={width != null ? { width, maxWidth: 'none', minWidth: 'auto' } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
         {!pipWindow && <div className="drawer-resize-handle" onMouseDown={onDragStart} />}
         <div className="drawer-header">
-          {/* 常設のヒント帯はやめ、選択でコメントできることはファイル名の tooltip に回す
+          {/* 常設のヒント帯はやめ、選択で指摘を追加できることはファイル名の tooltip に回す
               （キー操作はサイドバーの ShortcutHints が出している） */}
-          <div className="drawer-title-area" title="本文のテキストを選択するとコメントを追加できます">
-            <span className="drawer-filename">
-              {fileName}
-              {displaySaved.length > 0 && (
-                <span className="drawer-comment-count" title="このファイルに残したコメント数">
-                  <TbMessage aria-hidden="true" />
-                  {displaySaved.length}
-                </span>
-              )}
-            </span>
+          <div className="drawer-title-area" title="本文のテキストを選択するとレビューの指摘を追加できます">
+            <span className="drawer-filename">{fileName}</span>
             {filePath && <span className="drawer-path">{filePath}</span>}
           </div>
           <div className="drawer-actions">
@@ -990,18 +853,10 @@ export default function PreviewDrawer({
               >
                 <button
                   className="selection-popup-btn"
-                  onClick={() => addComment(selectionPopup.text, selectionPopup.location, 'review')}
+                  onClick={() => addComment(selectionPopup.text, selectionPopup.location)}
                 >
                   レビューに追加（送る）
                 </button>
-                {onSaveComment && (
-                  <button
-                    className="selection-popup-btn secondary"
-                    onClick={() => addComment(selectionPopup.text, selectionPopup.location, 'save')}
-                  >
-                    コメントに残す（送らない）
-                  </button>
-                )}
               </div>
             )}
 
@@ -1015,51 +870,10 @@ export default function PreviewDrawer({
                 ))}
               </div>
             )}
-
-            {/* コメントがある行の 💬 マーカー（本文左ガター） */}
-            {lineMarkers.length > 0 && (
-              <div className="comment-gutter">
-                {lineMarkers.map((m) => (
-                  <button
-                    key={m.line}
-                    className="comment-gutter-marker"
-                    style={{ top: m.top }}
-                    onClick={() => setActiveMarker((cur) => (cur?.line === m.line ? null : m))}
-                    title={`この箇所に ${m.comments.length} 件のコメント`}
-                  >
-                    <TbMessage aria-hidden="true" />
-                    {m.comments.length > 1 ? m.comments.length : ''}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* 行マーカークリックで内容表示 */}
-            {activeMarker && (
-              <div className="comment-gutter-popup" style={{ top: activeMarker.top }}>
-                <div className="comment-gutter-popup-head">
-                  <span>残したコメント</span>
-                  <button onClick={() => setActiveMarker(null)} title="閉じる" aria-label="閉じる">
-                    <TbX aria-hidden="true" />
-                  </button>
-                </div>
-                {activeMarker.comments.map((c) => (
-                  <div key={c.id} className="comment-gutter-item">
-                    {c.selectedText && (
-                      <div className="comment-gutter-quote">
-                        “{c.selectedText.slice(0, 60)}
-                        {c.selectedText.length > 60 ? '…' : ''}”
-                      </div>
-                    )}
-                    <div className="comment-gutter-text">{c.comment}</div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* レビュースレッド */}
-          {(reviewItems.length > 0 || displaySaved.length > 0 || (responses && responses.length > 0)) && (
+          {(reviewItems.length > 0 || (responses && responses.length > 0)) && (
             <div className={`drawer-review-pane ${reviewPaneCollapsed ? 'collapsed' : ''}`}>
               <button
                 className="review-pane-header"
@@ -1076,22 +890,18 @@ export default function PreviewDrawer({
                 </span>
                 <span className="review-pane-title">レビュースレッド</span>
                 {reviewPaneCollapsed && (
-                  <span className="review-pane-collapsed-count">
-                    {openItemCount + displaySaved.length + (responses?.length || 0)}
-                  </span>
+                  <span className="review-pane-collapsed-count">{openItemCount + (responses?.length || 0)}</span>
                 )}
               </button>
               {!reviewPaneCollapsed && (
                 <div className="review-pane-thread">
-                  {/* 未送信コメント */}
+                  {/* 未送信の指摘 */}
                   {reviewItems
                     .filter((i) => !i.resolved)
                     .map((item, index) => (
-                      <div key={item.id} className={`review-pane-item ${item.kind === 'save' ? 'save' : ''}`}>
+                      <div key={item.id} className="review-pane-item">
                         <div className="review-pane-item-header">
-                          <span className="review-pane-num">
-                            #{index + 1} {item.kind === 'save' ? '（残す）' : '（送る）'}
-                          </span>
+                          <span className="review-pane-num">#{index + 1}</span>
                           <button
                             className="review-pane-remove"
                             onClick={() => removeItem(item.id)}
@@ -1115,8 +925,7 @@ export default function PreviewDrawer({
                           onChange={(e) => updateComment(item.id, e.target.value)}
                           onFocus={() => setEditingId(item.id)}
                           onKeyDown={(e) => {
-                            // Ctrl/Cmd+Enter = この欄を確定（送る＝本文へフォーカスを戻して次の行を選べる状態に /
-                            // 残す＝保存）。Ctrl/Cmd+Shift+Enter = 溜めた指摘を一括送信。通常の Enter は改行。
+                            // Ctrl/Cmd+Enter = この欄を確定（本文へフォーカスを戻して次の行を選べる状態に）。Ctrl/Cmd+Shift+Enter = 溜めた指摘を一括送信。通常の Enter は改行。
                             // Escape も確定と同じ扱いにし、document の「ドロワーを閉じる」には届かせない。
                             // Ctrl/Cmd+Shift+Backspace = この指摘欄ごと削除して本文へ戻る。
                             if (isDeleteItemShortcut(e)) {
@@ -1135,23 +944,10 @@ export default function PreviewDrawer({
                               confirmItem(item);
                             }
                           }}
-                          placeholder={
-                            item.kind === 'save'
-                              ? 'コメントを書く（送信されません / Ctrl+Enterで保存）...'
-                              : '指摘を入力...（Ctrl+Enterで確定 / Ctrl+Shift+Enterで一括送信）'
-                          }
+                          placeholder="指摘を入力...（Ctrl+Enterで確定 / Ctrl+Shift+Enterで一括送信）"
                           rows={2}
                           autoFocus={editingId === item.id}
                         />
-                        {item.kind === 'save' && (
-                          <button
-                            className="review-pane-edit-btn"
-                            onClick={() => saveComment(item.id)}
-                            disabled={!item.comment.trim()}
-                          >
-                            コメントを残す（保存）
-                          </button>
-                        )}
                       </div>
                     ))}
 
@@ -1174,39 +970,6 @@ export default function PreviewDrawer({
                       >
                         {unresolvedCount}件送信
                       </button>
-                    </div>
-                  )}
-
-                  {/* 残したcomment（送信せず保存）。ファイルプレビューは保存済み全件を表示。 */}
-                  {displaySaved.length > 0 && (
-                    <div className="review-thread-saved">
-                      <div className="review-thread-label">残したコメント（送信なし）</div>
-                      {displaySaved.map((c) => (
-                        <div key={c.id} className="review-pane-item saved">
-                          {c.persisted && onDeleteComment && (
-                            <div className="review-pane-item-header">
-                              <span className="review-pane-num saved">
-                                <TbMessage aria-hidden="true" />
-                              </span>
-                              <button
-                                className="review-pane-remove"
-                                onClick={() => onDeleteComment(c.id)}
-                                title="このコメントを削除"
-                                aria-label="このコメントを削除"
-                              >
-                                <TbX aria-hidden="true" />
-                              </button>
-                            </div>
-                          )}
-                          {c.selectedText && (
-                            <div className="review-pane-selected">
-                              {c.selectedText.slice(0, 80)}
-                              {c.selectedText.length > 80 ? '...' : ''}
-                            </div>
-                          )}
-                          <div className="review-pane-comment-sent">{c.comment}</div>
-                        </div>
-                      ))}
                     </div>
                   )}
 

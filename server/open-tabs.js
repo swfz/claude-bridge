@@ -2,7 +2,7 @@
 //
 // 保存先は <dataDir>/open-tabs.json で、中身は { tabs, panes, pending }。
 // - tabs:    ブリッジで開いているタブ（tmux / readonly）。ブリッジ ID も持ち、復元時に同じ ID で開き直す
-//            （activeSessionId・historyBoundary:<id>・threads-<id>.json がブリッジ ID に紐づいているため）
+//            （activeSessionId・historyBoundary:<id> がブリッジ ID に紐づいているため）
 // - panes:   tmux 上で動いている claude のスナップショット（ブリッジのタブにしていないものも含む）。
 //            tmux セッション名・window 名・window 番号を持ち、作り直すときに同じ場所へ置く
 // - pending: 起動時に「動いていない」と分かったもの（PC/WSL 再起動で tmux ごと消えた等）。

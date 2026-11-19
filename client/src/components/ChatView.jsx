@@ -39,7 +39,6 @@ import {
   TbFilePlus,
   TbGripHorizontal,
   TbLink,
-  TbMessage,
   TbPencil,
   TbPin,
   TbPinFilled,
@@ -432,22 +431,16 @@ export function MarkdownContent({ content, sessionCwd, onOpenPreview, onOpenFile
 }
 
 // サブエージェントのトランスクリプト（SubagentDrawer）からも使うので export する。
-// その場合 threads/comments は空、操作ハンドラは渡らない（readonly 表示）。
+// その場合は操作ハンドラが渡らない（閲覧専用の表示）。
 // 5 秒ごとのポーリング（subagent_tasks 等）で App が再描画されても本文を作り直さないよう memo する。
 // 親から渡す props は App 側で useCallback / state の参照を保っている前提
 export const ChatMessage = memo(function ChatMessage({
   message,
-  threads,
-  comments,
   sessionCwd,
-  onStartThread,
   onAddAnchoredReview,
-  onAddAnchoredComment,
-  onDeleteComment,
   onOpenPreview,
   onPreviewMarkdown,
   onOpenFileReview,
-  readonly,
   pickNumber,
   pickTarget,
   pickLine,
@@ -459,13 +452,11 @@ export const ChatMessage = memo(function ChatMessage({
   // 長い本文も最初から全文で出す（畳むのはホバーの「折りたたむ」か ← で手動）。
   // スキルの展開（SKILL.md の本文）とサブエージェント・他エージェントとのやり取りは人宛てではないので既定で畳む
   const [expanded, setExpanded] = useState(() => !HIDDEN_BODY_SENDERS.has(message.sender?.kind));
-  // 範囲選択時に出すアクションメニュー（レビューに追加 / コメントに残す / スレッド）
+  // 範囲選択時に出すアクションメニュー（レビューに追加）
   const [selMenu, setSelMenu] = useState(null);
-  // 選択後に本文（指摘/コメント）を書くノート入力ポップオーバー { mode, quote, top, left, text }
+  // 選択後に本文（指摘）を書くノート入力ポップオーバー { quote, top, left, text }
   const [noteDraft, setNoteDraft] = useState(null);
   const noteRef = useRef(null);
-  // 💬 マーカーのインラインコメント一覧の開閉
-  const [showInlineComments, setShowInlineComments] = useState(false);
   // 行ピックの 2 段目（#N.M）で出す、本文左のソース行番号バッジ [{line, top}]
   const bodyRef = useRef(null);
   const [lineBadges, setLineBadges] = useState([]);
@@ -644,12 +635,6 @@ export const ChatMessage = memo(function ChatMessage({
       </div>
     );
   }
-  const messageThreads = (threads || []).filter((t) => t.messageId === message.id);
-  // このメッセージ（uuid）に紐付いたコメント
-  const messageComments = (comments || []).filter(
-    (c) => c.anchor && c.anchor.messageUuid && c.anchor.messageUuid === message.uuid,
-  );
-
   // スキルの展開・エージェント間のやり取りは長さに関わらず畳める対象にし、畳んでいる間は本文を隠す（既定で畳むのは useState の初期値）
   const senderKind = message.sender?.kind;
   const isHiddenBody = HIDDEN_BODY_SENDERS.has(senderKind);
@@ -659,7 +644,7 @@ export const ChatMessage = memo(function ChatMessage({
   // 行を指しているあいだは折りたたまない（隠れた行のバッジを打っても見えないため）
   const shouldCollapse = isLong && !expanded && !lineMode;
 
-  // 範囲選択したら、選択範囲の上にアクションメニューを出す（即 Thread 化はしない）
+  // 範囲選択したら、選択範囲の上にアクションメニューを出す
   const handleTextSelect = () => {
     const selection = window.getSelection();
     const text = selection?.toString().trim();
@@ -675,17 +660,10 @@ export const ChatMessage = memo(function ChatMessage({
     }
   };
 
-  // 選択 → スレッド（従来どおり選択範囲で即開始）
-  const runSelAction = (fn) => {
-    if (selMenu) fn(selMenu.text);
-    window.getSelection()?.removeAllRanges();
-    setSelMenu(null);
-  };
-
-  // 選択 → レビュー/コメント: 選択を「対象（引用）」にしてノート入力へ。本文は別に書く。
-  const openNote = (mode) => {
+  // 選択 → レビュー: 選択を「対象（引用）」にしてノート入力へ。本文は別に書く。
+  const openNote = () => {
     if (!selMenu) return;
-    setNoteDraft({ mode, quote: selMenu.text, top: selMenu.top, left: selMenu.left, text: '' });
+    setNoteDraft({ quote: selMenu.text, top: selMenu.top, left: selMenu.left, text: '' });
     setSelMenu(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -725,11 +703,7 @@ export const ChatMessage = memo(function ChatMessage({
     const text = (noteDraft.text || '').trim();
     if (!text) return;
     const anchor = { type: 'message', messageUuid: message.uuid || null, quote: noteDraft.quote };
-    if (noteDraft.mode === 'review') {
-      onAddAnchoredReview?.({ anchor, text });
-    } else {
-      onAddAnchoredComment?.({ anchor, text });
-    }
+    onAddAnchoredReview?.({ anchor, text });
     setNoteDraft(null);
   };
 
@@ -775,15 +749,6 @@ export const ChatMessage = memo(function ChatMessage({
         ) : (
           pinned && <TbPinFilled className="chat-pinned-mark" aria-label="ピン留め済み" />
         )}
-        {messageComments.length > 0 && (
-          <button
-            className="comment-marker"
-            onClick={() => setShowInlineComments((v) => !v)}
-            title="このメッセージへのコメント"
-          >
-            <TbMessage aria-hidden="true" /> {messageComments.length}
-          </button>
-        )}
         {/* 操作はホバー時だけ右上に出す */}
         <div className="header-actions">
           {isLong && (
@@ -800,37 +765,9 @@ export const ChatMessage = memo(function ChatMessage({
               Preview
             </button>
           )}
-          {!isHuman && !readonly && onStartThread && (
-            <button className="btn-header-action" onClick={() => onStartThread(message.id, '')} title="スレッドを開始">
-              Thread
-            </button>
-          )}
         </div>
       </div>
 
-      {showInlineComments && messageComments.length > 0 && (
-        <div className="inline-comments">
-          {messageComments.map((c) => (
-            <div key={c.id} className="inline-comment-item">
-              {c.anchor?.quote && (
-                <div className="inline-comment-quote">
-                  “{c.anchor.quote.slice(0, 80)}
-                  {c.anchor.quote.length > 80 ? '…' : ''}”
-                </div>
-              )}
-              <div className="inline-comment-text">{c.text}</div>
-              <div className="inline-comment-meta">
-                <span>{new Date(c.timestamp).toLocaleString('ja-JP')}</span>
-                {onDeleteComment && (
-                  <button onClick={() => onDeleteComment(c.id)} title="削除">
-                    削除
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
       {message.toolUses && message.toolUses.length > 0 && (
         <div className="tool-uses">
           {message.toolUses.map((tool) => (
@@ -874,17 +811,13 @@ export const ChatMessage = memo(function ChatMessage({
         </div>
       )}
 
-      {selMenu && !noteDraft && (onAddAnchoredReview || onAddAnchoredComment || onStartThread) && (
+      {selMenu && !noteDraft && onAddAnchoredReview && (
         <div
           className="selection-menu"
           style={{ top: selMenu.top, left: selMenu.left }}
           onMouseDown={(e) => e.preventDefault()}
         >
-          {onAddAnchoredReview && <button onClick={() => openNote('review')}>レビューに追加</button>}
-          {onAddAnchoredComment && <button onClick={() => openNote('comment')}>コメントに残す</button>}
-          {!readonly && onStartThread && (
-            <button onClick={() => runSelAction((t) => onStartThread(message.id, t))}>スレッド</button>
-          )}
+          <button onClick={openNote}>レビューに追加</button>
         </div>
       )}
 
@@ -899,7 +832,7 @@ export const ChatMessage = memo(function ChatMessage({
           >
             <div className="selection-note-head" onPointerDown={handleNoteDragStart} title="ドラッグで移動">
               <TbGripHorizontal className="selection-note-grip" aria-hidden="true" />
-              {noteDraft.mode === 'review' ? 'レビュー（送る）' : 'コメント（残す）'}
+              レビュー（送る）
             </div>
             <div className="selection-note-quote">
               “{noteDraft.quote.slice(0, 80)}
@@ -918,17 +851,13 @@ export const ChatMessage = memo(function ChatMessage({
                   setNoteDraft(null);
                 }
               }}
-              placeholder={
-                noteDraft.mode === 'review'
-                  ? 'この箇所への指摘を書く（Cmd+Enterで追加）...'
-                  : 'この箇所へのコメントを書く（送信されません / Cmd+Enter）...'
-              }
+              placeholder="この箇所への指摘を書く（Cmd+Enterで追加）..."
               rows={3}
             />
             <div className="selection-note-actions">
               <button onClick={() => setNoteDraft(null)}>キャンセル</button>
               <button className="primary" onClick={saveNote} disabled={!noteDraft.text.trim()}>
-                {noteDraft.mode === 'review' ? 'レビューに追加' : 'コメントを残す'}
+                レビューに追加
               </button>
             </div>
           </div>,
@@ -946,30 +875,14 @@ export const ChatMessage = memo(function ChatMessage({
           <span className="expand-bar-count">{message.content.length.toLocaleString()} 文字</span>
         </button>
       )}
-
-      {messageThreads.length > 0 && (
-        <div className="inline-threads">
-          {messageThreads.map((t) => (
-            <div key={t.id} className={`inline-thread-badge ${t.resolved ? 'resolved' : ''}`}>
-              {t.resolved ? 'done' : 'open'} {t.selectedText.slice(0, 30)}
-              {t.selectedText.length > 30 ? '...' : ''}({t.replies.length} replies)
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 });
 
 export default function ChatView({
   messages,
-  threads,
-  comments,
   sessionCwd,
-  onStartThread,
   onAddAnchoredReview,
-  onAddAnchoredComment,
-  onDeleteComment,
   jumpToUuid,
   onJumpDone,
   onOpenPreview,
@@ -979,7 +892,6 @@ export default function ChatView({
   pins,
   onTogglePin,
   onOpenTaskNotice,
-  readonly,
   sessionId,
 }) {
   // 描画するメッセージ。WebFetch の結果（role: 'webfetch'）はリンク一覧のタイトル用で画面には出さないので、
@@ -1181,7 +1093,7 @@ export default function ChatView({
       ? pick.target == null || Number(pick.buffer) !== pick.target
       : pick.subTarget == null || Number(pick.sub) !== pick.subTarget;
 
-  // コメント一覧から指定の messageUuid へスクロール（ベストエフォート）
+  // Refs ドロワーなどから指定の messageUuid へスクロール（ベストエフォート）
   useEffect(() => {
     if (!jumpToUuid || !scrollRef.current) return;
     // 束に畳まれたツール呼び出しは個別の要素が無いので、束の見出しへ飛ぶ
@@ -1228,17 +1140,11 @@ export default function ChatView({
               <div key={msg.id}>
                 <ChatMessage
                   message={msg}
-                  threads={threads}
-                  comments={comments}
                   sessionCwd={sessionCwd}
-                  onStartThread={onStartThread}
                   onAddAnchoredReview={onAddAnchoredReview}
-                  onAddAnchoredComment={onAddAnchoredComment}
-                  onDeleteComment={onDeleteComment}
                   onOpenPreview={onOpenPreview}
                   onPreviewMarkdown={onPreviewMarkdown}
                   onOpenFileReview={onOpenFileReview}
-                  readonly={readonly}
                   // ピック中だけ番号を渡す（それ以外は undefined のままで memo を効かせる）
                   pickNumber={pick.active ? (pickNumbers.get(msg.uuid) ?? null) : undefined}
                   pickTarget={pick.active && pick.target != null && pickNumbers.get(msg.uuid) === pick.target}
