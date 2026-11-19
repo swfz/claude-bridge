@@ -79,6 +79,10 @@
     "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:65:30 [] -> [\"Stryker was here!\"]"
   },
+  "1buhsszve7j": {
+    "reason": "equivalent: getLine が undefined を返す行は走査範囲に無く、'' の分岐には到達しない",
+    "where": "server/session.js:113:56 '' -> 'Stryker was here!'"
+  },
   "1c2fgaa1g4u": {
     "reason": "equivalent: field !== 'Stryker was here!' is true whenever the original condition matters; an extra trailing empty record is always removed as a blank record",
     "where": "client/src/utils/delimited.js:81:17 '' -> 'Stryker was here!'"
@@ -110,6 +114,10 @@
   "1hnap7vg8wr": {
     "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
     "where": "client/src/utils/tabOrder.js:51:12 Array.isArray(raw) -> true"
+  },
+  "1i9doxhem9o": {
+    "reason": "equivalent: 置き換え後の文字列 'Stryker was here!' も空白と ! を含み /^[\\w-]+$/ に一致しないので、sessionId が空・未指定のときに同じメッセージで例外になる",
+    "where": "server/storage.js:63:39 '' -> 'Stryker was here!'"
   },
   "1jdqqki8drh": {
     "reason": "equivalent: dropping a last character that is not a newline does not change the number of newlines, so the line count is the same (a single char gives [''] = 1)",
@@ -275,6 +283,14 @@
     "reason": "equivalent: when i === -1, path.slice(0, i + 1) is '' and path.slice(i + 1) is path, same as the i < 0 branch",
     "where": "client/src/utils/diffView.js:78:10 i < 0 -> false"
   },
+  "23dbw2037w1": {
+    "reason": "equivalent: readFileSync(file, '') は Buffer を返し、JSON.parse は Buffer を文字列化して同じ結果を返す",
+    "where": "server/storage.js:20:53 'utf-8' -> ''"
+  },
+  "23hvu0wivqr": {
+    "reason": "equivalent: y は baseY..baseY+rows-1 の範囲だけを回し、その行は xterm のバッファに必ず存在するので getLine が undefined を返さない",
+    "where": "server/session.js:113:18 line -> true"
+  },
   "23mtvdq3qfe": {
     "reason": "equivalent: a sentinel string as a session has no slots (session.slots || []), so nothing is added",
     "where": "client/src/utils/calendar.js:229:37 [] -> [\"Stryker was here!\"]"
@@ -286,6 +302,10 @@
   "24zgz3avj0f": {
     "reason": "equivalent: at left === margin, setting left = margin changes nothing",
     "where": "client/src/utils/recentPeek.js:11:7 left < margin -> left <= margin"
+  },
+  "25grbo148v7": {
+    "reason": "equivalent: readFileSync(file, '') は Buffer を返し、JSON.parse は Buffer を文字列化して同じ結果を返す",
+    "where": "server/storage.js:36:50 'utf-8' -> ''"
   },
   "25kytrajlmn": {
     "reason": "equivalent: the placeholder string has no alive flag and is skipped, the same as iterating an empty list",
@@ -302,6 +322,10 @@
   "287ulgc71t4": {
     "reason": "equivalent: when resetAt is set the date is valid, so remaining is always a non-empty string ('now' at the latest)",
     "where": "client/src/utils/usageMeter.js:73:39 remaining -> true"
+  },
+  "28n7u2osdgf": {
+    "reason": "equivalent: 先頭の [\\s\\S]*? が空から伸びられるので、^ が無くても exec は必ず位置 0 から一致し、m[1] は同じになる",
+    "where": "server/session.js:76:15 /^([\\s\\S]*?)(\\r+)$/ -> /([\\s\\S]*?)(\\r+)$/"
   },
   "29bcibxlam7": {
     "reason": "equivalent: the placeholder string has no repository, so the if (pr.repository) guard skips it",
@@ -343,6 +367,10 @@
     "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
   },
+  "2gadf25fgtf": {
+    "reason": "equivalent: i === segs.length では segs[i] が undefined で、SENSITIVE_DIRS.has(undefined) も SUBDIRS の比較も偽になり結果が変わらない",
+    "where": "server/sensitive-paths.js:55:19 i < segs.length -> i <= segs.length"
+  },
   "2gb1iqdlgg7": {
     "reason": "equivalent: the fallback string does not start with '/', so normalizeRootInput returns null either way",
     "where": "client/src/utils/filerRoots.js:15:31 '' -> 'Stryker was here!'"
@@ -383,6 +411,10 @@
     "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
     "where": "client/src/utils/tabOrder.js:50:67 '[]' -> ''"
   },
+  "7722c1rmgp": {
+    "reason": "equivalent: draft が null/undefined なら .items が TypeError になり catch で同じ { items: [] } を返す",
+    "where": "server/storage.js:54:33 ?. -> ."
+  },
   "7jwqd9p23q": {
     "reason": "equivalent: indexes past the end read messages[i]?.contextUsage as undefined and are skipped, so the scan result is unchanged",
     "where": "client/src/utils/contextUsage.js:9:16 messages.length - 1 -> messages.length + 1"
@@ -390,6 +422,10 @@
   "8mrlkfqera": {
     "reason": "equivalent: fallback for a missing e.key; VIM_NAV_BY_KEY has no 'stryker was here!' entry, so the lookup is undefined as with '' and the result is null",
     "where": "client/src/utils/keys.js:58:54 '' -> 'Stryker was here!'"
+  },
+  "8t9lngw497": {
+    "reason": "equivalent: kill 後は _term を null にするので dispose の有無は呼び出し側から観測できない（リソース解放のみ）",
+    "where": "server/session.js:135:7 this._term.dispose(); -> ;"
   },
   "93n31vq41k": {
     "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
