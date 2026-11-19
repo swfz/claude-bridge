@@ -193,3 +193,56 @@ describe('activeChoiceOf', () => {
     assert.equal(activeChoiceOf(unread), unread);
   });
 });
+
+describe('working: 欠けた入力と境界', () => {
+  it('先頭のメッセージのツールも実行中として拾う', () => {
+    const t = { id: 't1', name: 'Bash' };
+    assert.equal(runningToolOf([{ role: 'assistant', toolUses: [t] }]), t);
+  });
+
+  it('欠けたメッセージ・結果・ツールが混ざっていても実行中のツールを拾う', () => {
+    const t = { id: 't2', name: 'Read' };
+    const messages = [
+      { role: 'human', timestamp: '2026-01-01T00:00:00Z' },
+      { role: 'assistant', toolUses: [t, null] },
+      null,
+      { role: 'toolresult', results: [null, { id: 'x' }] },
+    ];
+    assert.equal(runningToolOf(messages), t);
+  });
+
+  it('assistant 以外のメッセージのツールは見ない', () => {
+    assert.equal(runningToolOf([{ role: 'system', toolUses: [{ id: 't' }] }]), null);
+  });
+
+  it('turnStartOf: 一覧でなければ null、時刻の無い指示も null、欠けた要素は飛ばす', () => {
+    assert.equal(turnStartOf(null), null);
+    assert.equal(turnStartOf([{ role: 'human' }]), null);
+    assert.equal(
+      turnStartOf([{ role: 'human', timestamp: '2026-01-01T00:00:00Z' }, null]),
+      Date.parse('2026-01-01T00:00:00Z'),
+    );
+  });
+
+  it('status が waiting なら送信直後でも出さない', () => {
+    const now = 100_000;
+    assert.equal(workingStateOf({ status: 'waiting', messages: [], pendingSince: now - 100, now }), null);
+  });
+
+  it('busy で指示の時刻が無ければ、送信時刻ではなく経過時間なしにする', () => {
+    const now = 100_000;
+    assert.equal(workingStateOf({ status: 'busy', messages: [], pendingSince: now - 100, now }).since, null);
+    assert.equal(workingStateOf({ status: 'busy', messages: [], now }).since, null);
+  });
+
+  it('送信直後で指示の時刻がまだ無ければ、送信時刻から数える', () => {
+    const now = 100_000;
+    assert.equal(workingStateOf({ status: 'idle', messages: [], pendingSince: now - 100, now }).since, now - 100);
+  });
+
+  it('formatElapsed の繰り上がりの境界', () => {
+    assert.equal(formatElapsed(0), '0s');
+    assert.equal(formatElapsed(60_000), '1m 0s');
+    assert.equal(formatElapsed(3_600_000), '1h 0m');
+  });
+});

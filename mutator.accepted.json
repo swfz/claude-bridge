@@ -1,4 +1,8 @@
 {
+  "10lg2p7vgq0": {
+    "reason": "equivalent: the fallback element is a string whose ?.claudeSessionId is undefined, so isSensitive is false and nothing is counted",
+    "where": "client/src/utils/sensitiveSessions.js:64:29 [] -> [\"Stryker was here!\"]"
+  },
   "14jncac50z": {
     "reason": "equivalent: when state.groups is missing the extra 'g:undefined' entry in byKey is never reached: groupKeyOf rejects g: keys (no manual groups) and the returned manual list uses its own st.groups || []",
     "where": "client/src/utils/tabGroups.js:56:32 [] -> [\"Stryker was here!\"]"
@@ -15,9 +19,17 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:66:38 '' -> 'Stryker was here!'"
   },
+  "1agtw2kh8dy": {
+    "reason": "equivalent: indexes past the end read undefined, whose ?.id is undefined, so they are skipped",
+    "where": "client/src/utils/working.js:34:18 tools.length - 1 -> tools.length + 1"
+  },
   "1b0byu6nfze": {
     "reason": "equivalent: with nothing stored, JSON.parse('') throws and the catch returns EMPTY_STATE, the same value the null branch returns",
     "where": "client/src/utils/tabGroups.js:134:68 'null' -> ''"
+  },
+  "1bkpjtgn1yc": {
+    "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
+    "where": "client/src/utils/sensitiveSessions.js:65:30 [] -> [\"Stryker was here!\"]"
   },
   "1djfc4g0h10": {
     "reason": "equivalent: group keys always start with 'p:' or 'g:', so a collapsed set containing 'Stryker was here!' never matches any group",
@@ -27,25 +39,93 @@
     "reason": "equivalent: the default isHidden result is only negated in filter, and !undefined === !false",
     "where": "client/src/utils/tabGroups.js:191:57 false -> undefined"
   },
+  "1hnap7vg8wr": {
+    "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
+    "where": "client/src/utils/tabOrder.js:51:12 Array.isArray(raw) -> true"
+  },
+  "1jdqqki8drh": {
+    "reason": "equivalent: dropping a last character that is not a newline does not change the number of newlines, so the line count is the same (a single char gives [''] = 1)",
+    "where": "client/src/utils/toolLines.js:29:16 text.endsWith('\\n') -> true"
+  },
+  "1jy2k8tz9vg": {
+    "reason": "equivalent: indexes past the end read undefined, which is not a turn start, so they are skipped",
+    "where": "client/src/utils/working.js:44:16 messages.length - 1 -> messages.length + 1"
+  },
   "1k129uql7xl": {
     "reason": "equivalent: a truthy non-object primitive yields empty defaults for every field, the same content as EMPTY_STATE (only object identity differs, which no caller relies on)",
     "where": "client/src/utils/tabGroups.js:135:17 typeof raw !== 'object' -> false"
+  },
+  "1la8kv810kn": {
+    "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
+    "where": "client/src/utils/sensitiveSessions.js:32:67 '[]' -> ''"
+  },
+  "1lzvln3c213": {
+    "reason": "equivalent: the fallback tool is a string whose ?.id is undefined, so it is never returned as running",
+    "where": "client/src/utils/working.js:33:33 [] -> [\"Stryker was here!\"]"
   },
   "1mamhd0kgoz": {
     "reason": "equivalent: for null the property access throws and the catch returns EMPTY_STATE; for a non-object primitive every field falls back to its empty default, so the returned state has the same content (only object identity differs, which no caller relies on)",
     "where": "client/src/utils/tabGroups.js:135:9 !raw || typeof raw !== 'object' -> (!raw && typeof raw !== 'object')"
   },
+  "1riwol4zvs6": {
+    "reason": "equivalent: the fallback edit is a string; its ?.old_string/?.new_string are undefined so lineDiffStats adds 0/0",
+    "where": "client/src/utils/toolLines.js:62:67 [] -> [\"Stryker was here!\"]"
+  },
   "1rszyqlbbvz": {
     "reason": "equivalent: fallback for a missing e.code; 'Stryker was here!' does not match /^(?:Digit|Numpad)([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:56 '' -> 'Stryker was here!'"
+  },
+  "1segzl933xn": {
+    "reason": "equivalent: with turn 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'; other turns take the same branch",
+    "where": "client/src/utils/completionState.js:87:29 'ended' -> ''"
+  },
+  "1tm1yyvauye": {
+    "reason": "equivalent: when turn is 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'",
+    "where": "client/src/utils/completionState.js:87:20 turn !== 'ended' -> true"
+  },
+  "1uw1yz18vqb": {
+    "reason": "equivalent (assumes unique bridge ids): dropping a tab on itself removes it, the target is then not found, and it is reinserted at its original index",
+    "where": "client/src/utils/tabOrder.js:37:19 fromId === targetId -> false"
+  },
+  "1z6mh2ish97": {
+    "reason": "equivalent: TURN_LABELS.ended is never read; completionChecks uses the literal 'ターン終了' when turn === 'ended'",
+    "where": "client/src/utils/completionState.js:25:10 'ターン終了' -> ''"
+  },
+  "239z2ga5ry1": {
+    "reason": "equivalent: the fallback message is a string whose ?.role is not 'toolresult', so it is skipped and the index stays empty",
+    "where": "client/src/utils/toolLines.js:75:31 [] -> [\"Stryker was here!\"]"
+  },
+  "23d4w8og68a": {
+    "reason": "equivalent: when i === -1, path.slice(0, i + 1) is '' and path.slice(i + 1) is path, same as the i < 0 branch",
+    "where": "client/src/utils/diffView.js:78:10 i < 0 -> false"
+  },
+  "26j5skqqnv3": {
+    "reason": "equivalent: Date.parse('Stryker was here!') and Date.parse('') are both NaN, so timeOf returns null either way",
+    "where": "client/src/utils/working.js:11:40 '' -> 'Stryker was here!'"
+  },
+  "2b2uxun9ppg": {
+    "reason": "equivalent: timeOf is only called on messages that passed isTurnStart (role === 'human'), so m is never nullish",
+    "where": "client/src/utils/working.js:11:25 ?. -> ."
   },
   "2fdmx5k57y3": {
     "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
   },
+  "3pe1ar1ew5": {
+    "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
+    "where": "client/src/utils/sensitiveSessions.js:33:12 Array.isArray(raw) -> true"
+  },
+  "701c6s0p4f": {
+    "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
+    "where": "client/src/utils/tabOrder.js:50:67 '[]' -> ''"
+  },
   "8mrlkfqera": {
     "reason": "equivalent: fallback for a missing e.key; VIM_NAV_BY_KEY has no 'stryker was here!' entry, so the lookup is undefined as with '' and the result is null",
     "where": "client/src/utils/keys.js:58:54 '' -> 'Stryker was here!'"
+  },
+  "93n31vq41k": {
+    "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
+    "where": "client/src/utils/sensitiveSessions.js:66:29 [] -> [\"Stryker was here!\"]"
   },
   "box5f11qqk": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
@@ -63,6 +143,10 @@
     "reason": "equivalent: the greedy [^/]+ always stops right before '/' or the end of the string, so the lookahead (?=\\/|$) is always satisfied and dropping $ changes no match",
     "where": "client/src/utils/tabGroups.js:186:23 /^\\/(?:home|Users)\\/[^/]+(?=\\/|$)/ -> /^\\/(?:home|Users)\\/[^/]+(?=\\/|)/"
   },
+  "gug07pz3uo": {
+    "reason": "equivalent: with an empty Map every index.get misses, so no parts are pushed and the result is '' anyway",
+    "where": "client/src/utils/toolLines.js:87:45 index.size === 0 -> false"
+  },
   "hq0b8gesgh": {
     "reason": "equivalent: parseCwd returns parent null whenever project is empty, so the template also yields 'p:'",
     "where": "client/src/utils/tabGroups.js:23:7 !project -> false"
@@ -78,6 +162,22 @@
   "m36xgg0wef": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:42:41 '' -> 'Stryker was here!'"
+  },
+  "n7ysnadd2v": {
+    "reason": "equivalent: when i === -1, shown.slice(0, i + 1) is '' and shown.slice(i + 1) is shown, same as the i < 0 branch",
+    "where": "client/src/utils/toolLines.js:23:10 i < 0 -> false"
+  },
+  "nak07yomy3": {
+    "reason": "equivalent: the fallback result is a string whose ?.id is undefined, so nothing is added to resolved",
+    "where": "client/src/utils/working.js:29:36 [] -> [\"Stryker was here!\"]"
+  },
+  "owjdfg0l4u": {
+    "reason": "equivalent: endsWith('') is always true; dropping a last character that is not a newline does not change the line count",
+    "where": "client/src/utils/toolLines.js:29:30 '\\n' -> ''"
+  },
+  "su1um2enmy": {
+    "reason": "equivalent: indexes past the end read undefined, which is neither a turn start, a toolresult nor an assistant, so they are skipped",
+    "where": "client/src/utils/working.js:25:16 messages.length - 1 -> messages.length + 1"
   },
   "toivh7kb00": {
     "reason": "equivalent: values failing isPaletteIndex are never integers in 0..7, so leaving them in the fixed set never removes a palette index from free",
