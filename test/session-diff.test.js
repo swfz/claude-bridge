@@ -344,12 +344,37 @@ describe('readSessionDiff の未追跡ファイルと上限', () => {
       await chmod(join(dir, 'locked.txt'), 0o000);
       await mkdir(join(dir, 'nested'));
       await git(join(dir, 'nested'), 'init', '-q');
+      // 資格情報の置き場と同じ名前の入れ子リポジトリも、ファイルでないものとして扱う
+      await mkdir(join(dir, '.ssh'));
+      await git(join(dir, '.ssh'), 'init', '-q');
       const { files } = await readSessionDiff({ cwd: dir });
       const bin = { status: 'untracked', binary: true, additions: 0, deletions: 0, patch: '' };
-      assert.deepEqual(files, [
-        { path: 'locked.txt', ...bin },
-        { path: 'nested/', ...bin },
-      ]);
+      assert.deepEqual(
+        [...files].sort((a, b) => (a.path < b.path ? -1 : 1)),
+        [
+          { path: '.ssh/', ...bin },
+          { path: 'locked.txt', ...bin },
+          { path: 'nested/', ...bin },
+        ],
+      );
+    });
+  });
+
+  it('git が列挙したのに lstat できないファイルは中身なしのバイナリ扱いにする', async (ctx) => {
+    if (process.getuid?.() === 0) ctx.skip();
+    await withRepo(async (dir) => {
+      const sub = join(dir, 'noexec');
+      await mkdir(sub);
+      await writeFile(join(sub, 'f.txt'), 'x\n');
+      await chmod(sub, 0o444);
+      try {
+        const { files } = await readSessionDiff({ cwd: dir });
+        assert.deepEqual(files, [
+          { path: 'noexec/f.txt', status: 'untracked', binary: true, additions: 0, deletions: 0, patch: '' },
+        ]);
+      } finally {
+        await chmod(sub, 0o755);
+      }
     });
   });
 

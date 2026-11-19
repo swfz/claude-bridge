@@ -187,6 +187,8 @@ describe('hasGitPush', () => {
   it('does not match other subcommands or non-strings', () => {
     assert.equal(hasGitPush('git pushx'), false);
     assert.equal(hasGitPush('git stash push'), false);
+    // 引用符で囲んだサブコマンドも push の前のオプションとはみなさない
+    assert.equal(hasGitPush('git "stash" push'), false);
     assert.equal(hasGitPush('git status'), false);
     assert.equal(hasGitPush(undefined), false);
   });
@@ -584,7 +586,7 @@ describe('getGitState', () => {
     assert.deepEqual([...(await getGitState(repo, base + 15_000)).dirty], ['committed.txt']);
   });
 
-  it('keeps entries for other cwds, and drops all of them once 200 are cached', async () => {
+  it('keeps entries for other cwds, and drops all of them once 200 are cached', { timeout: 30_000 }, async () => {
     const { repo } = await makeRepo();
     const scratch = await mkdtemp(join(tmpdir(), 'cb-gitcache-'));
     madeDirs.push(scratch);

@@ -334,6 +334,13 @@ describe('listSlashCommands の静的な候補と読み取りの細部', () => {
     assert.equal(find(commands, 'notfold').description, '>x');
   });
 
+  it('折り返し記法の続きが空白だけの行しか無ければ本文の行を使う', async () => {
+    const claudeDir = join(root, 'claude');
+    await writeCommand(claudeDir, 'blank-fold.md', '---\ndescription: >\n  \n  \n---\n本文に逃げる\n');
+    const commands = await listSlashCommands({ claudeDir });
+    assert.equal(find(commands, 'blank-fold').description, '本文に逃げる');
+  });
+
   it('frontmatter に description が無ければ本文の見出し以外の最初の行、無ければ空文字', async () => {
     const claudeDir = join(root, 'claude');
     await writeCommand(claudeDir, 'body.md', '---\nname: body\n---\n\n# 見出し\n\n本文の最初\n次の行\n');

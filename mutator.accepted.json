@@ -1083,6 +1083,10 @@
     "reason": "equivalent: the preceding greedy \\s* consumes all whitespace, so m[2] never starts with whitespace, and trailing whitespace is removed by the following replace",
     "where": "server/choice-prompt.js:67:19 m[2].trim() -> m[2]"
   },
+  "2f36n66zr8f": {
+    "reason": "equivalent: if lstat fails and the catch falls through, readHead fails the same way and its catch returns the same untracked/binary entry",
+    "where": "server/session-diff.js:125:11 { return { ...empty, binary: true }; } -> {}"
+  },
   "2fdmx5k57y3": {
     "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
