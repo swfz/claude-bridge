@@ -177,124 +177,16 @@
   flex: 1;
   overflow: auto;
   position: relative;
-  /* 左にコメント 💬 マーカー用のガターを確保 */
+  /* 左に行ピックの行番号バッジ用のガターを確保 */
   padding-left: 26px;
 }
 
-/* コメント行マーカーのガター（本文と一緒にスクロールする） */
+/* 行番号バッジのガター（本文と一緒にスクロールする） */
 .comment-gutter {
   position: absolute;
   left: 0;
   top: 0;
   width: 26px;
-}
-
-.comment-gutter-marker {
-  position: absolute;
-  left: 1px;
-  transform: translateY(-2px);
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 11px;
-  line-height: 1;
-  padding: 2px 3px;
-  white-space: nowrap;
-}
-
-.comment-gutter-marker:hover {
-  border-color: var(--text-secondary);
-  color: var(--text-primary);
-}
-
-/* コメントが付いたブロック（markdown は行が見えないのでブロックを強調して位置を示す）。
-   行ピックの対象（outline 付き）と見分けられるよう、こちらは薄い下地＋左線だけ */
-.comment-anchored {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  border-left: 3px solid var(--text-secondary);
-  border-radius: 3px;
-  padding-left: 6px !important;
-}
-
-/* テーブル行は border-left が効きにくいのでセル背景＋左端アクセントで強調 */
-tr.comment-anchored {
-  background: none;
-  border-left: none;
-  padding-left: 0 !important;
-}
-
-tr.comment-anchored > td,
-tr.comment-anchored > th {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-}
-
-tr.comment-anchored > td:first-child,
-tr.comment-anchored > th:first-child {
-  box-shadow: inset 3px 0 0 var(--text-secondary);
-}
-
-.comment-gutter-popup {
-  position: absolute;
-  left: 30px;
-  z-index: 50;
-  width: 280px;
-  max-width: calc(100% - 40px);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-  padding: 6px;
-}
-
-.comment-gutter-popup-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-}
-
-.comment-gutter-popup-head button {
-  display: inline-flex;
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.comment-gutter-popup-head button:hover {
-  color: var(--text-primary);
-}
-
-.comment-gutter-item {
-  padding: 4px 0;
-  border-top: 1px solid var(--border);
-}
-
-.comment-gutter-item:first-of-type {
-  border-top: none;
-}
-
-.comment-gutter-quote {
-  font-size: 11px;
-  color: var(--text-secondary);
-  border-left: 2px solid var(--border);
-  padding-left: 6px;
-  margin-bottom: 3px;
-}
-
-.comment-gutter-text {
-  font-size: 13px;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 /* プレビュー本文だけをライトテーマに。配下の var() 参照をまとめて差し替える。
@@ -654,17 +546,6 @@ body.light-mode .drawer-iframe,
   background: color-mix(in srgb, var(--accent) 14%, var(--bg-secondary));
 }
 
-/* 「残す（送らない）」は控えめにして、送る方と見分ける */
-.selection-popup-btn.secondary {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border-color: var(--border);
-}
-
-.selection-popup-btn.secondary:hover {
-  background: var(--bg-surface);
-}
-
 /* レビューペイン */
 .drawer-review-pane {
   width: 560px;
@@ -769,14 +650,12 @@ body.light-mode .drawer-iframe,
   background: var(--warning);
 }
 
-/* 保存済み（残した）コメント・送信済みはドットを出さず薄く */
-.review-pane-num.saved,
+/* 送信済みはドットを出さず薄く */
 .review-pane-num.sent {
   color: var(--text-secondary);
   font-weight: 400;
 }
 
-.review-pane-num.saved::before,
 .review-pane-num.sent::before {
   content: none;
 }
@@ -851,27 +730,6 @@ body.light-mode .drawer-iframe,
 .review-pane-input:focus {
   outline: none;
   border-color: var(--accent);
-}
-
-.review-pane-edit-btn {
-  margin-top: 4px;
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.review-pane-edit-btn:hover:not(:disabled) {
-  background: var(--bg-surface);
-  color: var(--text-primary);
-}
-
-.review-pane-edit-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .review-pane-thread {
@@ -998,18 +856,6 @@ body.light-mode .drawer-iframe,
 .review-pane-response-body ol {
   padding-left: 16px;
   margin: 4px 0;
-}
-
-/* プレビューのファイル名横に出すコメント件数（コメントがあるときだけ。枠は付けない） */
-.drawer-comment-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: 8px;
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-secondary);
-  vertical-align: middle;
 }
 
 /* 本文はキーボードで行を選べるようフォーカス可能にしてあるが、枠線は出さない */

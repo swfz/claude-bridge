@@ -230,7 +230,7 @@ export class JsonlWatcher {
               bridgeSessionId: state.bridgeSessionId,
               role: 'human',
               ...humanMessageFields(record, text),
-              // JSONL の uuid を安定アンカー（コメント/レビューの位置）として伝播する
+              // JSONL の uuid を安定アンカー（ピン/レビューの位置）として伝播する
               uuid: record.uuid,
               timestamp: record.timestamp || '',
             });
