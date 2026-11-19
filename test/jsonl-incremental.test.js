@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, appendFile, rm, stat } from 'fs/promises';
+import { mkdtemp, writeFile, appendFile, rm, stat, utimes } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { createIncrementalReader } from '../server/jsonl-incremental.js';
@@ -127,6 +127,32 @@ describe('createIncrementalReader', () => {
     assert.deepEqual(await reader.read(file, fileStat), [1]);
     assert.deepEqual(await reader.read(file, { size: fileStat.size, mtimeMs: fileStat.mtimeMs + 1000 }), [1]);
     assert.equal(calls.prefilter, 1);
+  });
+
+  it('同じサイズのまま書きかけの行が完成して mtime が変わったら読み足す', async () => {
+    const file = await tmpFile();
+    const second = JSON.stringify({ kind: 'keep', n: 2 });
+    // 2 行目は改行の代わりに空白で終わっている（書きかけ）
+    await writeFile(file, line({ kind: 'keep', n: 1 }) + second + ' ');
+    const t1 = new Date('2026-10-01T00:00:00.000Z');
+    await utimes(file, t1, t1);
+    const { reader } = makeReader();
+    assert.deepEqual(await reader.read(file), [1]);
+
+    await writeFile(file, line({ kind: 'keep', n: 1 }) + second + '\n');
+    const t2 = new Date('2026-10-01T00:01:00.000Z');
+    await utimes(file, t2, t2);
+    assert.deepEqual(await reader.read(file), [1, 2]);
+  });
+
+  it('渡された fileStat のサイズが前回と同じなら、mtime が違っても読み足さない', async () => {
+    const file = await tmpFile();
+    await writeFile(file, line({ kind: 'keep', n: 1 }));
+    const fileStat = await stat(file);
+    const { reader } = makeReader();
+    assert.deepEqual(await reader.read(file, fileStat), [1]);
+    await appendFile(file, line({ kind: 'keep', n: 2 }));
+    assert.deepEqual(await reader.read(file, { size: fileStat.size, mtimeMs: fileStat.mtimeMs + 1 }), [1]);
   });
 
   it('渡された fileStat を信じ、前回と同じ stat なら中身が変わっていてもキャッシュを返す', async () => {

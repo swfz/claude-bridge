@@ -538,8 +538,10 @@ const assistantRecord = (content, extra = {}) => ({
 });
 
 describe('readFirstLines', () => {
-  it('1 行が読み込みの塊より長くても、maxLines 行で打ち切る', async () => {
-    // 1 行 100KB（読み込みの塊 64KB より長い）なので、塊単位ではなく行数で止まっているかが分かる
+  it('maxLines 行目を読み終えた時点で読み込みを止める（1 行が読み込みの塊 64KB より長い場合）', async () => {
+    // 注意: 読み込みの塊（64KB）に収まっている行は rl.close() の後も 'line' が届くので、
+    // 短い行のファイルでは maxLines を超えて返る（既知の挙動）。ここでは 1 行 100KB にして、
+    // 行数で止めていることだけを確かめる
     const lines = ['a', 'b', 'c', 'd'].map((ch) => JSON.stringify({ type: ch, pad: ch.repeat(100 * 1024) }));
     const file = await tmpJsonl(lines.join('\n') + '\n');
     const read = await readFirstLines(file, 2);

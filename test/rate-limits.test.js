@@ -186,6 +186,11 @@ describe('normalizeUsage (境界)', () => {
     assert.equal(usage.extras[1].resetsAt, null);
   });
 
+  it('プロパティを持っていても関数の rate_limits は null', () => {
+    const fn = Object.assign(() => {}, { five_hour: { used_percentage: 10 } });
+    assert.equal(normalizeUsage(fn), null);
+  });
+
   it('オブジェクトでない rate_limits は null', () => {
     assert.equal(normalizeUsage('five_hour'), null);
     assert.equal(normalizeUsage(42), null);

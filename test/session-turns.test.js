@@ -705,3 +705,46 @@ describe('readSessionTurns (コミットのあるターンが途中にある場�
     assert.deepEqual(turns[1].commits, [{ subject: 'feat: 後のターン', hash: stdout.trim() }]);
   });
 });
+
+describe('readSessionTurns (git を引かない場合)', () => {
+  const createdDirs = [];
+  afterEach(async () => {
+    while (createdDirs.length > 0) await rm(createdDirs.pop(), { recursive: true, force: true });
+  });
+
+  async function writeSession(text) {
+    const dir = await mkdtemp(join(tmpdir(), 'cb-turns-'));
+    createdDirs.push(dir);
+    const file = join(dir, 's.jsonl');
+    await writeFile(file, text);
+    return { dir, file };
+  }
+
+  it('ターンが 1 つも無ければ cwd があっても空で返す', async () => {
+    const { dir, file } = await writeSession(JSON.stringify({ type: 'ai-title', aiTitle: 'x' }) + '\n');
+    const { turns, totals } = await readSessionTurns(file, { cwd: dir });
+    assert.deepEqual(turns, []);
+    assert.equal(totals.prompts, 0);
+  });
+
+  it('コミットの無いセッションは、開始時刻が無くても cwd があっても git を引かずに返す', async () => {
+    const { dir, file } = await writeSession(
+      JSON.stringify({ type: 'user', message: { role: 'user', content: '時刻なしの指示' } }) + '\n',
+    );
+    const { turns } = await readSessionTurns(file, { cwd: dir });
+    assert.deepEqual(
+      turns.map((t) => [t.prompt, t.startedAt, t.commits]),
+      [['時刻なしの指示', '', []]],
+    );
+  });
+});
+
+describe('buildTurns (meta の user レコード)', () => {
+  it('meta の user レコードの本文に null ブロックがあっても落ちない', () => {
+    const turns = buildTurns([
+      prompt('作業'),
+      { type: 'user', isMeta: true, message: { role: 'user', content: [null, { type: 'text', text: 'meta' }] } },
+    ]);
+    assert.equal(turns.length, 1);
+  });
+});

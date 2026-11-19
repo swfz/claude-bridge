@@ -359,3 +359,10 @@ describe('readRecentExchanges (読み始めがちょうど改行のとき)', () 
     );
   });
 });
+
+describe('buildRecentExchanges (message が文字列のレコード)', () => {
+  it('message が文字列の指示もそのまま本文にする', () => {
+    const [ex] = buildRecentExchanges([{ type: 'user', message: '文字列の指示' }]);
+    assert.equal(ex.prompt, '文字列の指示');
+  });
+});
