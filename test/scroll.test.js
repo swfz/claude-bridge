@@ -11,6 +11,10 @@ describe('isScrolledToBottom', () => {
     assert.strictEqual(isScrolledToBottom({ scrollHeight: 1000, scrollTop: 760, clientHeight: 200 }), true);
   });
 
+  it('余りがちょうど閾値なら true', () => {
+    assert.strictEqual(isScrolledToBottom({ scrollHeight: 1000, scrollTop: 720, clientHeight: 200 }), true);
+  });
+
   it('閾値を超えて上にいれば false', () => {
     assert.strictEqual(isScrolledToBottom({ scrollHeight: 1000, scrollTop: 500, clientHeight: 200 }), false);
   });

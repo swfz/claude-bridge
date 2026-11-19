@@ -445,3 +445,257 @@ describe('linksToMarkdown', () => {
     assert.equal(linksToMarkdown(null), '');
   });
 });
+
+describe('extractUrls の記法の細部', () => {
+  it('http の Markdown リンク・山括弧も記法として拾う', () => {
+    assert.deepEqual(extractUrls('[a](http://example.com/a)'), [
+      { url: 'http://example.com/a', label: 'a', index: 0, end: 25 },
+    ]);
+    assert.deepEqual(extractUrls('<http://example.com/b>'), [
+      { url: 'http://example.com/b', label: null, index: 0, end: 22 },
+    ]);
+  });
+
+  it('タイトルの前の空白が複数でも Markdown リンクとして拾う', () => {
+    assert.deepEqual(urlsAndLabels(extractUrls('[a](https://example.com/a  "タイトル")')), [
+      { url: 'https://example.com/a', label: 'a' },
+    ]);
+  });
+
+  it('ラベルの前後の空白は落とし、空白だけのラベルは null', () => {
+    assert.deepEqual(urlsAndLabels(extractUrls('[ 公式 ](https://example.com/a) [ ](https://example.com/b)')), [
+      { url: 'https://example.com/a', label: '公式' },
+      { url: 'https://example.com/b', label: null },
+    ]);
+  });
+
+  it('末尾のセミコロン・コロンも剥がす', () => {
+    assert.deepEqual(
+      extractUrls('https://a.example.com/1; https://a.example.com/2:').map((h) => h.url),
+      ['https://a.example.com/1', 'https://a.example.com/2'],
+    );
+  });
+
+  it('角括弧は釣り合っていれば残し、余った閉じ角括弧は剥がす', () => {
+    assert.deepEqual(
+      extractUrls('https://a.example.com/q?x[0] と https://a.example.com/y]').map((h) => h.url),
+      ['https://a.example.com/q?x[0]', 'https://a.example.com/y'],
+    );
+  });
+
+  it('ホストの無い URL は拾わない', () => {
+    assert.deepEqual(extractUrls('https://. と https:///path'), []);
+    assert.deepEqual(extractUrls('https:///https://example.com'), []);
+  });
+});
+
+describe('contextOf の細部', () => {
+  const ctx = (text, url) => {
+    const hit = extractUrls(text).find((h) => h.url === url);
+    return contextOf(text, hit.index, hit.end);
+  };
+
+  it('文字列以外は null', () => {
+    assert.equal(contextOf(null, 0, 0), null);
+    assert.equal(contextOf(42, 0, 1), null);
+  });
+
+  it('行頭の空白だけなら目印の前に空白を付けない', () => {
+    assert.equal(ctx('説明\n   https://example.com/a に続く', 'https://example.com/a'), '〔リンク〕 に続く');
+  });
+
+  it('片側がちょうど 60 文字なら切らない', () => {
+    const text = `${'前'.repeat(60)} https://example.com/x ${'後'.repeat(60)}`;
+    assert.equal(ctx(text, 'https://example.com/x'), `${'前'.repeat(60)} 〔リンク〕 ${'後'.repeat(60)}`);
+  });
+
+  it('直前の行がちょうど 120 文字なら切らず、空白は 1 つに畳む', () => {
+    const line = 'あ'.repeat(120);
+    assert.equal(ctx(`${line}\nhttps://example.com/ref`, 'https://example.com/ref'), line);
+    assert.equal(ctx('  参考 \t 資料  \nhttps://example.com/ref', 'https://example.com/ref'), '参考 資料');
+  });
+});
+
+describe('extractUrlsFromToolInput の細部', () => {
+  it('長すぎる文字列は先頭だけを見る', () => {
+    const long = `${'x'.repeat(20000)} https://example.com/late`;
+    assert.deepEqual(extractUrlsFromToolInput({ command: long }), []);
+  });
+});
+
+describe('collectLinks の細部', () => {
+  const fetchUse = (url, prompt) => ({ id: 't', name: 'WebFetch', input: { url, prompt } });
+
+  it('URL として解釈できなければ host は空', () => {
+    const [link] = collectLinks([{ role: 'human', content: 'http://[::1 を見て' }]);
+    assert.equal(link.url, 'http://[::1');
+    assert.equal(link.host, '');
+  });
+
+  it('Artifact は http(s) で始まる文字列の url だけ拾う', () => {
+    const messages = [
+      { role: 'artifact', url: ['https://claude.ai/code/artifact/arr'], title: 'arr' },
+      { role: 'artifact', url: 'see https://claude.ai/code/artifact/x', title: 'x' },
+      { role: 'artifact', url: 'http://localhost/artifact', title: 'local' },
+    ];
+    assert.deepEqual(
+      collectLinks(messages).map((l) => l.url),
+      ['http://localhost/artifact'],
+    );
+  });
+
+  it('injected は human のときだけ system 扱いにする', () => {
+    const [link] = collectLinks([{ role: 'assistant', injected: true, content: 'https://example.com/a' }]);
+    assert.deepEqual(link.sources, ['assistant']);
+  });
+
+  it('名前の無いツールは tool:unknown', () => {
+    const [link] = collectLinks([
+      { role: 'assistant', toolUses: [{ input: { command: 'curl https://example.com/a' } }] },
+    ]);
+    assert.deepEqual(link.sources, ['tool:unknown']);
+  });
+
+  it('prompt を文脈にするのは WebFetch の url だけ', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        toolUses: [
+          { name: 'Other', input: { url: 'https://example.com/other', prompt: '他のツールの prompt' } },
+          fetchUse('https://example.com/a', '比較して https://example.com/b'),
+        ],
+      },
+    ];
+    const byUrl = Object.fromEntries(collectLinks(messages).map((l) => [l.url, l]));
+    assert.equal(byUrl['https://example.com/other'].context, null);
+    assert.equal(byUrl['https://example.com/a'].context, '比較して https://example.com/b');
+    assert.equal(byUrl['https://example.com/b'].context, '比較して 〔リンク〕');
+  });
+
+  it('prompt・input の無い WebFetch でも落ちない', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        toolUses: [{ name: 'WebFetch', input: { url: 'https://example.com/a' } }, { name: 'WebFetch' }],
+      },
+    ];
+    const [link] = collectLinks(messages);
+    assert.equal(link.url, 'https://example.com/a');
+    assert.equal(link.context, null);
+  });
+
+  it('ツール入力より後に出た応答の文脈を優先する', () => {
+    const messages = [
+      { role: 'assistant', toolUses: [{ name: 'Bash', input: { command: 'curl https://example.com/a' } }] },
+      { role: 'assistant', content: '応答の文脈 https://example.com/a' },
+      { role: 'assistant', toolUses: [{ name: 'Bash', input: { command: 'wget https://example.com/a' } }] },
+    ];
+    assert.equal(collectLinks(messages)[0].context, '応答の文脈 〔リンク〕');
+  });
+
+  it('文脈の無い最初の出現の後に文脈があれば、同じ出どころでもそれを採る', () => {
+    const messages = [
+      { role: 'assistant', toolUses: [{ name: 'Bash', input: { url: 'https://example.com/a' } }] },
+      { role: 'assistant', toolUses: [{ name: 'Bash', input: { command: 'curl https://example.com/a' } }] },
+    ];
+    assert.equal(collectLinks(messages)[0].context, 'curl 〔リンク〕');
+  });
+
+  it('最初の人の指示の文脈は後の応答で上書きしない', () => {
+    const messages = [
+      { role: 'human', content: '指示の文脈 https://example.com/a' },
+      { role: 'assistant', content: '応答の文脈 https://example.com/a' },
+    ];
+    assert.equal(collectLinks(messages)[0].context, '指示の文脈 〔リンク〕');
+  });
+
+  it('同じ出どころは sources に 1 回だけ載せる', () => {
+    const messages = [
+      { role: 'human', content: 'https://example.com/a' },
+      { role: 'human', content: 'https://example.com/a もう一度' },
+    ];
+    const [link] = collectLinks(messages);
+    assert.equal(link.count, 2);
+    assert.deepEqual(link.sources, ['human']);
+  });
+
+  it('最初の出現に uuid が無ければ、次に uuid のある出現を firstUuid にする', () => {
+    const messages = [
+      { role: 'human', content: 'https://example.com/a' },
+      { role: 'assistant', content: 'https://example.com/a', uuid: 'a1' },
+      { role: 'assistant', content: 'https://example.com/a', uuid: 'a2' },
+    ];
+    const [link] = collectLinks(messages);
+    assert.equal(link.firstUuid, 'a1');
+    assert.equal(link.lastUuid, 'a2');
+  });
+
+  it('timestamp が無ければ lastTimestamp は空文字', () => {
+    const messages = [
+      { role: 'human', content: 'https://example.com/a' },
+      { role: 'webfetch', url: 'https://example.com/w', title: 'W', code: 200 },
+    ];
+    assert.deepEqual(
+      collectLinks(messages).map((l) => l.lastTimestamp),
+      ['', ''],
+    );
+  });
+
+  it('webfetch の code が数値でなければ null', () => {
+    const messages = [
+      { role: 'webfetch', url: 'https://example.com/new', title: 'N' },
+      { role: 'assistant', toolUses: [fetchUse('https://example.com/a', 'x')] },
+      { role: 'webfetch', url: 'https://example.com/a', title: 'A', code: '200' },
+    ];
+    assert.deepEqual(
+      collectLinks(messages).map((l) => l.code),
+      [null, null],
+    );
+  });
+
+  it('webfetch は http(s) で始まる文字列の url だけ受け付ける', () => {
+    const messages = [
+      { role: 'webfetch', url: ['https://example.com/arr'], title: 'arr', code: 200 },
+      { role: 'webfetch', url: 'see https://example.com/x', title: 'x', code: 200 },
+      { role: 'webfetch', url: 'http://example.com/plain', title: 'plain', code: 200 },
+    ];
+    assert.deepEqual(
+      collectLinks(messages).map((l) => l.url),
+      ['http://example.com/plain'],
+    );
+  });
+
+  it('timestamp が同じなら後に出たものを先にする', () => {
+    const messages = [
+      { role: 'human', content: 'https://example.com/a', timestamp: 't' },
+      { role: 'human', content: 'https://example.com/b', timestamp: 't' },
+    ];
+    assert.deepEqual(
+      collectLinks(messages).map((l) => l.url),
+      ['https://example.com/b', 'https://example.com/a'],
+    );
+  });
+
+  it('片方にだけ timestamp があれば出現順で比べる', () => {
+    const messages = [
+      { role: 'human', content: 'https://example.com/a', timestamp: '2026-01-02T00:00:00Z' },
+      { role: 'human', content: 'https://example.com/b' },
+    ];
+    assert.deepEqual(
+      collectLinks(messages).map((l) => l.url),
+      ['https://example.com/b', 'https://example.com/a'],
+    );
+  });
+
+  it('timestamp が無い 3 件は後に出たものから並べる', () => {
+    const messages = [
+      { role: 'human', content: 'https://example.com/a' },
+      { role: 'human', content: 'https://example.com/b' },
+      { role: 'human', content: 'https://example.com/c' },
+    ];
+    assert.deepEqual(
+      collectLinks(messages).map((l) => l.url),
+      ['https://example.com/c', 'https://example.com/b', 'https://example.com/a'],
+    );
+  });
+});

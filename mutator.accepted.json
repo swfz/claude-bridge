@@ -1,7 +1,23 @@
 {
+  "10l4py29gx2": {
+    "reason": "equivalent: bucketDays(days, 'day') yields one bucket per day with the same metric values, so the stacked max is identical",
+    "where": "client/src/utils/heatmap.js:350:21 granularity === 'day' -> false"
+  },
   "10lg2p7vgq0": {
     "reason": "equivalent: the fallback element is a string whose ?.claudeSessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:64:29 [] -> [\"Stryker was here!\"]"
+  },
+  "114dqx61hv1": {
+    "reason": "equivalent: JSON.parse never yields a non-array with a filter method; calling filter on anything else throws and the catch returns []",
+    "where": "client/src/utils/filerRoots.js:73:12 Array.isArray(raw) -> true"
+  },
+  "11b77v49rnh": {
+    "reason": "equivalent: shiftDate is only used by weekStartOf as a bucket id compared for equality within bucketDays; the full ISO string compares the same way as its date part and never appears in the output",
+    "where": "client/src/utils/heatmap.js:203:10 new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice… -> new Date(Date.UTC(y, m - 1, d + delta)).toISOString()"
+  },
+  "13uls4qj4eg": {
+    "reason": "equivalent: tool input is JSON, so the non-string primitives that reach here (number, boolean) give Object.values() === [] just like the early return; only a function input could differ",
+    "where": "client/src/utils/links.js:149:7 typeof input !== 'object' -> false"
   },
   "14jncac50z": {
     "reason": "equivalent: when state.groups is missing the extra 'g:undefined' entry in byKey is never reached: groupKeyOf rejects g: keys (no manual groups) and the returned manual list uses its own st.groups || []",
@@ -11,6 +27,10 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:77:40 '' -> 'Stryker was here!'"
   },
+  "15wbd46ma9o": {
+    "reason": "equivalent: BARE_URL_RE excludes the full-width closing bracket, so a bare URL match can never end with it",
+    "where": "client/src/utils/links.js:12:73 '）' -> ''"
+  },
   "16fiaxayp3g": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:76:40 '' -> 'Stryker was here!'"
@@ -18,6 +38,10 @@
   "18xxspt59a5": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:66:38 '' -> 'Stryker was here!'"
+  },
+  "19mj04nklwn": {
+    "reason": "equivalent: on an empty string last is undefined, which is not in TRAILING_CHARS, so the loop breaks right away",
+    "where": "client/src/utils/links.js:32:10 result.length > 0 -> result.length >= 0"
   },
   "1agtw2kh8dy": {
     "reason": "equivalent: indexes past the end read undefined, whose ?.id is undefined, so they are skipped",
@@ -31,9 +55,17 @@
     "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:65:30 [] -> [\"Stryker was here!\"]"
   },
+  "1c6z7nsylv5": {
+    "reason": "equivalent: floor(len * ratio) is at most len - 1 for ratio < 1, so Math.min never picks the first argument",
+    "where": "client/src/utils/heatmap.js:87:44 positives.length - 1 -> positives.length + 1"
+  },
   "1djfc4g0h10": {
     "reason": "equivalent: group keys always start with 'p:' or 'g:', so a collapsed set containing 'Stryker was here!' never matches any group",
     "where": "client/src/utils/tabGroups.js:54:45 [] -> [\"Stryker was here!\"]"
+  },
+  "1dnlie1wne4": {
+    "reason": "equivalent: an empty array maps to an empty points list and joins to '' without the guard",
+    "where": "client/src/utils/heatmap.js:430:18 values.length === 0 -> false"
   },
   "1h9b3t97r56": {
     "reason": "equivalent: the default isHidden result is only negated in filter, and !undefined === !false",
@@ -55,6 +87,10 @@
     "reason": "equivalent: a truthy non-object primitive yields empty defaults for every field, the same content as EMPTY_STATE (only object identity differs, which no caller relies on)",
     "where": "client/src/utils/tabGroups.js:135:17 typeof raw !== 'object' -> false"
   },
+  "1k2n7jk2a4w": {
+    "reason": "equivalent: bucketIdOf and bucketLabel treat any value other than week/month as day, so the default '' behaves exactly like 'day'",
+    "where": "client/src/utils/heatmap.js:230:48 'day' -> ''"
+  },
   "1la8kv810kn": {
     "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
     "where": "client/src/utils/sensitiveSessions.js:32:67 '[]' -> ''"
@@ -63,9 +99,21 @@
     "reason": "equivalent: the fallback tool is a string whose ?.id is undefined, so it is never returned as running",
     "where": "client/src/utils/working.js:33:33 [] -> [\"Stryker was here!\"]"
   },
+  "1m88hajhjhq": {
+    "reason": "equivalent: an empty raw does not start with '/', so the absolute-path check returns null either way",
+    "where": "client/src/utils/filerRoots.js:16:7 !raw -> false"
+  },
   "1mamhd0kgoz": {
     "reason": "equivalent: for null the property access throws and the catch returns EMPTY_STATE; for a non-object primitive every field falls back to its empty default, so the returned state has the same content (only object identity differs, which no caller relies on)",
     "where": "client/src/utils/tabGroups.js:135:9 !raw || typeof raw !== 'object' -> (!raw && typeof raw !== 'object')"
+  },
+  "1n898o2c294": {
+    "reason": "equivalent: BARE_URL_RE excludes the closing corner bracket, so a bare URL match can never end with it",
+    "where": "client/src/utils/links.js:12:78 '」' -> ''"
+  },
+  "1qcc0c8adzo": {
+    "reason": "equivalent: JSON.parse('') throws and the catch returns [], the same as parsing '[]'",
+    "where": "client/src/utils/filerRoots.js:72:76 '[]' -> ''"
   },
   "1riwol4zvs6": {
     "reason": "equivalent: the fallback edit is a string; its ?.old_string/?.new_string are undefined so lineDiffStats adds 0/0",
@@ -75,6 +123,10 @@
     "reason": "equivalent: fallback for a missing e.code; 'Stryker was here!' does not match /^(?:Digit|Numpad)([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:56 '' -> 'Stryker was here!'"
   },
+  "1rz95dtzhgu": {
+    "reason": "equivalent: bucketDays(days, 'day') yields one bucket per day with the same metric values, so the bar max is identical",
+    "where": "client/src/utils/heatmap.js:362:21 granularity === 'day' -> false"
+  },
   "1segzl933xn": {
     "reason": "equivalent: with turn 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'; other turns take the same branch",
     "where": "client/src/utils/completionState.js:87:29 'ended' -> ''"
@@ -83,9 +135,21 @@
     "reason": "equivalent: when turn is 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'",
     "where": "client/src/utils/completionState.js:87:20 turn !== 'ended' -> true"
   },
+  "1uq6ewumu4q": {
+    "reason": "equivalent: BARE_URL_RE excludes the closing white corner bracket, so a bare URL match can never end with it",
+    "where": "client/src/utils/links.js:12:83 '』' -> ''"
+  },
   "1uw1yz18vqb": {
     "reason": "equivalent (assumes unique bridge ids): dropping a tab on itself removes it, the target is then not found, and it is reinserted at its original index",
     "where": "client/src/utils/tabOrder.js:37:19 fromId === targetId -> false"
+  },
+  "1w3fyjlr77a": {
+    "reason": "equivalent: Object.values of a JSON array is its elements in order, the same as the array itself",
+    "where": "client/src/utils/links.js:151:18 Array.isArray(input) -> false"
+  },
+  "1wekl6in5aq": {
+    "reason": "equivalent: the fallback string ends with '!', so the extension regex does not match and getExt still returns ''",
+    "where": "client/src/utils/previewExts.js:38:26 '' -> 'Stryker was here!'"
   },
   "1z6mh2ish97": {
     "reason": "equivalent: TURN_LABELS.ended is never read; completionChecks uses the literal 'ターン終了' when turn === 'ended'",
@@ -111,6 +175,18 @@
     "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
   },
+  "2gb1iqdlgg7": {
+    "reason": "equivalent: the fallback string does not start with '/', so normalizeRootInput returns null either way",
+    "where": "client/src/utils/filerRoots.js:15:31 '' -> 'Stryker was here!'"
+  },
+  "32hwu6c84l": {
+    "reason": "equivalent: with '' the day case goes through bucketDays(days, 'day'), which yields the same per-day metric values",
+    "where": "client/src/utils/heatmap.js:362:37 'day' -> ''"
+  },
+  "3bw6vo9p3d": {
+    "reason": "equivalent: contextSide only checks side === 'before'; any other value, including '', takes the after branch",
+    "where": "client/src/utils/links.js:125:55 'after' -> ''"
+  },
   "3pe1ar1ew5": {
     "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
     "where": "client/src/utils/sensitiveSessions.js:33:12 Array.isArray(raw) -> true"
@@ -127,9 +203,17 @@
     "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:66:29 [] -> [\"Stryker was here!\"]"
   },
+  "9tvvwco2jx": {
+    "reason": "equivalent: without the branch, '~' expands to home + '/' and the trailing slash is then removed, giving home",
+    "where": "client/src/utils/filerRoots.js:19:12 path === '~' -> false"
+  },
   "box5f11qqk": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
     "where": "client/src/utils/tabGroups.js:145:21 typeof raw.colors === 'object' -> true"
+  },
+  "do60oj4gb5": {
+    "reason": "equivalent: bucketTicks only special-cases 'month'; any other default takes the same day/week path",
+    "where": "client/src/utils/heatmap.js:274:52 'day' -> ''"
   },
   "e1hx4lek3q": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
@@ -150,6 +234,10 @@
   "hq0b8gesgh": {
     "reason": "equivalent: parseCwd returns parent null whenever project is empty, so the template also yields 'p:'",
     "where": "client/src/utils/tabGroups.js:23:7 !project -> false"
+  },
+  "iytu4kbcvj": {
+    "reason": "equivalent: raw is trimmed and non-empty, so path === '' is never true and '~' still expands to home via the other branch and trailing-slash removal",
+    "where": "client/src/utils/filerRoots.js:19:21 '~' -> ''"
   },
   "l8a2ybil5f": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
@@ -175,6 +263,14 @@
     "reason": "equivalent: endsWith('') is always true; dropping a last character that is not a newline does not change the line count",
     "where": "client/src/utils/toolLines.js:29:30 '\\n' -> ''"
   },
+  "s74n479wqs": {
+    "reason": "equivalent: with 0 or 1 week buckets the baseline (all but the last bucket) is empty, so the next guard returns null anyway",
+    "where": "client/src/utils/heatmap.js:397:7 weeks.length < 2 -> false"
+  },
+  "sgrwg6j4hr": {
+    "reason": "equivalent: the placeholder label is always overwritten by bucketLabel before bucketDays returns",
+    "where": "client/src/utils/heatmap.js:242:16 '' -> 'Stryker was here!'"
+  },
   "su1um2enmy": {
     "reason": "equivalent: indexes past the end read undefined, which is neither a turn start, a toolresult nor an assistant, so they are skipped",
     "where": "client/src/utils/working.js:25:16 messages.length - 1 -> messages.length + 1"
@@ -183,8 +279,20 @@
     "reason": "equivalent: values failing isPaletteIndex are never integers in 0..7, so leaving them in the fixed set never removes a palette index from free",
     "where": "client/src/utils/tabGroups.js:202:25 list.map((g) => colors?.[g.key]).filter(isPaletteIndex) -> list.map((g) => colors?.[g.key])"
   },
+  "wlwnfzn3oh": {
+    "reason": "equivalent: with '' the day case goes through bucketDays(days, 'day'), which yields the same per-day metric values",
+    "where": "client/src/utils/heatmap.js:350:37 'day' -> ''"
+  },
   "wt8ty3lrmk": {
     "reason": "equivalent: for null the property access throws and the catch returns EMPTY_STATE; for a non-object primitive every field falls back to its empty default, so the returned state has the same content (only object identity differs, which no caller relies on)",
     "where": "client/src/utils/tabGroups.js:135:9 !raw || typeof raw !== 'object' -> false"
+  },
+  "xoy4ze0gko": {
+    "reason": "equivalent: contextOf is only called with ranges from extractUrls; text[start] and text[start+1] are inside the URL or link notation and never a newline, so lastIndexOf finds the same line start",
+    "where": "client/src/utils/links.js:120:44 start - 1 -> start + 1"
+  },
+  "z00ji2ilrk": {
+    "reason": "equivalent: max === 0 is already caught by !max, so <= 0 and < 0 differ on no input",
+    "where": "client/src/utils/heatmap.js:305:15 max <= 0 -> max < 0"
   }
 }
