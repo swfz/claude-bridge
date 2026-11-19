@@ -21,6 +21,7 @@ pnpm setup:statusline  # レート制限表示用の statusLine tee を ~/.claud
 pnpm run dev:client    # Vite dev server（クライアントのホットリロード開発用。API はサーバー側を別途起動）
 pnpm run lint          # ESLint（CI でも実行）
 pnpm run format:check  # Prettier の整形チェック（CI でも実行）。整形するときは pnpm run format
+pnpm mutation --include <file>  # ミューテーションテスト（@mizchi/mutator）。対象を絞って使う（「テスト」の節）
 # コミット時は lefthook(lefthook.yml)がステージしたファイルに ESLint と Prettier --check をかける。
 # フックは pnpm install の prepare で .git/hooks に入る(core.hooksPath を設定している環境では入れない。そちらのフックから lefthook を呼ぶ)
 ```
@@ -418,3 +419,12 @@ pnpm test
 - ユニットテストは純粋関数から。外部依存は `vi.mock` でモック
 - ファイル監視のテストは `tmpdir` + 実ファイル書き込みで
 - WebSocket テストは `ws` ライブラリで軽量サーバーを立てて結合テスト
+
+### ミューテーションテスト（pnpm mutation）
+
+`@mizchi/mutator` でコードを少しずつ書き換え（`>=` → `>` など）、テストが落ちるかを見る。カバレッジでは分からない「実行しているが検証していない」箇所が分かるので、リファクタリングの前後やテストを足すときに使う。
+
+- 全体は重いので対象を絞る: `pnpm mutation --include client/src/utils/numberPick.js`（1 ファイル数十秒）、`pnpm mutation --since main`（差分だけ）
+- 設定は `mutator.config.js`（対象は `server/**/*.js` と `client/src/utils/**/*.js`、`server/index.js` は除外）。キャッシュとレポートは `.mutator/`（git 管理外）
+- 生き残ったミュータントの一覧とキーは `--reporter agent`。意味の変わらない（等価な）ものは `npx mutator accept <key> --reason "..."` で `mutator.accepted.json` に記録する
+- CI では回さない

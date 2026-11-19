@@ -18,7 +18,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "git config --get core.hooksPath >/dev/null || lefthook install"
+    "prepare": "git config --get core.hooksPath >/dev/null || lefthook install",
+    "mutation": "mutator"
   },
   "dependencies": {
     "@xterm/headless": "^6.0.0",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@mizchi/mutator": "0.2.0",
     "@playwright/test": "1.65.0",
     "@vitest/coverage-v8": "5.1.0",
     "eslint": "10.14.0",
