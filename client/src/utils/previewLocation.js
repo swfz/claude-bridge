@@ -5,28 +5,34 @@
 
 // rootEl 配下のテキストノードを文書順に走査し、指定 (node, offsetInNode) までの
 // 累積文字数を返す。rootEl が node を含まない場合は -1。
+// Range.startContainer は要素にもなり得る（トリプルクリックなど）。そのときの位置は
+// 「node の offsetInNode 番目の子の直前」で、子が無ければ（数を超えていても）node の末尾。
 export function getRootTextOffset(rootEl, node, offsetInNode) {
   if (!rootEl || !node || !rootEl.contains(node)) return -1;
-  // node がテキストノードでない場合は、その node の子の先頭から offsetInNode 番目までの
-  // テキスト長を加算する必要がある。Range.startContainer は要素になり得るため対応する。
   if (node.nodeType !== Node.TEXT_NODE) {
-    let total = 0;
-    const children = Array.from(node.childNodes).slice(0, offsetInNode);
-    for (const c of children) total += textLengthOf(c);
-    return getRootTextOffset(rootEl, node, 0) + total;
+    const child = node.childNodes[offsetInNode];
+    // その位置以降にある最初のテキストノードの手前までの文字数。無ければ root 全体の文字数
+    const isAtOrAfter = child
+      ? (text) => text === child || Boolean(child.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING)
+      : (text) =>
+          !node.contains(text) && Boolean(node.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING);
+    return textLengthBefore(rootEl, isAtOrAfter);
   }
+  const offset = textLengthBefore(rootEl, (text) => text === node, true);
+  return offset < 0 ? -1 : offset + offsetInNode;
+}
+
+// rootEl 配下のテキストノードを文書順に辿り、isTarget を満たす最初のテキストノードより前の文字数を返す。
+// 見つからなければ、notFoundAsMissing なら -1、そうでなければ全体の文字数。
+function textLengthBefore(rootEl, isTarget, notFoundAsMissing = false) {
   const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, null);
   let total = 0;
   let current;
   while ((current = walker.nextNode())) {
-    if (current === node) return total + offsetInNode;
+    if (isTarget(current)) return total;
     total += current.nodeValue.length;
   }
-  return -1;
-}
-
-function textLengthOf(node) {
-  return node.nodeType === Node.TEXT_NODE ? node.nodeValue.length : node.textContent.length;
+  return notFoundAsMissing ? -1 : total;
 }
 
 // テキスト先頭から offset 位置の {line, column}（共に 1-based）。
