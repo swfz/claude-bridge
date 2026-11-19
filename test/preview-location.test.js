@@ -385,6 +385,62 @@ describe('getRootTextOffset（DOM）', () => {
     assert.equal(getRootTextOffset(root, new FakeText('outside'), 0), -1);
   });
 
+  describe('node が要素（トリプルクリックなどで Range の端が要素になる）', () => {
+    // root = <div><p>ab</p>cd<span>ef</span></div>
+    it('要素の子の途中なら、要素の先頭までの文字数に offsetInNode 個の子の文字数を足す', () => {
+      const { root } = build();
+      assert.equal(getRootTextOffset(root, root, 1), 2);
+      assert.equal(getRootTextOffset(root, root, 2), 4);
+    });
+
+    it('offsetInNode が 0 なら要素の先頭（root 自身なら 0）', () => {
+      const { root } = build();
+      const span = root.childNodes[2];
+      assert.equal(getRootTextOffset(root, root, 0), 0);
+      assert.equal(getRootTextOffset(root, span, 0), 4);
+    });
+
+    it('offsetInNode が子の数と同じなら要素の末尾', () => {
+      const { root } = build();
+      const p = root.childNodes[0];
+      assert.equal(getRootTextOffset(root, p, 1), 2);
+      assert.equal(getRootTextOffset(root, root, 3), 6);
+    });
+
+    it('offsetInNode が子の数を超えても要素の末尾として扱う', () => {
+      const { root } = build();
+      const p = root.childNodes[0];
+      assert.equal(getRootTextOffset(root, p, 5), 2);
+      assert.equal(getRootTextOffset(root, root, 99), 6);
+    });
+
+    it('空の要素は後ろに来る最初のテキストの位置、後ろにも無ければ root 全体の文字数', () => {
+      const middle = el('br');
+      const last = el('hr');
+      const root = el('div', 'ab', middle, 'cd', last);
+      assert.equal(getRootTextOffset(root, middle, 0), 2);
+      assert.equal(getRootTextOffset(root, middle, 1), 2);
+      assert.equal(getRootTextOffset(root, last, 0), 4);
+    });
+
+    it('ネストした要素でも子孫のテキストを数える', () => {
+      // <div>x<section><p>ab</p><p><em>cd</em>ef</p></section>gh</div>
+      const inner = el('p', el('em', 'cd'), 'ef');
+      const section = el('section', el('p', 'ab'), inner);
+      const root = el('div', 'x', section, 'gh');
+      assert.equal(getRootTextOffset(root, section, 0), 1);
+      assert.equal(getRootTextOffset(root, section, 1), 3);
+      assert.equal(getRootTextOffset(root, section, 2), 7);
+      assert.equal(getRootTextOffset(root, inner, 1), 5);
+      assert.equal(getRootTextOffset(root, inner.childNodes[0], 0), 3);
+    });
+
+    it('要素の子がテキストノードでも、その子の先頭を指す', () => {
+      const root = el('div', 'ab', 'cd');
+      assert.equal(getRootTextOffset(root, root, 1), 2);
+    });
+  });
+
   it('root 自身がテキストノードなら（走査対象が無いので）-1', () => {
     const t = new FakeText('abc');
     assert.equal(getRootTextOffset(t, t, 1), -1);
