@@ -19,6 +19,10 @@
     "reason": "equivalent: a sentinel string as a session has no slots, so buildRuns(undefined) yields no runs and no segment is produced",
     "where": "client/src/utils/calendar.js:113:37 [] -> [\"Stryker was here!\"]"
   },
+  "12gl9342ay5": {
+    "reason": "equivalent: when resetAt is set the date is valid, so remaining is always a non-empty string and the '' branch is never taken",
+    "where": "client/src/utils/usageMeter.js:73:73 '' -> 'Stryker was here!'"
+  },
   "13iabbwu8n7": {
     "reason": "equivalent: at d = 7, starts[8] is undefined so ms < undefined is false and totals[7] is never written",
     "where": "client/src/utils/calendar.js:234:23 d < totals.length -> d <= totals.length"
@@ -67,9 +71,17 @@
     "reason": "equivalent: with nothing stored, JSON.parse('') throws and the catch returns EMPTY_STATE, the same value the null branch returns",
     "where": "client/src/utils/tabGroups.js:134:68 'null' -> ''"
   },
+  "1bemfwq5vla": {
+    "reason": "equivalent: ms === 0 is already caught by !ms, so <= 0 and < 0 differ on no input that reaches the check",
+    "where": "client/src/utils/sessionTurns.js:7:14 ms <= 0 -> ms < 0"
+  },
   "1bkpjtgn1yc": {
     "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:65:30 [] -> [\"Stryker was here!\"]"
+  },
+  "1c2fgaa1g4u": {
+    "reason": "equivalent: field !== 'Stryker was here!' is true whenever the original condition matters; an extra trailing empty record is always removed as a blank record",
+    "where": "client/src/utils/delimited.js:81:17 '' -> 'Stryker was here!'"
   },
   "1c6z7nsylv5": {
     "reason": "equivalent: floor(len * ratio) is at most len - 1 for ratio < 1, so Math.min never picks the first argument",
@@ -103,6 +115,10 @@
     "reason": "equivalent: dropping a last character that is not a newline does not change the number of newlines, so the line count is the same (a single char gives [''] = 1)",
     "where": "client/src/utils/toolLines.js:29:16 text.endsWith('\\n') -> true"
   },
+  "1jiczj7khdt": {
+    "reason": "equivalent: splitting on single whitespace only adds empty terms, which filter((term) => term.length > 0) removes",
+    "where": "client/src/utils/sessionSearch.js:23:12 /[\\s\\u3000]+/ -> /[\\s\\u3000]/"
+  },
   "1jy2k8tz9vg": {
     "reason": "equivalent: indexes past the end read undefined, which is not a turn start, so they are skipped",
     "where": "client/src/utils/working.js:44:16 messages.length - 1 -> messages.length + 1"
@@ -127,6 +143,10 @@
     "reason": "equivalent: the sentinel string slot gives slot[1]+slot[2] = 'tr', and 'tr' > 0 is false, so it is filtered out exactly like an empty list",
     "where": "client/src/utils/calendar.js:44:32 [] -> [\"Stryker was here!\"]"
   },
+  "1lt1e8cfkis": {
+    "reason": "equivalent: removing claude- elsewhere only drops a token that is neither a family name nor a 1-2 digit version, so the output is the same",
+    "where": "client/src/utils/modelLabel.js:15:44 /^claude-/ -> /claude-/"
+  },
   "1lzvln3c213": {
     "reason": "equivalent: the fallback tool is a string whose ?.id is undefined, so it is never returned as running",
     "where": "client/src/utils/working.js:33:33 [] -> [\"Stryker was here!\"]"
@@ -143,6 +163,14 @@
     "reason": "equivalent: BARE_URL_RE excludes the closing corner bracket, so a bare URL match can never end with it",
     "where": "client/src/utils/links.js:12:78 '」' -> ''"
   },
+  "1pipvett5vx": {
+    "reason": "equivalent: new Date(undefined) is an invalid date, so formatClock returns null through the NaN check anyway",
+    "where": "client/src/utils/usageMeter.js:26:23 iso === undefined -> false"
+  },
+  "1q4cphcvuqf": {
+    "reason": "equivalent: when prevStatus is undefined the next check prevStatus === 'busy' is false anyway, so the session is skipped either way",
+    "where": "client/src/utils/attention.js:47:9 prevStatus === undefined -> false"
+  },
   "1qcc0c8adzo": {
     "reason": "equivalent: JSON.parse('') throws and the catch returns [], the same as parsing '[]'",
     "where": "client/src/utils/filerRoots.js:72:76 '[]' -> ''"
@@ -155,9 +183,21 @@
     "reason": "equivalent: fallback for a missing e.code; 'Stryker was here!' does not match /^(?:Digit|Numpad)([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:56 '' -> 'Stryker was here!'"
   },
+  "1rxv7jr3xih": {
+    "reason": "equivalent: with sessions missing, the placeholder string has no alive/id, so it is filtered out of aliveIds and skipped in the loop exactly like an empty list",
+    "where": "client/src/utils/attention.js:22:28 [] -> [\"Stryker was here!\"]"
+  },
   "1rz95dtzhgu": {
     "reason": "equivalent: bucketDays(days, 'day') yields one bucket per day with the same metric values, so the bar max is identical",
     "where": "client/src/utils/heatmap.js:362:21 granularity === 'day' -> false"
+  },
+  "1s0dc6es0dl": {
+    "reason": "equivalent: with start < 0, segments[start] is undefined and never equals a marker, so the marker does not match anyway",
+    "where": "client/src/utils/cwdLabel.js:26:11 start < 0 -> false"
+  },
+  "1s23o3rwpn": {
+    "reason": "equivalent: 8-digit date tokens never match the family regex nor the 1-2 digit version regex, so filtering them out first changes nothing",
+    "where": "client/src/utils/modelLabel.js:16:18 s.split('-').filter((t) => !/^\\d{8}$/.test(t)) -> s.split('-')"
   },
   "1segzl933xn": {
     "reason": "equivalent: with turn 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'; other turns take the same branch",
@@ -183,9 +223,17 @@
     "reason": "equivalent: the fallback string ends with '!', so the extension regex does not match and getExt still returns ''",
     "where": "client/src/utils/previewExts.js:38:26 '' -> 'Stryker was here!'"
   },
+  "1x4xdihf8oo": {
+    "reason": "equivalent: makes the trailing-record condition always true; the only extra record produced is a single empty field, which the blank-record trim removes",
+    "where": "client/src/utils/delimited.js:81:23 cells.length > 0 -> cells.length >= 0"
+  },
   "1xaoaolxkz6": {
     "reason": "equivalent: unreachable; pos = found + 1 <= length always holds, so the loop only exits through its returns",
     "where": "client/src/utils/previewLocation.js:85:10 -1 -> +1"
+  },
+  "1y0xxmthpdc": {
+    "reason": "equivalent: body.slice(0, MAX_TABLE_ROWS) equals body when body has at most MAX_TABLE_ROWS rows",
+    "where": "client/src/utils/delimited.js:89:26 truncated -> true"
   },
   "1yvjp69w1hq": {
     "reason": "equivalent: offset 0 also yields {line: 1, column: 1} through the normal path",
@@ -195,9 +243,29 @@
     "reason": "equivalent: TURN_LABELS.ended is never read; completionChecks uses the literal 'ターン終了' when turn === 'ended'",
     "where": "client/src/utils/completionState.js:25:10 'ターン終了' -> ''"
   },
+  "200uz498wwn": {
+    "reason": "equivalent: this loop runs only when no block has x.line === line (exact matches return earlier), so <= and < select the same block",
+    "where": "client/src/utils/sourceBlocks.js:30:9 x.line <= line -> x.line < line"
+  },
   "215s1jfeehy": {
     "reason": "equivalent: headings after the node in document order neither have FOLLOWING set nor equal the node, so continuing the loop never changes last",
     "where": "client/src/utils/previewLocation.js:101:12 { // 後続の見出しに来たら打ち切り break; } -> {}"
+  },
+  "21ilzlb2ydv": {
+    "reason": "equivalent: Date.parse of the placeholder is NaN just like Date.parse(''), and both fall back to 0",
+    "where": "client/src/utils/pins.js:19:68 '' -> 'Stryker was here!'"
+  },
+  "21kzqpo352o": {
+    "reason": "equivalent: the placeholder summary matches none of the Monitor/Agent/Background patterns, so the kind is 'other' just like for ''",
+    "where": "client/src/utils/taskNotifications.js:8:36 '' -> 'Stryker was here!'"
+  },
+  "22w9o6qr67r": {
+    "reason": "equivalent: the placeholder text for null has no NUL and no U+FFFD, so looksBinary returns false just like for ''",
+    "where": "client/src/utils/binaryText.js:14:31 '' -> 'Stryker was here!'"
+  },
+  "2359pfindo5": {
+    "reason": "equivalent: the placeholder string has no alive flag, so the alive filter removes it, the same as an empty tab list",
+    "where": "client/src/utils/runningSessions.js:46:35 [] -> [\"Stryker was here!\"]"
   },
   "239z2ga5ry1": {
     "reason": "equivalent: the fallback message is a string whose ?.role is not 'toolresult', so it is skipped and the index stays empty",
@@ -211,6 +279,18 @@
     "reason": "equivalent: a sentinel string as a session has no slots (session.slots || []), so nothing is added",
     "where": "client/src/utils/calendar.js:229:37 [] -> [\"Stryker was here!\"]"
   },
+  "24u5ctkinwu": {
+    "reason": "equivalent: tokens ending in 8 digits are neither a family name nor a 1-2 digit version, so dropping them changes nothing",
+    "where": "client/src/utils/modelLabel.js:16:46 /^\\d{8}$/ -> /\\d{8}$/"
+  },
+  "24zgz3avj0f": {
+    "reason": "equivalent: at left === margin, setting left = margin changes nothing",
+    "where": "client/src/utils/recentPeek.js:11:7 left < margin -> left <= margin"
+  },
+  "25kytrajlmn": {
+    "reason": "equivalent: the placeholder string has no alive flag and is skipped, the same as iterating an empty list",
+    "where": "client/src/utils/notifications.js:9:28 [] -> [\"Stryker was here!\"]"
+  },
   "25qd7ayohbs": {
     "reason": "equivalent: leading/trailing whitespace only produces '' terms, which filter(Boolean) drops",
     "where": "client/src/utils/recentDirs.js:25:17 (query || '').trim() -> (query || '')"
@@ -218,6 +298,18 @@
   "26j5skqqnv3": {
     "reason": "equivalent: Date.parse('Stryker was here!') and Date.parse('') are both NaN, so timeOf returns null either way",
     "where": "client/src/utils/working.js:11:40 '' -> 'Stryker was here!'"
+  },
+  "287ulgc71t4": {
+    "reason": "equivalent: when resetAt is set the date is valid, so remaining is always a non-empty string ('now' at the latest)",
+    "where": "client/src/utils/usageMeter.js:73:39 remaining -> true"
+  },
+  "29bcibxlam7": {
+    "reason": "equivalent: the placeholder string has no repository, so the if (pr.repository) guard skips it",
+    "where": "client/src/utils/sessionTurns.js:50:31 [] -> [\"Stryker was here!\"]"
+  },
+  "2a5fje276wt": {
+    "reason": "equivalent: the placeholder text does not match the rgb() regex, so parseCssColor returns null just like for ''",
+    "where": "client/src/utils/previewColorScheme.js:11:112 '' -> 'Stryker was here!'"
   },
   "2b2uxun9ppg": {
     "reason": "equivalent: timeOf is only called on messages that passed isTurnStart (role === 'human'), so m is never nullish",
@@ -230,6 +322,18 @@
   "2cwltaeaymu": {
     "reason": "equivalent: consecutive whitespace only produces '' terms, which filter(Boolean) drops",
     "where": "client/src/utils/recentDirs.js:25:58 /\\s+/ -> /\\s/"
+  },
+  "2djtkzh1d0n": {
+    "reason": "equivalent: the placeholder string has no prs, so it contributes nothing to the counts",
+    "where": "client/src/utils/sessionTurns.js:49:28 [] -> [\"Stryker was here!\"]"
+  },
+  "2dpbqwtvrg8": {
+    "reason": "equivalent: the placeholder string has no utilization, so windowMeter returns null and it is skipped, the same as no extras",
+    "where": "client/src/utils/usageMeter.js:94:41 [] -> [\"Stryker was here!\"]"
+  },
+  "2eg9ojkbvts": {
+    "reason": "equivalent: bridge tabs from session_list always have an id, so an undefined entry in the matched set never excludes a tab",
+    "where": "client/src/utils/runningSessions.js:32:5 [ ...annotateRunningSessions(runningSessions, bridgeSession… -> [ ...annotateRunningSessions(runningSessions, bridgeSession…"
   },
   "2estp09juxt": {
     "reason": "equivalent: ms = 0 is already caught by !ms, so <= 0 and < 0 differ for no input",
@@ -259,6 +363,10 @@
     "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
     "where": "client/src/utils/sensitiveSessions.js:33:12 Array.isArray(raw) -> true"
   },
+  "43e0a5gs6y": {
+    "reason": "equivalent: the placeholder string has no sessionId, so filter(Boolean) removes it and runningIds stays empty",
+    "where": "client/src/utils/runningSessions.js:45:50 [] -> [\"Stryker was here!\"]"
+  },
   "4p7ljk15ti": {
     "reason": "equivalent: letting value 0 through adds 0 to the day total",
     "where": "client/src/utils/calendar.js:232:11 value <= 0 -> value < 0"
@@ -275,6 +383,10 @@
     "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
     "where": "client/src/utils/tabOrder.js:50:67 '[]' -> ''"
   },
+  "7jwqd9p23q": {
+    "reason": "equivalent: indexes past the end read messages[i]?.contextUsage as undefined and are skipped, so the scan result is unchanged",
+    "where": "client/src/utils/contextUsage.js:9:16 messages.length - 1 -> messages.length + 1"
+  },
   "8mrlkfqera": {
     "reason": "equivalent: fallback for a missing e.key; VIM_NAV_BY_KEY has no 'stryker was here!' entry, so the lookup is undefined as with '' and the result is null",
     "where": "client/src/utils/keys.js:58:54 '' -> 'Stryker was here!'"
@@ -283,6 +395,10 @@
     "reason": "equivalent: the fallback element is a string whose ?.sessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:66:29 [] -> [\"Stryker was here!\"]"
   },
+  "9mcdojeoyi": {
+    "reason": "equivalent: width only feeds left; whenever width differs, left = viewport.width - margin - width falls below margin and is clamped to margin, the same as the original",
+    "where": "client/src/utils/recentPeek.js:5:58 margin * 2 -> margin / 2"
+  },
   "9tvvwco2jx": {
     "reason": "equivalent: without the branch, '~' expands to home + '/' and the trailing slash is then removed, giving home",
     "where": "client/src/utils/filerRoots.js:19:12 path === '~' -> false"
@@ -290,6 +406,18 @@
   "box5f11qqk": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
     "where": "client/src/utils/tabGroups.js:145:21 typeof raw.colors === 'object' -> true"
+  },
+  "bxaorqq920": {
+    "reason": "equivalent: with nothing stored, JSON.parse('') throws and the catch returns [], the same as parsing '[]'",
+    "where": "client/src/utils/starredSessions.js:30:65 '[]' -> ''"
+  },
+  "d2ix5byxfg": {
+    "reason": "equivalent: the placeholder string has no alive flag, so the alive filter removes it, the same as an empty tab list",
+    "where": "client/src/utils/runningSessions.js:11:35 [] -> [\"Stryker was here!\"]"
+  },
+  "d7gzao2u95": {
+    "reason": "equivalent: for an empty head the ratio is 0/0 = NaN and NaN > 0.05 is false, the same result as the early return",
+    "where": "client/src/utils/binaryText.js:15:7 head.length === 0 -> false"
   },
   "do60oj4gb5": {
     "reason": "equivalent: bucketTicks only special-cases 'month'; any other default takes the same day/week path",
@@ -311,6 +439,14 @@
     "reason": "equivalent: with an empty Map every index.get misses, so no parts are pushed and the result is '' anyway",
     "where": "client/src/utils/toolLines.js:87:45 index.size === 0 -> false"
   },
+  "h7fsraungr": {
+    "reason": "equivalent: starting the scan past the end only compares undefined segments to marker names, which never match",
+    "where": "client/src/utils/cwdLabel.js:22:16 segments.length - 1 -> segments.length + 1"
+  },
+  "hlys0ojgbf": {
+    "reason": "equivalent: when prevStatus is undefined the next check prevStatus === 'busy' is false anyway, so the session is skipped either way",
+    "where": "client/src/utils/notifications.js:15:9 prevStatus === undefined -> false"
+  },
   "hq0b8gesgh": {
     "reason": "equivalent: parseCwd returns parent null whenever project is empty, so the template also yields 'p:'",
     "where": "client/src/utils/tabGroups.js:23:7 !project -> false"
@@ -318,6 +454,22 @@
   "iytu4kbcvj": {
     "reason": "equivalent: raw is trimmed and non-empty, so path === '' is never true and '~' still expands to home via the other branch and trailing-slash removal",
     "where": "client/src/utils/filerRoots.js:19:21 '~' -> ''"
+  },
+  "jmpafd0jdy": {
+    "reason": "equivalent: at equality the shifted left (viewport.width - margin - width) equals the current left, so >= and > give the same position",
+    "where": "client/src/utils/recentPeek.js:10:7 left + width > viewport.width - margin -> left + width >= viewport.width - margin"
+  },
+  "js9f4f3kib": {
+    "reason": "equivalent: dir is always 1 or -1, never 0",
+    "where": "client/src/utils/pickJump.js:14:12 dir > 0 -> dir >= 0"
+  },
+  "kh652apbcg": {
+    "reason": "equivalent: the placeholder string has no uuid, so nothing is added to byUuid, the same as an empty message list",
+    "where": "client/src/utils/pins.js:27:31 [] -> [\"Stryker was here!\"]"
+  },
+  "kjujzkp7cp": {
+    "reason": "equivalent: a match at i = 0 always has projectIdx < 0 (or start < 0), so it never returns; skipping i = 0 changes nothing",
+    "where": "client/src/utils/cwdLabel.js:22:37 i >= 0 -> i > 0"
   },
   "l5qv6k5ivi": {
     "reason": "equivalent: cluster is empty only for the first segment (clusterEnd = -Infinity); flushing an empty cluster pushes nothing and resets already-empty arrays",
@@ -335,6 +487,14 @@
     "reason": "equivalent: occ is only read as occ.total > 1 (undefined > 1 is false), and occ.index only inside that branch",
     "where": "client/src/utils/previewLocation.js:124:88 { index: 0, total: 0 } -> {}"
   },
+  "lqxjqot9zu": {
+    "reason": "equivalent: 8-letter non-digit tokens are neither a family name (max 7 letters) nor a version, so dropping them changes nothing",
+    "where": "client/src/utils/modelLabel.js:16:46 /^\\d{8}$/ -> /^\\D{8}$/"
+  },
+  "lz4hiv0u77": {
+    "reason": "equivalent: the placeholder string has no cwd, so its project is '' and never equals the truthy project filter",
+    "where": "client/src/utils/sessionSearch.js:68:25 [] -> [\"Stryker was here!\"]"
+  },
   "m36xgg0wef": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:42:41 '' -> 'Stryker was here!'"
@@ -347,9 +507,17 @@
     "reason": "equivalent: the fallback result is a string whose ?.id is undefined, so nothing is added to resolved",
     "where": "client/src/utils/working.js:29:36 [] -> [\"Stryker was here!\"]"
   },
+  "njnucljzlg": {
+    "reason": "equivalent: always ending a trailing record only adds a single empty-field record after a final newline, which the blank-record trim removes",
+    "where": "client/src/utils/delimited.js:81:7 field !== '' || cells.length > 0 || inQuotes -> true"
+  },
   "owjdfg0l4u": {
     "reason": "equivalent: endsWith('') is always true; dropping a last character that is not a newline does not change the line count",
     "where": "client/src/utils/toolLines.js:29:30 '\\n' -> ''"
+  },
+  "rfdm28ktj7": {
+    "reason": "equivalent: lastTimestamp is always a string (set from publish.timestamp || ''), so the || '' fallback in the sort is never taken",
+    "where": "client/src/utils/artifacts.js:30:65 '' -> 'Stryker was here!'"
   },
   "s74n479wqs": {
     "reason": "equivalent: with 0 or 1 week buckets the baseline (all but the last bucket) is empty, so the next guard returns null anyway",
@@ -359,13 +527,33 @@
     "reason": "equivalent: the placeholder label is always overwritten by bucketLabel before bucketDays returns",
     "where": "client/src/utils/heatmap.js:242:16 '' -> 'Stryker was here!'"
   },
+  "snap8abfpn": {
+    "reason": "equivalent: when the popup does not fit below but fits above, the anchor is in the lower part (roomBelow < top), so the fallback also picks above with the same top",
+    "where": "client/src/utils/recentPeek.js:21:14 above >= margin -> false"
+  },
   "su1um2enmy": {
     "reason": "equivalent: indexes past the end read undefined, which is neither a turn start, a toolresult nor an assistant, so they are skipped",
     "where": "client/src/utils/working.js:25:16 messages.length - 1 -> messages.length + 1"
   },
+  "t582wwhvls": {
+    "reason": "equivalent: a marker starting at index 0 has projectIdx = -1 and never returns, so skipping start = 0 changes nothing",
+    "where": "client/src/utils/cwdLabel.js:26:11 start < 0 -> start <= 0"
+  },
+  "t5okwackdb": {
+    "reason": "equivalent: lastTimestamp is always a string (set from publish.timestamp || ''), so the || '' fallback in the sort is never taken",
+    "where": "client/src/utils/artifacts.js:30:102 '' -> 'Stryker was here!'"
+  },
   "toivh7kb00": {
     "reason": "equivalent: values failing isPaletteIndex are never integers in 0..7, so leaving them in the fixed set never removes a palette index from free",
     "where": "client/src/utils/tabGroups.js:202:25 list.map((g) => colors?.[g.key]).filter(isPaletteIndex) -> list.map((g) => colors?.[g.key])"
+  },
+  "tr37htq6hh": {
+    "reason": "equivalent: at above === margin the fallback picks above and clamps top to margin, which equals above",
+    "where": "client/src/utils/recentPeek.js:21:14 above >= margin -> above > margin"
+  },
+  "umyb39c143": {
+    "reason": "equivalent: every non-array JSON value (object, string, number, boolean, null) has no filter method, so the call throws and the catch returns []",
+    "where": "client/src/utils/starredSessions.js:31:12 Array.isArray(raw) -> true"
   },
   "uyoym35s8o": {
     "reason": "equivalent: the final flush with an empty cluster (no segments) pushes nothing",
@@ -374,6 +562,14 @@
   "v7cbr33akx": {
     "reason": "equivalent: replacing the earliest offset with an equal offset returns the same value",
     "where": "client/src/utils/calendar.js:290:32 offset < earliest -> offset <= earliest"
+  },
+  "vo3de5pqns": {
+    "reason": "equivalent: width only feeds left; whenever width differs, left = viewport.width - margin - width falls below margin and is clamped to margin, the same as the original",
+    "where": "client/src/utils/recentPeek.js:5:41 viewport.width - margin * 2 -> viewport.width + margin * 2"
+  },
+  "whauh8pcl9": {
+    "reason": "equivalent: the placeholder string has no cwd, so parseCwd gives an empty project and it is skipped",
+    "where": "client/src/utils/sessionSearch.js:58:35 [] -> [\"Stryker was here!\"]"
   },
   "wlwnfzn3oh": {
     "reason": "equivalent: with '' the day case goes through bucketDays(days, 'day'), which yields the same per-day metric values",
@@ -387,8 +583,24 @@
     "reason": "equivalent: contextOf is only called with ranges from extractUrls; text[start] and text[start+1] are inside the URL or link notation and never a newline, so lastIndexOf finds the same line start",
     "where": "client/src/utils/links.js:120:44 start - 1 -> start + 1"
   },
+  "y7yj4ef5bp": {
+    "reason": "equivalent: the placeholder string has no cwd, so parseCwd gives an empty project and it is skipped",
+    "where": "client/src/utils/sessionSearch.js:77:33 [] -> [\"Stryker was here!\"]"
+  },
+  "yj498n3uzh": {
+    "reason": "equivalent: with the CRLF branch empty, the CR is dropped and the following LF ends the record in the next branch with the same line counting",
+    "where": "client/src/utils/delimited.js:67:52 { endRecord(); i++; line++; recordLine = line; } -> {}"
+  },
+  "yp5p813fq3": {
+    "reason": "equivalent: the placeholder string has no messageUuid, so filter(Boolean) removes it and the set stays empty",
+    "where": "client/src/utils/pins.js:14:27 [] -> [\"Stryker was here!\"]"
+  },
   "z00ji2ilrk": {
     "reason": "equivalent: max === 0 is already caught by !max, so <= 0 and < 0 differ on no input",
     "where": "client/src/utils/heatmap.js:305:15 max <= 0 -> max < 0"
+  },
+  "zfzpccndoe": {
+    "reason": "equivalent: tokens starting with 8 digits are neither a family name nor a 1-2 digit version, so dropping them changes nothing",
+    "where": "client/src/utils/modelLabel.js:16:46 /^\\d{8}$/ -> /^\\d{8}/"
   }
 }

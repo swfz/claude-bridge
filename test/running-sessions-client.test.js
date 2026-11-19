@@ -222,4 +222,82 @@ describe('terminateConfirmMessage', () => {
   it('falls back to a generic label', () => {
     assert.match(terminateConfirmMessage(), /「このセッション」の claude を終了/);
   });
+
+  it('本文は改行区切りで、最後に確認の問いを置く', () => {
+    assert.equal(
+      terminateConfirmMessage({ name: 'x', status: 'busy', target: 'main:1.0' }),
+      '「x」（tmux main:1.0）の claude を終了し、tmux ペインを閉じます。\n作業中です。途中の処理は中断されます。\nよろしいですか？',
+    );
+  });
+});
+
+describe('findOpenTab（境界）', () => {
+  it('起動中セッションが無ければ null', () => {
+    assert.equal(findOpenTab(null, [{ id: 't1', alive: true, claudeSessionId: 'sid-a', claudePid: 1 }]), null);
+  });
+
+  it('pid が違うタブは開いているとは扱わない', () => {
+    assert.equal(findOpenTab({ pid: 100, sessionId: 'sid-x' }, [{ id: 't1', alive: true, claudePid: 200 }]), null);
+  });
+});
+
+describe('findUnmatchedTabs（境界）', () => {
+  it('タブが無ければ空配列', () => {
+    assert.deepEqual(findUnmatchedTabs(null, null, null), []);
+  });
+
+  it('どのタブにも開かれていない起動中セッションがあっても、全タブを返す', () => {
+    const tabs = [{ id: 't1', alive: true, claudeSessionId: 'sid-other' }];
+    assert.deepEqual(
+      findUnmatchedTabs([{ pid: 1, sessionId: 'sid-a' }], tabs, [{ sessionId: 'sid-b' }]).map((t) => t.id),
+      ['t1'],
+    );
+  });
+});
+
+describe('annotateRecentSessions（境界）', () => {
+  it('死んだタブは openTab にしない', () => {
+    const [s] = annotateRecentSessions(
+      [{ sessionId: 'sid-a' }],
+      [],
+      [{ id: 't1', alive: false, claudeSessionId: 'sid-a' }],
+    );
+    assert.equal(s.openTab, null);
+  });
+
+  it('sessionId の無い起動中セッションは、sessionId の無い直近セッションを隠さない', () => {
+    const recent = annotateRecentSessions([{ title: 'no id' }], [{ pid: 1 }], []);
+    assert.deepEqual(
+      recent.map((s) => s.title),
+      ['no id'],
+    );
+  });
+});
+
+describe('formatElapsed（境界）', () => {
+  const now = 1_000_000_000;
+
+  it('epoch 0 は未指定として空文字', () => {
+    assert.equal(formatElapsed(0, now), '');
+  });
+
+  it('ちょうど今は 0秒前', () => {
+    assert.equal(formatElapsed(now, now), '0秒前');
+  });
+
+  it('単位の切り替わりはちょうどの値で次の単位になる', () => {
+    assert.equal(formatElapsed(now - 60_000, now), '1分前');
+    assert.equal(formatElapsed(now - 3600_000, now), '1時間前');
+    assert.equal(formatElapsed(now - 86400_000, now), '1日前');
+  });
+});
+
+describe('readonlyDeliveryState（境界）', () => {
+  it('タブが無ければ stopped', () => {
+    assert.deepEqual(readonlyDeliveryState(null, []), { kind: 'stopped', running: null });
+  });
+
+  it('claudeSessionId が無ければ、sessionId の無い起動中セッションと結びつけない', () => {
+    assert.equal(readonlyDeliveryState({ id: 't2' }, [{ pid: 1 }]).kind, 'stopped');
+  });
 });

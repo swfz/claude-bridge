@@ -77,5 +77,19 @@ describe('resolvePins', () => {
   it('読み込まれていても本文が空なら保存した抜粋を使う', () => {
     const [a] = resolvePins([{ messageUuid: 'u1', excerpt: '保存' }], [{ uuid: 'u1', content: '' }]);
     assert.equal(a.excerpt, '保存');
+    assert.equal(a.content, '');
+  });
+});
+
+describe('pins（境界）', () => {
+  it('sortPins は null を空配列にする', () => {
+    assert.deepEqual(sortPins(null), []);
+  });
+
+  it('メッセージ列の null や uuid の無いメッセージには結びつけない', () => {
+    const [a] = resolvePins([{ excerpt: '保存' }], [null, { content: 'uuid なし' }]);
+    assert.equal(a.loaded, false);
+    assert.equal(a.excerpt, '保存');
+    assert.equal(a.content, null);
   });
 });

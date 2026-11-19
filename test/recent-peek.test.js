@@ -39,3 +39,42 @@ describe('peekPosition', () => {
     assert.equal(up.top, 8);
   });
 });
+
+describe('peekPosition（境界）', () => {
+  const pop = { width: 520, height: 300 };
+
+  it('下にも上にも入るなら下を選ぶ', () => {
+    assert.deepEqual(peekPosition(rect(100, 400), pop, viewport), { left: 100, top: 426, placement: 'below' });
+  });
+
+  it('下端の余白ちょうどまでなら下に出し、1px でもはみ出すなら上に出す', () => {
+    // bottom 486 + gap 6 + 300 = 792 = 800 - 8
+    assert.deepEqual(peekPosition(rect(100, 466), pop, viewport), { left: 100, top: 492, placement: 'below' });
+    assert.deepEqual(peekPosition(rect(100, 476), pop, viewport), { left: 100, top: 170, placement: 'above' });
+  });
+
+  it('右端の余白に食い込むだけでも左へずらす', () => {
+    // 680 + 520 = 1200 > 1200 - 8
+    assert.equal(peekPosition(rect(680, 100), pop, viewport).left, 672);
+  });
+
+  it('アイコンが左端の余白より左にあれば余白に寄せる', () => {
+    assert.equal(peekPosition(rect(3, 100), pop, viewport).left, 8);
+  });
+
+  it('画面より高いポップオーバーは画面の高さに縮めて下に収める', () => {
+    // アイコンが画面上端の外まで流れていても、下に入る分だけ表示する
+    const anchor = { left: 100, top: -20, right: 120, bottom: 0 };
+    assert.deepEqual(peekPosition(anchor, { width: 520, height: 790 }, viewport), {
+      left: 100,
+      top: 6,
+      placement: 'below',
+    });
+  });
+
+  it('上下どちらにも入らず空きが同じなら下に置く', () => {
+    // 上の空き 340 = 下の空き 700 - 360
+    const pos = peekPosition(rect(100, 340), { width: 520, height: 500 }, { width: 1200, height: 700 });
+    assert.deepEqual(pos, { left: 100, top: 192, placement: 'below' });
+  });
+});
