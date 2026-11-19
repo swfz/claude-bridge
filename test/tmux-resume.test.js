@@ -575,7 +575,8 @@ describe('sendCommandWhenShellReady', () => {
 
     const clearIdx = execCalls.findIndex((c) => c.includes('C-u'));
     const enterIdx = execCalls.findIndex((c) => c === 'tmux send-keys -t %7 Enter');
-    assert.ok(literalSendsOf().length >= 2);
+    // エコーが見えないまま 8 回見たところで 1 回だけ打ち直す
+    assert.equal(literalSendsOf().length, 2);
     assert.ok(clearIdx > -1, 'clears the input line with C-u before resending');
     assert.ok(enterIdx > clearIdx, 'presses Enter only after the retried echo is confirmed');
   });
@@ -616,6 +617,23 @@ describe('sendCommandWhenShellReady', () => {
     // 打ち直す前に入力行を C-u で空にする
     const retypeIdx = execCalls.findLastIndex((c) => c.includes('send-keys -t %7 -l'));
     assert.equal(execCalls[retypeIdx - 1], 'tmux send-keys -t %7 C-u');
+  });
+
+  it('does not re-press Enter until startCheckMs has passed since Enter', async () => {
+    let pollsAfterEnter = 0;
+    responses = {
+      'capture-pane': () => (literalSendsOf().length ? 'user@host:~$ claude --resume abc-123\n' : 'user@host:~$\n'),
+      // Enter の後、数回はまだシェルが前景（claude の起動待ち）
+      'display-message': () => {
+        if (!enterCount()) return 'zsh\n';
+        pollsAfterEnter += 1;
+        return pollsAfterEnter > 4 ? 'claude\n' : 'zsh\n';
+      },
+    };
+
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, startCheckMs: 500, timeoutMs: 2000 });
+
+    assert.equal(enterCount(), 1);
   });
 
   it('treats every known shell name as still waiting at the prompt', async () => {

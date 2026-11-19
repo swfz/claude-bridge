@@ -194,7 +194,7 @@ describe('enrichPanesWithSessionMeta', () => {
 
   it('同じ親の子を全部辿る', async () => {
     writeMeta(300, { sessionId: 'sid-3', name: 'n' });
-    psResult.stdout = ['201 100', '300 100'].join('\n');
+    psResult.stdout = ['300 100', '201 100'].join('\n');
 
     const [p] = await enrichPanesWithSessionMeta([pane(100)]);
 
@@ -213,6 +213,28 @@ describe('enrichPanesWithSessionMeta', () => {
 
     assert.equal(p.claudePid, 204);
     assert.equal(p.claudeSessionId, 'ok');
+  });
+
+  it('.json 以外のファイルは pid が合っていても読まない', async () => {
+    writeFileSync(join(dirs.sessions, '200.txt'), JSON.stringify({ pid: 200, sessionId: 'txt', name: 'n' }));
+    psResult.stdout = '200 100\n';
+
+    const [p] = await enrichPanesWithSessionMeta([pane(100)]);
+
+    assert.equal(p.claudePid, null);
+  });
+
+  it('ps の行は「pid ppid」だけのものを読む（前後に余計なものがあれば捨てる）', async () => {
+    writeMeta(200, { sessionId: 'sid-1', name: 'n' });
+    writeMeta(300, { sessionId: 'sid-3', name: 'n' });
+    psResult.stdout = ['x200 100', '300 101 extra'].join('\n');
+
+    const panes = await enrichPanesWithSessionMeta([pane(100), pane(101)]);
+
+    assert.deepEqual(
+      panes.map((p) => p.claudePid),
+      [null, null],
+    );
   });
 
   it('セッションディレクトリが無ければ紐づけない', async () => {

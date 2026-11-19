@@ -123,6 +123,10 @@
     "reason": "equivalent: 件数 1 のキーを delete する代わりに 0 を入れても、読む側は pending.get(key) || 0 で同じ 0 になる",
     "where": "server/jsonl-utils.js:130:9 n === 1 -> false"
   },
+  "15khex49c63": {
+    "reason": "equivalent: 探索中の子の配列に文字列が混ざっても数値キーの Map に一致しないので結果は変わらない",
+    "where": "server/claude-session-meta.js:66:43 [] -> [\"Stryker was here!\"]"
+  },
   "15kukn7hw8c": {
     "reason": "equivalent: in git diff output the only unprefixed line starting with 'Binary files ' is 'Binary files ... differ', which always ends with 'differ'",
     "where": "server/session-diff.js:76:38 /^Binary files .* differ$/ -> /^Binary files .* differ/"
@@ -142,6 +146,10 @@
   "162sktold7f": {
     "reason": "equivalent: a sentinel string as a slot has slot[0]='S', so ms is NaN and matches no day (and slot[7]=' ' is skipped by value <= 0)",
     "where": "client/src/utils/calendar.js:230:41 [] -> [\"Stryker was here!\"]"
+  },
+  "166k9fm1fjw": {
+    "reason": "equivalent: running の既定値に文字列が混ざっても sessionId が undefined で filter(Boolean) に落とされるので結果は同じ",
+    "where": "server/open-tabs.js:205:96 [] -> [\"Stryker was here!\"]"
   },
   "167qk9fs0we": {
     "reason": "equivalent: buildRecentExchanges skips the injected string element (turnPrompt returns '' and it is not an assistant record)",
@@ -166,6 +174,10 @@
   "16nwkzz01ff": {
     "reason": "equivalent: a placeholder string main entry has no prompts, so it contributes nothing",
     "where": "server/activity-heatmap.js:887:22 [] -> [\"Stryker was here!\"]"
+  },
+  "16phvzpf3ko": {
+    "reason": "equivalent: livePanes の既定値に文字列が混ざっても claudeSessionId が undefined のキーになるだけで、照合する ID は常に空でない文字列なので一致しない",
+    "where": "server/open-tabs.js:280:51 [] -> [\"Stryker was here!\"]"
   },
   "16qwpgomrxs": {
     "reason": "equivalent: continue is the last statement of the loop body, so removing it changes nothing",
@@ -219,6 +231,10 @@
     "reason": "equivalent: whitespace-only lines then go to JSON.parse, which throws and is caught, so they are still skipped",
     "where": "server/session-turns.js:20:10 line.trim() -> line"
   },
+  "18qqf2jfg5f": {
+    "reason": "equivalent: claudeSessionId の無いペインは undefined キーに入るだけで、照合する ID は常に空でない文字列なので一致しない",
+    "where": "server/open-tabs.js:281:29 livePanes.filter((p) => p.claudeSessionId) -> livePanes"
+  },
   "18tuxqzfmey": {
     "reason": "equivalent: blank lines then go to JSON.parse, which throws and is caught, so they are still skipped",
     "where": "server/session-turns.js:20:9 !line.trim() -> false"
@@ -239,6 +255,10 @@
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:86:15 pending.get(key) || 0 -> (pending.get(key) && 0)"
   },
+  "19ky8gdowrh": {
+    "reason": "equivalent: 子の配列に文字列 'Stryker was here!' が混ざっても数値 pid の Map には一致せず、その子も無いので探索結果は変わらない",
+    "where": "server/claude-session-meta.js:48:55 [] -> [\"Stryker was here!\"]"
+  },
   "19mj04nklwn": {
     "reason": "equivalent: on an empty string last is undefined, which is not in TRAILING_CHARS, so the loop breaks right away",
     "where": "client/src/utils/links.js:32:10 result.length > 0 -> result.length >= 0"
@@ -255,6 +275,10 @@
     "reason": "equivalent: an active request only has info while one of its tools is pending or held, which already protects it",
     "where": "server/activity-heatmap.js:413:7 state.request -> false"
   },
+  "1at1jyyp62u": {
+    "reason": "equivalent: 空白だけの行を残しても name が undefined で後段の filter で落ちるので結果は同じ",
+    "where": "server/tmux-session.js:265:23 line.trim() -> line"
+  },
   "1b0byu6nfze": {
     "reason": "equivalent: with nothing stored, JSON.parse('') throws and the catch returns EMPTY_STATE, the same value the null branch returns",
     "where": "client/src/utils/tabGroups.js:134:68 'null' -> ''"
@@ -266,6 +290,10 @@
   "1b8s48ryl6d": {
     "reason": "equivalent: with a target file, _detectNewFile checks it exists, re-arms the watch and calls _readNewLines, which is the same output as calling _readNewLines directly (a missing file yields nothing either way)",
     "where": "server/jsonl-watcher.js:174:13 !state.targetFile -> true"
+  },
+  "1bbcsvph5zk": {
+    "reason": "equivalent: running の既定値に文字列が混ざっても sessionId が undefined で filter(Boolean) に落とされるので結果は同じ",
+    "where": "server/open-tabs.js:280:65 [] -> [\"Stryker was here!\"]"
   },
   "1bcejfkf51f": {
     "reason": "equivalent: the text of a non-string/non-array tool_result is only searched for the background-ID marker, which neither '' nor the placeholder contains",
@@ -283,6 +311,10 @@
     "reason": "equivalent: the extra iteration at index*SLOT_MS === endMs has to === from and adds nothing",
     "where": "server/activity-heatmap.js:191:51 index * SLOT_MS < endMs -> index * SLOT_MS <= endMs"
   },
+  "1btkx1kphex": {
+    "reason": "equivalent: e が真の非オブジェクト（文字列・数値）でも e.type は undefined で tmux/readonly に合わず null になるので結果は同じ",
+    "where": "server/open-tabs.js:39:13 typeof e !== 'object' -> false"
+  },
   "1buhsszve7j": {
     "reason": "equivalent: getLine が undefined を返す行は走査範囲に無く、'' の分岐には到達しない",
     "where": "server/session.js:113:56 '' -> 'Stryker was here!'"
@@ -298,6 +330,10 @@
   "1d80n3pd7ff": {
     "reason": "equivalent: a stray string element has no name/path; collectCommands skips entries without name and readCommands gets null from readDescription(undefined), so it never reaches the output",
     "where": "server/slash-commands.js:143:12 [] -> [\"Stryker was here!\"]"
+  },
+  "1de409i08g5": {
+    "reason": "equivalent: tab.id が無いときの代替が 'Stryker was here!' になっても ID_RE に合わず null になるのは同じ",
+    "where": "server/open-tabs.js:78:38 '' -> 'Stryker was here!'"
   },
   "1decmr4w4yb": {
     "reason": "equivalent: the prefilter only skips JSON.parse; collect re-checks every record with extractArtifactPublish (claude.ai URL pattern, tool_result success) and type === 'custom-title'",
@@ -351,6 +387,10 @@
     "reason": "equivalent: 呼び出し側が code を number か null に正規化済みで、null < 200 は true なので同じくタイトルなしになる",
     "where": "server/jsonl-utils.js:271:7 typeof code !== 'number' -> false"
   },
+  "1godj322nxd": {
+    "reason": "equivalent: 空行は分割後 command が undefined になり isClaudeCommand の filter で必ず落ちるので、空行を先に除く filter の有無は結果に出ない",
+    "where": "server/tmux-session.js:26:12 stdout .trim() .split('\\n') .filter((line) => line) -> stdout .trim() .split('\\n')"
+  },
   "1h340xxwdxq": {
     "reason": "equivalent: pos = found + 1 never exceeds length; at pos === length indexOf finds only an empty needle, which is returned early",
     "where": "client/src/utils/previewLocation.js:78:10 pos <= sourceText.length -> pos < sourceText.length"
@@ -362,6 +402,10 @@
   "1h9b3t97r56": {
     "reason": "equivalent: the default isHidden result is only negated in filter, and !undefined === !false",
     "where": "client/src/utils/tabGroups.js:191:57 false -> undefined"
+  },
+  "1hemhdjvc4k": {
+    "reason": "equivalent: 最後に candidates を !isLive で絞り直すので、ここで動いているものを候補に入れても結果の pending には残らない",
+    "where": "server/open-tabs.js:259:16 !isLive(p.claudeSessionId) -> true"
   },
   "1hjoo838ylj": {
     "reason": "equivalent: 2 つ目の ?. は、match が null なら 1 つ目の ?. で式全体が短絡し、非 null ならキャプチャ群は必ず文字列なので . でも同じ",
@@ -403,6 +447,10 @@
     "reason": "equivalent: splitting on single whitespace only adds empty terms, which filter((term) => term.length > 0) removes",
     "where": "client/src/utils/sessionSearch.js:23:12 /[\\s\\u3000]+/ -> /[\\s\\u3000]/"
   },
+  "1jj9ynqa6pw": {
+    "reason": "equivalent: readFileSync の encoding が '' だと Buffer が返るが JSON.parse は Buffer を文字列化して読むので結果は同じ",
+    "where": "server/open-tabs.js:105:59 'utf-8' -> ''"
+  },
   "1jnoo1oobsb": {
     "reason": "equivalent: the mutant only widens the edits prefilter; collect() checks the record type, tool_use block, tool name and absolute path itself, so extra parsed lines add nothing",
     "where": "server/session-completion.js:27:51 '\"file_path\"' -> ''"
@@ -435,6 +483,10 @@
     "reason": "equivalent: an entry without mtimeMs/size never matches the cache check, so the value is always recomputed (performance-only)",
     "where": "server/subagent-tasks.js:106:36 { mtimeMs: st.mtimeMs, size: st.size, value } -> {}"
   },
+  "1kr7fc5uouq": {
+    "reason": "equivalent: catch で sessionName を null にしなくても未代入の undefined のままで、後段は真偽（sessionName ? / sessionName || createName）でしか見ない",
+    "where": "server/tmux-session.js:345:11 { sessionName = null; } -> {}"
+  },
   "1kytxr29f1m": {
     "reason": "equivalent: addBusy itself adds nothing when to <= from",
     "where": "server/activity-heatmap.js:287:9 to > from -> true"
@@ -458,6 +510,10 @@
   "1llbls3tm3c": {
     "reason": "equivalent: rest 0 gives ratio 0 and sum 0 means every interval is 0, so every share is 0 and skipped by share > 0",
     "where": "server/activity-heatmap.js:570:9 rest <= 0 || sum <= 0 -> (rest <= 0 && sum <= 0)"
+  },
+  "1lmcn13i6mz": {
+    "reason": "equivalent: claudeSessionId が空のときの代替文字列が 'Stryker was here!' になっても空白と ! を含み /^[\\w-]+$/ に合わないので、同じく Invalid claudeSessionId で投げる",
+    "where": "server/tmux-session.js:305:43 '' -> 'Stryker was here!'"
   },
   "1lovyep9u6i": {
     "reason": "equivalent: intervals are max(0, ...) so sum is never negative; sum 0 gives zero shares",
@@ -495,6 +551,14 @@
     "reason": "equivalent: for null the property access throws and the catch returns EMPTY_STATE; for a non-object primitive every field falls back to its empty default, so the returned state has the same content (only object identity differs, which no caller relies on)",
     "where": "client/src/utils/tabGroups.js:135:9 !raw || typeof raw !== 'object' -> (!raw && typeof raw !== 'object')"
   },
+  "1mrtjv460q8": {
+    "reason": "equivalent: g フラグ付きの置換なので /\\s/g でも空白を全部消し、結果の文字列は同じ",
+    "where": "server/tmux-session.js:214:45 /\\s+/g -> /\\s/g"
+  },
+  "1n4zijcxi9q": {
+    "reason": "equivalent: 最後に candidates を !isLive で絞り直すので、ここで動いているものを候補に入れても結果の pending には残らない",
+    "where": "server/open-tabs.js:264:9 !isLive(s.claudeSessionId) -> true"
+  },
   "1n898o2c294": {
     "reason": "equivalent: BARE_URL_RE excludes the closing corner bracket, so a bare URL match can never end with it",
     "where": "client/src/utils/links.js:12:78 '」' -> ''"
@@ -522,6 +586,10 @@
   "1o8fn10vhdw": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> (pending.get(key) && 0)"
+  },
+  "1oicv12dal1": {
+    "reason": "equivalent: 経過時間が startCheckMs とちょうど等しいミリ秒かどうかの境界で、決定的に観測できない",
+    "where": "server/tmux-session.js:235:9 Date.now() - lastCheck < startCheckMs -> Date.now() - lastCheck <= startCheckMs"
   },
   "1ojyyyd6ajj": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
@@ -647,9 +715,25 @@
     "reason": "equivalent: when turn is 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'",
     "where": "client/src/utils/completionState.js:87:20 turn !== 'ended' -> true"
   },
+  "1ubmrxkqvvi": {
+    "reason": "equivalent: 落ち着いた経過時間が settleMs とちょうど等しいミリ秒かどうかの境界で、決定的に観測できない",
+    "where": "server/tmux-session.js:172:33 Date.now() - stableSince >= settleMs -> Date.now() - stableSince > settleMs"
+  },
+  "1ud75afqnzx": {
+    "reason": "equivalent: readFile の encoding が '' だと Buffer が返るが JSON.parse は Buffer を文字列化して読むので結果は同じ",
+    "where": "server/running-sessions.js:72:82 'utf8' -> ''"
+  },
+  "1ue4dbd6600": {
+    "reason": "equivalent: 直前で sa !== sb を確かめているので sa と sb が等しい場合は来ず、< と <= は区別できない",
+    "where": "server/open-tabs.js:193:27 sa < sb -> sa <= sb"
+  },
   "1uh2n9kckxo": {
     "reason": "equivalent: a stray string element has no name/path; collectCommands skips entries without name and readCommands gets null from readDescription(undefined), so it never reaches the output",
     "where": "server/slash-commands.js:174:55 [] -> [\"Stryker was here!\"]"
+  },
+  "1uly2oaa0gq": {
+    "reason": "equivalent: claudeSessionId が無いときの代替が 'Stryker was here!' になっても ID_RE に合わず捨てられるのは同じ",
+    "where": "server/open-tabs.js:62:71 '' -> 'Stryker was here!'"
   },
   "1uq6ewumu4q": {
     "reason": "equivalent: BARE_URL_RE excludes the closing white corner bracket, so a bare URL match can never end with it",
@@ -667,6 +751,10 @@
     "reason": "equivalent: addToolTime only compares kind with 'unverified' and 'full', so '' behaves exactly like 'reported'",
     "where": "server/activity-heatmap.js:341:40 'reported' -> ''"
   },
+  "1vvyz4mym8h": {
+    "reason": "equivalent: 失敗時の戻り値が '' から undefined になるだけで、呼び出し側は真偽（current && / !current / command || '取得できず' / isClaudeCommand）でしか見ないので区別できない",
+    "where": "server/tmux-session.js:156:11 { return ''; } -> {}"
+  },
   "1vxqg1rlwip": {
     "reason": "equivalent: content が無いときの [] を文字列 1 要素の配列にしても、文字列には type が無いので tool_use / tool_result として拾われない",
     "where": "server/jsonl-utils.js:158:86 [] -> [\"Stryker was here!\"]"
@@ -682,6 +770,10 @@
   "1wekl6in5aq": {
     "reason": "equivalent: the fallback string ends with '!', so the extension regex does not match and getExt still returns ''",
     "where": "client/src/utils/previewExts.js:38:26 '' -> 'Stryker was here!'"
+  },
+  "1wr885763w3": {
+    "reason": "equivalent: g フラグ付きの置換なので /\\s/g でも空白を全部消し、結果の文字列は同じ",
+    "where": "server/tmux-session.js:190:24 /\\s+/g -> /\\s/g"
   },
   "1x4xdihf8oo": {
     "reason": "equivalent: makes the trailing-record condition always true; the only extra record produced is a single empty field, which the blank-record trim removes",
@@ -710,6 +802,14 @@
   "1y6bwy0zxc1": {
     "reason": "equivalent: a 0 ms slot is skipped later by ms <= 0 in dailyActiveMs",
     "where": "server/activity-heatmap.js:933:9 ms -> true"
+  },
+  "1y94mqcr0tj": {
+    "reason": "equivalent: 探索スタックに文字列 'Stryker was here!' が混ざっても metaByPid（数値キー）にも childrenOf にも無いので結果は変わらない",
+    "where": "server/claude-session-meta.js:59:50 [] -> [\"Stryker was here!\"]"
+  },
+  "1ysgnf5xyid": {
+    "reason": "equivalent: g フラグ付きの置換なので /\\s/g でも空白を全部消し、結果の文字列は同じ",
+    "where": "server/tmux-session.js:241:66 /\\s+/g -> /\\s/g"
   },
   "1yvjp69w1hq": {
     "reason": "equivalent: offset 0 also yields {line: 1, column: 1} through the normal path",
@@ -759,9 +859,17 @@
     "reason": "equivalent: whitespace-only or untrimmed parts only add whitespace, which truncate() collapses to single spaces and trims",
     "where": "server/slash-commands.js:230:16 line.trim() -> line"
   },
+  "20w06bll9x0": {
+    "reason": "equivalent: readFile の encoding が '' だと Buffer が返るが JSON.parse は Buffer を文字列化して読むので結果は同じ",
+    "where": "server/vim-mode.js:44:52 'utf-8' -> ''"
+  },
   "215s1jfeehy": {
     "reason": "equivalent: headings after the node in document order neither have FOLLOWING set nor equal the node, so continuing the loop never changes last",
     "where": "client/src/utils/previewLocation.js:101:12 { // 後続の見出しに来たら打ち切り break; } -> {}"
+  },
+  "21cssu9o2au": {
+    "reason": "equivalent: o が真なら o.pid が undefined でも undefined キーに入るだけで数値 pid の検索に影響せず、o が偽なら o.pid が投げて catch されるので結果は同じ",
+    "where": "server/claude-session-meta.js:29:15 o && o.pid -> (o || o.pid)"
   },
   "21geicnrx0d": {
     "reason": "equivalent: continue is the last statement of the loop body, so removing it changes nothing",
@@ -779,9 +887,17 @@
     "reason": "equivalent: after trim() the label has no trailing whitespace, so /\\s+$/ never matches and the replacement string is never inserted",
     "where": "server/choice-prompt.js:67:47 '' -> 'Stryker was here!'"
   },
+  "21v95zo2g5o": {
+    "reason": "equivalent: readdir に失敗したときだけ使う初期値で、'Stryker was here!' というファイルはディレクトリに無いので readFile が失敗し catch で飛ばされ、結果は同じ",
+    "where": "server/new-session.js:109:17 [] -> [\"Stryker was here!\"]"
+  },
   "21vw7g9n5kw": {
     "reason": "equivalent: the mutant only widens the push prefilter; collect() checks pr-link / Bash tool_use / error tool_result itself, so extra parsed lines add nothing",
     "where": "server/session-completion.js:77:20 '\"Bash\"' -> ''"
+  },
+  "21vxbynb6eo": {
+    "reason": "equivalent: missing が 0 のとき >= 0 でも 0 を返し、それ以外の値の扱いは変わらない",
+    "where": "server/open-tabs.js:69:45 e.missing > 0 -> e.missing >= 0"
   },
   "22a39muh34f": {
     "reason": "equivalent: readFileSync(null) throws and the catch returns, same as the guard",
@@ -826,6 +942,18 @@
   "23mtvdq3qfe": {
     "reason": "equivalent: a sentinel string as a session has no slots (session.slots || []), so nothing is added",
     "where": "client/src/utils/calendar.js:229:37 [] -> [\"Stryker was here!\"]"
+  },
+  "23pdyai2h0y": {
+    "reason": "equivalent: キーは assertValidChoiceKeys で数字 1 桁かキー名（Enter/Tab 等、数字で終わらない）に限られるので、^ を外しても判定は変わらない",
+    "where": "server/tmux-session.js:115:17 /^[0-9]$/ -> /[0-9]$/"
+  },
+  "23s12e1u2p2": {
+    "reason": "equivalent: stdout が空のときの代替が 'Stryker was here!' になってもタブを含まず name が undefined で落ち、null が返るのは同じ",
+    "where": "server/tmux-session.js:263:27 '' -> 'Stryker was here!'"
+  },
+  "24bcco18750": {
+    "reason": "equivalent: id が無いときの代替が 'Stryker was here!' になっても ID_RE に合わず null になるのは同じ",
+    "where": "server/open-tabs.js:45:28 '' -> 'Stryker was here!'"
   },
   "24pirhmb26v": {
     "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクトなら result.url は undefined で、次の typeof url 検査で同じく null になる",
@@ -903,6 +1031,10 @@
     "reason": "equivalent: rest is max(0, ...) so it is never negative; rest 0 gives zero shares",
     "where": "server/activity-heatmap.js:570:9 rest <= 0 -> rest < 0"
   },
+  "277jobnsl80": {
+    "reason": "equivalent: claudeSessionId の無いペインを paneToSnapshot に渡しても sanitizePane が null を返し、同じく飛ばされる",
+    "where": "server/open-tabs.js:176:18 p.claudeSessionId -> true"
+  },
   "27k025xwe61": {
     "reason": "equivalent: for the first interval a > null is true for positive epoch ms, so the same branch runs",
     "where": "server/activity-heatmap.js:531:9 curEnd === null -> false"
@@ -914,6 +1046,10 @@
   "27rd1yyzmkj": {
     "reason": "equivalent: msg が文字列なら msg.content は undefined で、次の Array.isArray(content) で同じく [] になる",
     "where": "server/jsonl-utils.js:460:15 typeof msg === 'string' -> false"
+  },
+  "27vjshdl8it": {
+    "reason": "equivalent: pid の無いメタは byPid の undefined キーに入るだけで、findClaudePid は数値 pid でしか引かないので見えない。o が null なら o.pid が投げて catch される",
+    "where": "server/claude-session-meta.js:29:15 o && o.pid -> true"
   },
   "284if8rf9ck": {
     "reason": "equivalent: promptText is only called when turnPrompt returned a prompt, which requires record.message to be present",
@@ -951,6 +1087,10 @@
     "reason": "equivalent: adding 0 to a date total gives the same activeMs (missing dates read as 0)",
     "where": "server/activity-heatmap.js:952:11 ms <= 0 -> false"
   },
+  "298wu4ub75w": {
+    "reason": "equivalent: livePanes の既定値に文字列が混ざっても p.claudeSessionId が undefined で飛ばされるので結果は同じ",
+    "where": "server/open-tabs.js:205:82 [] -> [\"Stryker was here!\"]"
+  },
   "29bcibxlam7": {
     "reason": "equivalent: the placeholder string has no repository, so the if (pr.repository) guard skips it",
     "where": "client/src/utils/sessionTurns.js:50:31 [] -> [\"Stryker was here!\"]"
@@ -966,6 +1106,10 @@
   "29odj2miwjt": {
     "reason": "equivalent: allocateApprovedTools returns {} when there are no cost-state windows",
     "where": "server/activity-heatmap.js:913:38 Object.keys(group.costStates).length === 0 -> false"
+  },
+  "29sdju87k3r": {
+    "reason": "equivalent: claudeSessionId が無いときの代替が 'Stryker was here!' になっても空白と ! を含み ID_RE に合わないので捨てられるのは同じ",
+    "where": "server/open-tabs.js:41:40 '' -> 'Stryker was here!'"
   },
   "2a08l2n1wme": {
     "reason": "equivalent: a zero-length interval shrinks nothing and removes 0 ms",
@@ -990,6 +1134,10 @@
   "2b2uxun9ppg": {
     "reason": "equivalent: timeOf is only called on messages that passed isTurnStart (role === 'human'), so m is never nullish",
     "where": "client/src/utils/working.js:11:25 ?. -> ."
+  },
+  "2bmwdk5cl2v": {
+    "reason": "equivalent: キーは assertValidChoiceKeys で数字 1 桁かキー名（数字で始まらない）に限られるので、$ を外しても判定は変わらない",
+    "where": "server/tmux-session.js:115:17 /^[0-9]$/ -> /^[0-9]/"
   },
   "2byoc66hi38": {
     "reason": "equivalent: webFetch null makes webFetch.title throw after every other message for the record was pushed; the per-line catch swallows it",
@@ -1039,6 +1187,10 @@
     "reason": "equivalent: with 200 or fewer pending tools ids.slice(0, length - 200) is empty, so nothing is deleted",
     "where": "server/activity-heatmap.js:295:9 ids.length > MAX_PENDING_TOOLS -> true"
   },
+  "2db4yylf1gz": {
+    "reason": "equivalent: Date.now() が deadline とちょうど等しいミリ秒での 1 回の差で、決定的に観測できない時刻の境界",
+    "where": "server/tmux-session.js:184:9 Date.now() > deadline -> Date.now() >= deadline"
+  },
   "2de6iiviju7": {
     "reason": "equivalent: rest 0 gives ratio 0, so every share is 0 and skipped by share > 0",
     "where": "server/activity-heatmap.js:570:9 rest <= 0 -> false"
@@ -1067,6 +1219,10 @@
     "reason": "equivalent: addBusy over a zero-length share adds nothing",
     "where": "server/activity-heatmap.js:574:11 share > 0 -> share >= 0"
   },
+  "2eabns1d68k": {
+    "reason": "equivalent: runningIds に null/undefined が入っても、照合する claudeSessionId は常に空でない文字列なので一致しない",
+    "where": "server/open-tabs.js:282:30 running.map((r) => r.sessionId).filter(Boolean) -> running.map((r) => r.sessionId)"
+  },
   "2eg9ojkbvts": {
     "reason": "equivalent: bridge tabs from session_list always have an id, so an undefined entry in the matched set never excludes a tab",
     "where": "client/src/utils/runningSessions.js:32:5 [ ...annotateRunningSessions(runningSessions, bridgeSession… -> [ ...annotateRunningSessions(runningSessions, bridgeSession…"
@@ -1087,9 +1243,17 @@
     "reason": "equivalent: if lstat fails and the catch falls through, readHead fails the same way and its catch returns the same untracked/binary entry",
     "where": "server/session-diff.js:125:11 { return { ...empty, binary: true }; } -> {}"
   },
+  "2fdmpsrttsb": {
+    "reason": "equivalent: meta が真の非オブジェクト（文字列・数値）なら meta.pid が undefined で Number.isInteger に落ち null になるので結果は同じ",
+    "where": "server/running-sessions.js:23:16 typeof meta !== 'object' -> false"
+  },
   "2fdmx5k57y3": {
     "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
+  },
+  "2fghvav27y2": {
+    "reason": "equivalent: tmuxSession が無いときの代替が 'Stryker was here!' になっても TMUX_SESSION_RE に合わず null になるのは同じ",
+    "where": "server/open-tabs.js:55:56 '' -> 'Stryker was here!'"
   },
   "2fgur0spfhd": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
@@ -1115,6 +1279,10 @@
     "reason": "equivalent: allocateApprovedTools returns {} when there are no approved tools",
     "where": "server/activity-heatmap.js:913:7 group.approved.length === 0 -> false"
   },
+  "2fxmiuefh96": {
+    "reason": "equivalent: e が真の非オブジェクトでも e.claudeSessionId は undefined で ID_RE に合わず null になるので結果は同じ",
+    "where": "server/open-tabs.js:62:13 typeof e !== 'object' -> false"
+  },
   "2gadf25fgtf": {
     "reason": "equivalent: i === segs.length では segs[i] が undefined で、SENSITIVE_DIRS.has(undefined) も SUBDIRS の比較も偽になり結果が変わらない",
     "where": "server/sensitive-paths.js:55:19 i < segs.length -> i <= segs.length"
@@ -1126,6 +1294,14 @@
   "2gff6zqjstp": {
     "reason": "equivalent: with no newline the chunk becomes '' and the offset advances by 0, so nothing is recorded either way",
     "where": "server/shell-tasks.js:197:9 lastNewline < 0 -> false"
+  },
+  "2ghupb3jbrk": {
+    "reason": "equivalent: claudePid が null のとき metaByPid.get(null) は undefined で、後段は meta && / meta?. でしか見ないので null と区別できない",
+    "where": "server/claude-session-meta.js:99:20 claudePid != null -> true"
+  },
+  "2gik30l6ghk": {
+    "reason": "equivalent: 候補は tab 付きなら placeTmuxTab で動いていないときだけ、tab なしの再開待ち・スナップショットも !isLive のときだけ入るので、最後の filter で落ちるものが無い",
+    "where": "server/open-tabs.js:267:23 [...candidates.values()].filter((c) => !isLive(c.claudeSess… -> [...candidates.values()]"
   },
   "2jj4n004l6": {
     "reason": "equivalent: pos = found + 1 never exceeds length; at pos === length indexOf finds only an empty needle, which is returned early",
@@ -1151,6 +1327,10 @@
     "reason": "equivalent: with '' the day case goes through bucketDays(days, 'day'), which yields the same per-day metric values",
     "where": "client/src/utils/heatmap.js:362:37 'day' -> ''"
   },
+  "3491jn869q": {
+    "reason": "equivalent: runningIds に null/undefined が入っても、照合する claudeSessionId は sanitize 済みで常に空でない文字列なので一致しない",
+    "where": "server/open-tabs.js:210:30 running.map((r) => r.sessionId).filter(Boolean) -> running.map((r) => r.sessionId)"
+  },
   "36asvclp04": {
     "reason": "equivalent: pruning only drops request info no pending/held tool or active request refers to; a lingering entry has endMs reset when its key is reused and its lastResultMs never exceeds a later tool_use time",
     "where": "server/activity-heatmap.js:365:3 pruneRequests(state); -> ;"
@@ -1171,6 +1351,10 @@
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:78:73 false -> true"
   },
+  "41b4uznkkj": {
+    "reason": "equivalent: relocatedCwd が cwd と等しいなら、cwd は直前の isDir で無いと分かっているので続く isDir(relocatedCwd) も偽になり、同じく見つからないエラーになる",
+    "where": "server/resume-cwd.js:38:23 relocatedCwd !== cwd -> true"
+  },
   "438bniwlgl": {
     "reason": "equivalent: with 3+ spaces the unanchored \\s{2} still matches the last two spaces before the box; test() gives the same boolean and the leftover space is removed by the label trim()",
     "where": "server/choice-prompt.js:36:24 /\\s{2,}[┌│└├╭╰].*$/ -> /\\s{2}[┌│└├╭╰].*$/"
@@ -1182,6 +1366,10 @@
   "45fimf0cag": {
     "reason": "equivalent: the line was selected by the anchored regex, so its first 'description:' match is at the start either way",
     "where": "server/slash-commands.js:223:38 /^description\\s*:/ -> /description\\s*:/"
+  },
+  "48zewunurk": {
+    "reason": "equivalent: Date.now() が deadline とちょうど等しいミリ秒に 1 回多く回るかどうかの境界で、決定的に観測できない",
+    "where": "server/new-session.js:108:10 Date.now() < deadline -> Date.now() <= deadline"
   },
   "4gejuacb4s": {
     "reason": "equivalent: an error result without tool_use_id adds undefined to errorIds, but pushIds only holds truthy ids, so no push is ever matched by it",
@@ -1222,6 +1410,14 @@
   "6q919alzq9": {
     "reason": "equivalent: String.split always returns at least one element, so lines[0] is never undefined",
     "where": "server/slash-commands.js:211:15 ?. -> ."
+  },
+  "6svefdtgep": {
+    "reason": "equivalent: 空行を飛ばさなくても JSON.parse('') が投げて catch で次の行へ進むので結果は同じ",
+    "where": "server/claude-session-meta.js:78:11 !line -> false"
+  },
+  "6ula36yuj3": {
+    "reason": "equivalent: catch で null の代わりに undefined を返しても、直後の filter(Boolean) で同じく捨てられる",
+    "where": "server/running-sessions.js:73:17 { return null; } -> {}"
   },
   "6xcjeh57h4": {
     "reason": "equivalent: count starts at 1 and only grows, so it never equals a targetIndex < 1; the loop ends with -1 when indexOf stops finding",
@@ -1323,9 +1519,17 @@
     "reason": "equivalent: a window without tools has sum 0 and is skipped by the next guard",
     "where": "server/activity-heatmap.js:566:9 window.tools.length === 0 -> false"
   },
+  "ay5la8texb": {
+    "reason": "equivalent: isValidProjectDir 自身が typeof === 'string' を確かめるので、前段の typeof 判定は結果を変えない",
+    "where": "server/open-tabs.js:34:7 typeof e.projectDir === 'string' -> true"
+  },
   "azfi54t4d2": {
     "reason": "equivalent: toolResultIsError is only called with blocks that passed block?.type === 'tool_result', so block is never nullish there",
     "where": "server/session-turns.js:94:15 ?. -> ."
+  },
+  "b06r6jaimr": {
+    "reason": "equivalent: readFile の encoding が '' だと Buffer が返るが JSON.parse は Buffer を文字列化して読むので結果は同じ",
+    "where": "server/claude-session-meta.js:28:70 'utf8' -> ''"
   },
   "box5f11qqk": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
@@ -1343,6 +1547,14 @@
     "reason": "equivalent: adding undefined to countedMessages does not matter because the dedupe check is (id && countedMessages.has(id)), which is false for id-less messages either way",
     "where": "server/session-turns.js:158:11 id -> true"
   },
+  "cwoq5kram6": {
+    "reason": "equivalent: target が無いときの代替が 'Stryker was here!' になっても : を含まず一致しないので結果は同じ",
+    "where": "server/open-tabs.js:140:48 '' -> 'Stryker was here!'"
+  },
+  "cwsb3aphk8": {
+    "reason": "equivalent: readFile の encoding が '' だと Buffer が返るが JSON.parse は Buffer を文字列化して読むので結果は同じ",
+    "where": "server/claude-session-meta.js:121:82 'utf8' -> ''"
+  },
   "d2ix5byxfg": {
     "reason": "equivalent: the placeholder string has no alive flag, so the alive filter removes it, the same as an empty tab list",
     "where": "client/src/utils/runningSessions.js:11:35 [] -> [\"Stryker was here!\"]"
@@ -1355,6 +1567,10 @@
     "reason": "equivalent: for an empty head the ratio is 0/0 = NaN and NaN > 0.05 is false, the same result as the early return",
     "where": "client/src/utils/binaryText.js:15:7 head.length === 0 -> false"
   },
+  "dcrk23ud0i": {
+    "reason": "equivalent: readFile の encoding が '' だと Buffer が返るが JSON.parse は Buffer を文字列化して読むので結果は同じ",
+    "where": "server/new-session.js:117:59 'utf8' -> ''"
+  },
   "df2mueafh6": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:84:22 (pending.get(key) || 0) + 1 -> (pending.get(key) || 0) - 1"
@@ -1366,6 +1582,10 @@
   "do60oj4gb5": {
     "reason": "equivalent: bucketTicks only special-cases 'month'; any other default takes the same day/week path",
     "where": "client/src/utils/heatmap.js:274:52 'day' -> ''"
+  },
+  "dq5aj48tpm": {
+    "reason": "equivalent: readFile の encoding が '' だと Buffer が返るが JSON.parse は Buffer を文字列化して読むので結果は同じ",
+    "where": "server/new-session.js:92:69 'utf8' -> ''"
   },
   "duejkhoxh2": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
@@ -1407,6 +1627,10 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:67:38 '' -> 'Stryker was here!'"
   },
+  "fy8o5r6g25": {
+    "reason": "equivalent: Date.now() がちょうど deadline に等しいミリ秒に 1 回多く回るかどうかだけの差で、テストから決定的に観測できない時刻の境界",
+    "where": "server/tmux-session.js:167:10 Date.now() < deadline -> Date.now() <= deadline"
+  },
   "g372z8uexz": {
     "reason": "equivalent: the greedy [^/]+ always stops right before '/' or the end of the string, so the lookahead (?=\\/|$) is always satisfied and dropping $ changes no match",
     "where": "client/src/utils/tabGroups.js:186:23 /^\\/(?:home|Users)\\/[^/]+(?=\\/|$)/ -> /^\\/(?:home|Users)\\/[^/]+(?=\\/|)/"
@@ -1430,6 +1654,10 @@
   "gn6ko8s81h": {
     "reason": "equivalent: the mutant only widens the edits prefilter; collect() checks the record type, tool_use block, tool name and absolute path itself, so extra parsed lines add nothing",
     "where": "server/session-completion.js:27:5 line.includes('\"tool_use\"') && (line.includes('\"file_path\"'… -> true"
+  },
+  "gqtbmlwyit": {
+    "reason": "equivalent: tmux/readonly 以外のタブは直後の sanitizeTab が type で必ず捨てるので、前段の type の filter は結果を変えない",
+    "where": "server/open-tabs.js:123:44 s.type === 'tmux' || s.type === 'readonly' -> true"
   },
   "gsyklstm1": {
     "reason": "equivalent: held tools always belong to the active request, which pruneRequests already protects via state.request",
@@ -1479,6 +1707,10 @@
     "reason": "equivalent: a null content block makes extractTextContent (b.type) throw on the next line anyway, so both versions throw",
     "where": "server/session-recent.js:78:49 ?. -> ."
   },
+  "iigtqzub2j": {
+    "reason": "equivalent: Date.now() が deadline とちょうど等しいミリ秒に 1 回多く回るかどうかの境界で、決定的に観測できない",
+    "where": "server/new-session.js:90:10 Date.now() < deadline -> Date.now() <= deadline"
+  },
   "iku9vi624a": {
     "reason": "equivalent: resetting offset/ids before every scan only forces a full rescan, which collects the same ids",
     "where": "server/subagent-tasks.js:41:7 fileStat.size < entry.offset -> true"
@@ -1503,6 +1735,10 @@
     "reason": "equivalent: an invalid Date yields the key 'NaN-NaN-NaN', which is never inside the YYYY-MM-DD day range or any from/to period, so no output changes",
     "where": "server/activity-heatmap.js:160:13 Number.isNaN(date.getTime()) -> false"
   },
+  "j6u1ti42ui": {
+    "reason": "equivalent: e が真の非オブジェクトでも e.claudeSessionId は undefined で ID_RE に合わず null になるので結果は同じ",
+    "where": "server/open-tabs.js:74:13 typeof e !== 'object' -> false"
+  },
   "jcusbqmg4i": {
     "reason": "equivalent: slice(0, DESCRIPTION_MAX) returns the same string when its length is <= DESCRIPTION_MAX",
     "where": "server/slash-commands.js:242:10 flat.length > DESCRIPTION_MAX -> flat.length >= DESCRIPTION_MAX"
@@ -1522,6 +1758,10 @@
   "js9f4f3kib": {
     "reason": "equivalent: dir is always 1 or -1, never 0",
     "where": "client/src/utils/pickJump.js:14:12 dir > 0 -> dir >= 0"
+  },
+  "juqygckiby": {
+    "reason": "equivalent: Number() は前後の空白を無視するので、line.trim() の有無で得られる pid は同じ",
+    "where": "server/running-sessions.js:49:26 line.trim() -> line"
   },
   "k3g6thth7t": {
     "reason": "equivalent: readFirstLines of a missing file yields an empty head, giving title '' and cwd '' like the fallback",
@@ -1611,6 +1851,14 @@
     "reason": "equivalent: a zero-length interval adds nothing to any slot, union or cap",
     "where": "server/activity-heatmap.js:384:7 end <= start -> end < start"
   },
+  "o1khmbykz0": {
+    "reason": "equivalent: Date.now() が deadline とちょうど等しいミリ秒での 1 回の差で、決定的に観測できない時刻の境界",
+    "where": "server/tmux-session.js:226:9 Date.now() > deadline -> Date.now() >= deadline"
+  },
+  "oapivmzc94": {
+    "reason": "equivalent: stat 失敗時に false の代わりに undefined を返しても、呼び出し側は真偽でしか見ない",
+    "where": "server/resume-cwd.js:10:11 { return false; } -> {}"
+  },
   "owjdfg0l4u": {
     "reason": "equivalent: endsWith('') is always true; dropping a last character that is not a newline does not change the line count",
     "where": "client/src/utils/toolLines.js:29:30 '\\n' -> ''"
@@ -1634,6 +1882,10 @@
   "q1myd3h2xr": {
     "reason": "equivalent: the substring check is only a JSON.parse prefilter; a JSONL line written by Claude Code (JSON.stringify) that has a tool_use/tool_result block always contains the literal type string, so parsing every line records the same blocks",
     "where": "server/shell-tasks.js:206:9 !line.includes('\"tool_use\"') && !line.includes('\"tool_resul… -> false"
+  },
+  "qu2ua9oddd": {
+    "reason": "equivalent: screen が null/undefined のときの代替が 'Stryker was here!' になっても罫線を含まないので false が返るのは同じ",
+    "where": "server/vim-mode.js:16:34 '' -> 'Stryker was here!'"
   },
   "ren1i3wg8d": {
     "reason": "equivalent: only changes the cache key used when cwd is absent; no caller can tell apart unless cwd is literally that placeholder string",
@@ -1678,6 +1930,10 @@
   "rytfpoyqyl": {
     "reason": "equivalent: the mutant only widens the push prefilter; collect() checks pr-link / Bash tool_use / error tool_result itself, so extra parsed lines add nothing",
     "where": "server/session-completion.js:77:5 (line.includes('\"Bash\"') && line.includes('push')) || line.… -> true"
+  },
+  "s1a0bpjz8l": {
+    "reason": "equivalent: 一致しないときに {} を返しても tmuxSession / windowIndex は undefined になり、sanitizeLocation で null に揃うので結果は同じ",
+    "where": "server/open-tabs.js:141:65 { tmuxSession: null, windowIndex: null } -> {}"
   },
   "s5eqaj0vlc": {
     "reason": "equivalent: zero/negative intervals add nothing: addBusy skips them, unionLength filters them and the outside cap check skips them",
@@ -1727,6 +1983,10 @@
     "reason": "equivalent: lastTimestamp is always a string (set from publish.timestamp || ''), so the || '' fallback in the sort is never taken",
     "where": "client/src/utils/artifacts.js:30:102 '' -> 'Stryker was here!'"
   },
+  "t7tonvqz5": {
+    "reason": "equivalent: (.*) は貪欲で先頭から一致できるので ^ の有無で一致の可否も取り出す値も変わらない",
+    "where": "server/open-tabs.js:140:13 /^(.*):(\\d+)\\.\\d+$/ -> /(.*):(\\d+)\\.\\d+$/"
+  },
   "ti5pzcanyw": {
     "reason": "equivalent: readFirstLines never rejects for a string path, so the .catch fallback is unreachable",
     "where": "server/claude-sessions.js:271:70 [] -> [\"Stryker was here!\"]"
@@ -1743,6 +2003,10 @@
     "reason": "equivalent: at above === margin the fallback picks above and clamps top to margin, which equals above",
     "where": "client/src/utils/recentPeek.js:21:14 above >= margin -> above > margin"
   },
+  "u6xdfh05p0": {
+    "reason": "equivalent: 直後の waitForQuietScreen が capturePane で同じ validatePaneId を tmux 実行前に呼ぶので、同じエラーで止まり差が出ない",
+    "where": "server/tmux-session.js:212:3 validatePaneId(paneId); -> ;"
+  },
   "ujdq1olcg1": {
     "reason": "equivalent: slice(0, DESCRIPTION_MAX) returns the same string when its length is <= DESCRIPTION_MAX",
     "where": "server/slash-commands.js:242:10 flat.length > DESCRIPTION_MAX -> true"
@@ -1754,6 +2018,10 @@
   "uqjatt56es": {
     "reason": "equivalent: entry.prompts is always an array in entries built by refreshDaily",
     "where": "server/activity-heatmap.js:1004:45 [] -> [\"Stryker was here!\"]"
+  },
+  "uxbdhrp0l7": {
+    "reason": "equivalent: claudeSessionId が無いときの代替が 'Stryker was here!' になっても ID_RE に合わず捨てられるのは同じ",
+    "where": "server/open-tabs.js:74:71 '' -> 'Stryker was here!'"
   },
   "uyoym35s8o": {
     "reason": "equivalent: the final flush with an empty cluster (no segments) pushes nothing",
@@ -1859,6 +2127,10 @@
     "reason": "equivalent: settleStaleBusy returns early when held is empty",
     "where": "server/activity-heatmap.js:764:9 entry.busy.held.length > 0 -> true"
   },
+  "xrjw5lsb32": {
+    "reason": "equivalent: 空白だけの行は split('\\t') で name が undefined になり後段の filter(r.name && ...) で必ず落ちるので、先に除く filter の有無は結果に出ない",
+    "where": "server/tmux-session.js:263:16 (stdout || '') .split('\\n') .filter((line) => line.trim()) -> (stdout || '') .split('\\n')"
+  },
   "y3wsoinbnd": {
     "reason": "equivalent: blank lines fail JSON.parse and are skipped by the catch anyway",
     "where": "server/activity-heatmap.js:647:11 line.trim() -> line"
@@ -1887,6 +2159,10 @@
     "reason": "equivalent: this fallback watcher is only installed when targetFile is set (with no target the same projectPath watch has just failed), so the else branch is always taken",
     "where": "server/jsonl-watcher.js:184:15 !state.targetFile -> false"
   },
+  "zbjnsi55yx": {
+    "reason": "equivalent: json が null（ファイルの中身が null）のとき json.editorMode は TypeError を投げるが try/catch で握りつぶされ、?. と同じく vim 設定なしになる",
+    "where": "server/vim-mode.js:45:15 ?. -> ."
+  },
   "zdqhrz9iy1": {
     "reason": "equivalent: for a non-directory entry the following readdirSync throws (ENOTDIR) and the same catch skips it",
     "where": "server/claude-sessions.js:52:11 !statSync(projectPath).isDirectory() -> false"
@@ -1898,5 +2174,9 @@
   "zmmwizlob5": {
     "reason": "equivalent: BUNDLED_SKILLS also has 'init' and wins by priority, so the builtin init entry never reaches the output",
     "where": "server/slash-commands.js:26:3 { name: 'init', description: 'CLAUDE.md を生成する' } -> {}"
+  },
+  "zsub9bi4kd": {
+    "reason": "equivalent: 各行を line.trim() してから正規表現で照合し、空行は照合に失敗して飛ばされるので、全体の trim の有無は結果に出ない",
+    "where": "server/claude-session-meta.js:43:24 stdout.trim() -> stdout"
   }
 }

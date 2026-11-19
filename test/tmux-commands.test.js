@@ -191,8 +191,14 @@ describe('TmuxSession.write', () => {
   });
 
   it('skips the vim check while waiting for a choice prompt', async () => {
+    vimEnabled = true;
+    execCalls._mockStdout = NORMAL_SCREEN;
     const s = new TmuxSession({ id: 'a', name: 'a', paneId: '%1', target: '0:1.1', waitingFor: 'input needed' });
-    await s.write('1\r');
+    try {
+      await s.write('1\r');
+    } finally {
+      vimEnabled = false;
+    }
     assert.ok(execCalls.every((c) => !c.includes('capture-pane')));
     assert.equal(execCalls[execCalls.length - 1], 'tmux send-keys -t %1 Enter');
   });

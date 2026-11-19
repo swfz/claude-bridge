@@ -165,7 +165,8 @@ describe('isGitRepo（既定の run）', () => {
   });
 
   it('git が失敗したら偽', async () => {
-    execFileResult = { err: new Error('fatal: not a git repository'), stdout: '' };
+    // 失敗時に stdout が残っていても信じない
+    execFileResult = { err: new Error('fatal: not a git repository'), stdout: 'true\n' };
     assert.equal(await isGitRepo('/repo'), false);
   });
 });

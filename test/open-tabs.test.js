@@ -553,7 +553,7 @@ describe('open-tabs: スナップショットの更新の詳細', () => {
   });
 
   it('見えている間は前回の記録を引き継がず、今の置き場所で書き直す', () => {
-    const prev = [{ claudeSessionId: SID_A, tmuxSession: 'old', windowName: 'x', windowIndex: 9, missing: 1 }];
+    const prev = [{ claudeSessionId: SID_A, tmuxSession: 'old', windowName: 'x', windowIndex: 9, missing: 0 }];
     const next = updatePaneSnapshot(prev, [livePane(SID_A, { target: 'new:1.0' })], { tmuxAlive: true });
     assert.equal(next.length, 1);
     assert.equal(next[0].tmuxSession, 'new');
@@ -625,6 +625,19 @@ describe('open-tabs: planRestore の詳細', () => {
         tmuxSession: 'work',
         windowName: 'wa',
         windowIndex: 0,
+      },
+    ]);
+  });
+
+  it('どこにも無い置き場所は再開待ちの項目にしない', () => {
+    const plan = planRestore({ tabs: [tmuxTab(SID_A)] }, [], []);
+    assert.deepStrictEqual(plan.pending, [
+      {
+        claudeSessionId: SID_A,
+        tab: { id: 'tab-aaaa', name: 'T' },
+        name: 'T',
+        cwd: '/home/u/t',
+        projectDir: '-home-u-t',
       },
     ]);
   });

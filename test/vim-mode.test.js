@@ -60,6 +60,19 @@ describe('isVimNormalMode', () => {
     assert.equal(isVimNormalMode([RULE, '❯ ', RULE, '  -- INS', 'ERT --'].join('\n')), true);
   });
 
+  it('only counts lines made entirely of box characters as rules', () => {
+    assert.equal(isVimNormalMode([RULE, '❯ ', 'note ' + RULE, '  footer'].join('\n')), false);
+    assert.equal(isVimNormalMode([RULE, '❯ ', RULE + ' note', '  footer'].join('\n')), false);
+  });
+
+  it('ignores a prompt mark in an earlier box above the input box', () => {
+    assert.equal(isVimNormalMode([RULE, '❯ old', RULE, 'no prompt here', RULE, '  footer'].join('\n')), false);
+  });
+
+  it('accepts a multi-line input box whose first line has the prompt mark', () => {
+    assert.equal(isVimNormalMode([RULE, '❯ hello', '  second line', RULE, '  footer'].join('\n')), true);
+  });
+
   it('treats a missing screen as not NORMAL', () => {
     assert.equal(isVimNormalMode(undefined), false);
     assert.equal(isVimNormalMode(null), false);
