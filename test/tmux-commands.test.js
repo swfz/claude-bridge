@@ -16,9 +16,27 @@ vi.mock('child_process', () => ({
   },
 }));
 
+// vim 設定は本物の ~/.claude を読まないよう差し替える（画面の判定は本物を使う）
+let vimEnabled = false;
+vi.mock('../server/vim-mode.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isVimEditorEnabled: async () => vimEnabled,
+}));
+
 // モック後に import
-const { listClaudeTmuxPanes, sendKeysToPane, validateSessionName, ensureInsertMode, TmuxSession } =
-  await import('../server/tmux-session.js');
+const {
+  listClaudeTmuxPanes,
+  isTmuxServerRunning,
+  sendKeysToPane,
+  sendChoiceKeysToPane,
+  sendChoiceTextToPane,
+  capturePane,
+  escapeTmuxFormat,
+  escapeForShell,
+  validateSessionName,
+  ensureInsertMode,
+  TmuxSession,
+} = await import('../server/tmux-session.js');
 
 describe('listClaudeTmuxPanes', () => {
   beforeEach(() => {
@@ -192,5 +210,286 @@ describe('validateSessionName', () => {
     assert.throws(() => validateSessionName('a;ls'));
     assert.throws(() => validateSessionName(''));
     assert.throws(() => validateSessionName(undefined));
+  });
+
+  it('不正な名前をエラーに含める', () => {
+    assert.throws(() => validateSessionName('a b'), /Invalid tmux session name: a b/);
+  });
+});
+
+describe('listClaudeTmuxPanes: claude の判定と出力の読み方', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = '';
+    execError = null;
+  });
+
+  it('tmux list-panes を全セッション対象のフォーマット付きで呼ぶ', async () => {
+    await listClaudeTmuxPanes();
+    assert.equal(execCalls.length, 1);
+    assert.ok(execCalls[0].startsWith('tmux list-panes -a -F "#{pane_id}\t#{pane_pid}\t#{pane_current_command}'));
+  });
+
+  it('バージョン番号は各部が複数桁でも claude とみなし、前後に余計な文字があれば claude としない', async () => {
+    execCalls._mockStdout = [
+      '%0\t1\t12.1.100\t/a\t0:1.1\tw\ts',
+      '%1\t2\t2.10.3\t/a\t0:1.2\tw\ts',
+      '%2\t3\tv2.1.100\t/a\t0:1.3\tw\ts',
+      '%3\t4\t2.1.100-beta\t/a\t0:1.4\tw\ts',
+      '%4\t5\tclaude-code\t/a\t0:1.5\tw\ts',
+    ].join('\n');
+
+    const panes = await listClaudeTmuxPanes();
+
+    assert.deepEqual(
+      panes.map((p) => p.paneId),
+      ['%0', '%1'],
+    );
+  });
+
+  it('出力末尾の空白は最後のペインの値に含めない', async () => {
+    execCalls._mockStdout = '%0\t1\tclaude\t/a\t0:1.1\tw\tsess0  \n\n';
+
+    const panes = await listClaudeTmuxPanes();
+
+    assert.equal(panes.length, 1);
+    assert.equal(panes[0].sessionName, 'sess0');
+  });
+});
+
+describe('ペイン ID の検証', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = '';
+    execError = null;
+  });
+
+  it('sendKeysToPane は不正な paneId を tmux に渡さず投げる', async () => {
+    await assert.rejects(
+      () => sendKeysToPane('%0; tmux kill-server', 'x'),
+      /Invalid paneId format: %0; tmux kill-server/,
+    );
+    assert.equal(execCalls.length, 0);
+  });
+
+  it('ensureInsertMode は不正な paneId を tmux に渡さず投げる', async () => {
+    await assert.rejects(() => ensureInsertMode('0', { vimEnabled: async () => true }), /Invalid paneId/);
+    assert.equal(execCalls.length, 0);
+  });
+});
+
+describe('sendKeysToPane: 末尾の改行', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = '';
+    execError = null;
+  });
+
+  it('末尾に続く改行（\\r\\n など）は全部落としてから送る', async () => {
+    await sendKeysToPane('%0', 'hello\r\n\n');
+    assert.equal(execCalls[0], "tmux send-keys -t %0 -l 'hello'");
+  });
+});
+
+describe('isTmuxServerRunning', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = '';
+    execError = null;
+  });
+
+  it('list-sessions が通れば真', async () => {
+    assert.equal(await isTmuxServerRunning(), true);
+    assert.deepEqual([...execCalls], ['tmux list-sessions -F "#{session_name}"']);
+  });
+
+  it('失敗したら偽', async () => {
+    execError = new Error('no server running');
+    assert.equal(await isTmuxServerRunning(), false);
+  });
+});
+
+describe('sendChoiceKeysToPane', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = '';
+    execError = null;
+  });
+
+  it('数字は -l でリテラル送信し、それ以外はキー名のまま 1 キーずつ送る', async () => {
+    await sendChoiceKeysToPane('%3', ['2', 'Enter', 'BTab']);
+    assert.deepEqual(
+      [...execCalls],
+      ["tmux send-keys -t %3 -l '2'", 'tmux send-keys -t %3 Enter', 'tmux send-keys -t %3 BTab'],
+    );
+  });
+
+  it('キーの間に少し待つ（TUI の取りこぼし対策）', async () => {
+    const t0 = Date.now();
+    await sendChoiceKeysToPane('%3', ['1', '2', '3']);
+    assert.ok(Date.now() - t0 >= 170, `elapsed ${Date.now() - t0}ms`);
+  });
+
+  it('1 キーだけなら待たない', async () => {
+    const t0 = Date.now();
+    await sendChoiceKeysToPane('%3', 'Escape');
+    assert.ok(Date.now() - t0 < 80);
+    assert.deepEqual([...execCalls], ['tmux send-keys -t %3 Escape']);
+  });
+
+  it('ホワイトリスト外のキー・不正な paneId は tmux に渡さず投げる', async () => {
+    await assert.rejects(() => sendChoiceKeysToPane('%3', ['1', 'C-c']), /Invalid choice key/);
+    await assert.rejects(() => sendChoiceKeysToPane('3', ['1']), /Invalid paneId/);
+    assert.equal(execCalls.length, 0);
+  });
+});
+
+describe('sendChoiceTextToPane', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = '';
+    execError = null;
+  });
+
+  it('改行を空白に潰し、エスケープしてリテラル送信する（Enter は付けない）', async () => {
+    await sendChoiceTextToPane('%3', "it's\nok");
+    assert.deepEqual([...execCalls], ["tmux send-keys -t %3 -l 'it'\\''s ok'"]);
+  });
+
+  it('空なら何も送らない', async () => {
+    await sendChoiceTextToPane('%3', '');
+    await sendChoiceTextToPane('%3', undefined);
+    assert.equal(execCalls.length, 0);
+  });
+
+  it('不正な paneId は投げる', async () => {
+    await assert.rejects(() => sendChoiceTextToPane('%3 x', 'a'), /Invalid paneId/);
+    assert.equal(execCalls.length, 0);
+  });
+});
+
+describe('capturePane', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = 'screen text';
+    execError = null;
+  });
+
+  it('既定は今の画面だけを読む', async () => {
+    assert.equal(await capturePane('%2'), 'screen text');
+    assert.deepEqual([...execCalls], ['tmux capture-pane -t %2 -p']);
+  });
+
+  it('scrollback を指定すると遡る（2000 行まで）', async () => {
+    await capturePane('%2', { scrollback: 300 });
+    await capturePane('%2', { scrollback: 5000 });
+    await capturePane('%2', { scrollback: 2000 });
+    assert.deepEqual(
+      [...execCalls],
+      [
+        'tmux capture-pane -t %2 -p -S -300',
+        'tmux capture-pane -t %2 -p -S -2000',
+        'tmux capture-pane -t %2 -p -S -2000',
+      ],
+    );
+  });
+
+  it('不正な paneId は投げる', async () => {
+    await assert.rejects(() => capturePane('pane'), /Invalid paneId/);
+    assert.equal(execCalls.length, 0);
+  });
+});
+
+describe('escapeTmuxFormat / escapeForShell', () => {
+  it('# を ## にする（全部）', () => {
+    assert.equal(escapeTmuxFormat('#(a) #{b}'), '##(a) ##{b}');
+    assert.equal(escapeTmuxFormat(12), '12');
+  });
+
+  it('シングルクォートを全部閉じ直す', () => {
+    assert.equal(escapeForShell("a'b'c"), "'a'\\''b'\\''c'");
+  });
+});
+
+describe('ensureInsertMode: 既定の vim 判定', () => {
+  beforeEach(() => {
+    execCalls.length = 0;
+    execCalls._mockStdout = NORMAL_SCREEN;
+    execError = null;
+  });
+
+  it('vimEnabled が失敗しても投げずに偽を返す', async () => {
+    const changed = await ensureInsertMode('%0', {
+      vimEnabled: async () => {
+        throw new Error('boom');
+      },
+    });
+    assert.equal(changed, false);
+    assert.equal(execCalls.length, 0);
+  });
+
+  it('INSERT に戻した後、少し待ってから返す', async () => {
+    const t0 = Date.now();
+    await ensureInsertMode('%0', { vimEnabled: async () => true });
+    assert.ok(Date.now() - t0 >= 70, `elapsed ${Date.now() - t0}ms`);
+  });
+});
+
+describe('TmuxSession: tmux に流す操作', () => {
+  beforeEach(() => {
+    vimEnabled = false;
+    execCalls.length = 0;
+    execCalls._mockStdout = '';
+    execError = null;
+  });
+
+  const make = (extra = {}) => new TmuxSession({ id: 'a', name: 'a', paneId: '%4', target: '0:1.1', ...extra });
+
+  it('write は選択肢待ちでなければ vim の NORMAL を INSERT に戻してから本文と Enter を送る', async () => {
+    vimEnabled = true;
+    execCalls._mockStdout = NORMAL_SCREEN;
+    await make().write('hi\r');
+    assert.deepEqual(
+      [...execCalls],
+      [
+        'tmux capture-pane -t %4 -p',
+        'tmux send-keys -t %4 -l i',
+        "tmux send-keys -t %4 -l 'hi'",
+        'tmux send-keys -t %4 Enter',
+      ],
+    );
+  });
+
+  it('続けて呼んだ write は順番どおりに送る', async () => {
+    const s = make({ waitingFor: 'input needed' });
+    s.write('first\r');
+    await s.write('second\r');
+    const bodies = execCalls.filter((c) => c.includes(' -l '));
+    assert.deepEqual(bodies, ["tmux send-keys -t %4 -l 'first'", "tmux send-keys -t %4 -l 'second'"]);
+  });
+
+  it('getScreenText は今の画面を返す', async () => {
+    execCalls._mockStdout = 'current';
+    assert.equal(await make().getScreenText(), 'current');
+    assert.deepEqual([...execCalls], ['tmux capture-pane -t %4 -p']);
+  });
+
+  it('sendChoiceKeys / sendChoiceText はそのペインに送る', async () => {
+    const s = make();
+    await s.sendChoiceKeys(['Escape']);
+    await s.sendChoiceText('abc');
+    assert.deepEqual([...execCalls], ['tmux send-keys -t %4 Escape', "tmux send-keys -t %4 -l 'abc'"]);
+  });
+
+  it('getOutputBuffer は 500 行遡った画面を返し、失敗したら空文字', async () => {
+    execCalls._mockStdout = 'history';
+    assert.equal(await make().getOutputBuffer(), 'history');
+    assert.deepEqual([...execCalls], ['tmux capture-pane -t %4 -p -S -500']);
+    execError = new Error('pane gone');
+    assert.equal(await make().getOutputBuffer(), '');
+  });
+
+  it('不正な paneId では作れない', () => {
+    assert.throws(() => make({ paneId: 'bad' }), /Invalid paneId/);
   });
 });
