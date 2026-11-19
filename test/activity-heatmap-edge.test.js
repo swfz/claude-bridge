@@ -18,7 +18,6 @@ import {
   listActiveSessionIds,
   noteCostState,
   resetActivityHeatmapState,
-  sessionBusyCorrections,
   settleStaleBusy,
   toolCountMode,
 } from '../server/activity-heatmap.js';
@@ -1028,6 +1027,55 @@ describe('getActivityCalendar の範囲と並び', () => {
     assert.ok(sumCol(session, BUSY_COL) < 300000);
   });
 
+  it('期間の後に始まったセッションの縮小・配分では、セッションを出さない', async () => {
+    const after = (toSlot * SLOT_MS - BASE) / 1000;
+    const shrunk = [
+      human(after),
+      block(after + 1, 'r1', [use('a')]),
+      result(after + 301, 'a', { permissionDecision: CONFIG }),
+      block(after + 302, 'r2'),
+      costState(after - 10, 10000, 3600),
+    ];
+    assert.equal(await calendarOf(shrunk), undefined);
+    resetActivityHeatmapState();
+    const approved = [
+      human(after),
+      block(after + 1, 'r1', [use('a')]),
+      block(after + 2, 'r2'),
+      result(after + 30, 'a', { permissionDecision: ACCEPT }),
+      block(after + 31, 'r3'),
+      costState(after - 10, 10000, 3600),
+    ];
+    assert.equal(await calendarOf(approved), undefined);
+  });
+
+  it('期間の前に終わったセッションの配分では、セッションを出さない', async () => {
+    const before = (RANGE.fromMs - BASE) / 1000 - 7200;
+    const approved = [
+      human(before),
+      block(before + 1, 'r1', [use('a')]),
+      block(before + 2, 'r2'),
+      result(before + 30, 'a', { permissionDecision: ACCEPT }),
+      block(before + 31, 'r3'),
+      costState(before - 10, 10000, 3600),
+    ];
+    assert.equal(await calendarOf(approved), undefined);
+  });
+
+  it('期間の最初の枠への配分も当てる', async () => {
+    const start = (fromSlot * SLOT_MS - BASE) / 1000;
+    const session = await calendarOf([
+      human(start),
+      block(start + 1, 'r1', [use('a')]),
+      block(start + 2, 'r2'),
+      result(start + 30, 'a', { permissionDecision: ACCEPT }),
+      block(start + 31, 'r3'),
+      costState(start - 10, 10000, 3600),
+    ]);
+    // 推論 1+1+1 = 3s と、許可ツールへの配分 10s
+    assert.equal(sumCol(session, BUSY_COL), 13000);
+  });
+
   it('期間外の縮小・配分だけでセッションを出したり、期間外の枠を足したりしない', async () => {
     // 期間（RANGE）より前に終わったセッション。縮小と配分の差分は期間外の枠にだけ乗る
     const before = (RANGE.fromMs - BASE) / 1000 - 7200;
@@ -1227,14 +1275,39 @@ describe('キャッシュの読み込みと走査', () => {
     assert.equal(fresh.total.prompts, 2);
   });
 
-  it('更新されたばかりのファイルの保留中のツールはまだ数えない', async () => {
-    const session = await calendarOf([
+  it('更新が止まって 10 分経つまでは保留中のツールを数えない', async () => {
+    const { dir, cacheFile } = await makeEnv();
+    await writeMain(dir, [human(0), block(1, 'r1', [use('a')]), result(301, 'a', { permissionDecision: CONFIG })]);
+    const path = join(dir, '-home-me-a', 's1.jsonl');
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    await utimes(path, fiveMinutesAgo, fiveMinutesAgo);
+    const { sessions } = await getActivityCalendar({ ...RANGE, dir, cacheFile });
+    // 推論 1s だけ（ツールは応答の確定を待って保留）
+    assert.equal(sumCol(sessions[0], BUSY_COL), 1000);
+    resetActivityHeatmapState();
+    const elevenMinutesAgo = new Date(Date.now() - 11 * 60 * 1000);
+    await utimes(path, elevenMinutesAgo, elevenMinutesAgo);
+    const settled = await getActivityCalendar({ ...RANGE, dir, cacheFile });
+    assert.equal(sumCol(settled.sessions[0], BUSY_COL), 301000);
+  });
+
+  it('サブエージェントの自動ツールは本体の縮小の和集合に入れない', async () => {
+    const main = [
       human(0),
       block(1, 'r1', [use('a')]),
-      result(301, 'a', { permissionDecision: CONFIG }),
-    ]);
-    // 推論 1s だけ（ツールは応答の確定を待って保留）
-    assert.equal(sumCol(session, BUSY_COL), 1000);
+      result(101, 'a', { permissionDecision: CONFIG }),
+      block(102, 'r2'),
+      costState(-10, 10000, 3600),
+    ];
+    const sub = [
+      human(0),
+      block(1, 's1', [use('b')]),
+      result(51, 'b', { permissionDecision: CONFIG }),
+      block(52, 's2'),
+    ];
+    const session = await calendarOf(main, sub);
+    // 本体 a は 100s → 10s、サブ b は 50s のまま。推論は本体 1+1、サブ 1+1
+    assert.equal(sumCol(session, BUSY_COL), 10000 + 50000 + 4000);
   });
 });
 
