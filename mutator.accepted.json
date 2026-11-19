@@ -39,9 +39,17 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:77:40 '' -> 'Stryker was here!'"
   },
+  "15jacm6pe8i": {
+    "reason": "equivalent: 件数 1 のキーを delete する代わりに 0 を入れても、読む側は pending.get(key) || 0 で同じ 0 になる",
+    "where": "server/jsonl-utils.js:130:9 n === 1 -> false"
+  },
   "15wbd46ma9o": {
     "reason": "equivalent: BARE_URL_RE excludes the full-width closing bracket, so a bare URL match can never end with it",
     "where": "client/src/utils/links.js:12:73 '）' -> ''"
+  },
+  "15yy0eyyvwx": {
+    "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクトなら result.url は undefined で、次の typeof url 検査で同じく null になる",
+    "where": "server/jsonl-utils.js:227:18 typeof result !== 'object' -> false"
   },
   "162sktold7f": {
     "reason": "equivalent: a sentinel string as a slot has slot[0]='S', so ms is NaN and matches no day (and slot[7]=' ' is skipped by value <= 0)",
@@ -59,9 +67,17 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:66:38 '' -> 'Stryker was here!'"
   },
+  "19jd9zbhotq": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:86:15 pending.get(key) || 0 -> (pending.get(key) && 0)"
+  },
   "19mj04nklwn": {
     "reason": "equivalent: on an empty string last is undefined, which is not in TRAILING_CHARS, so the loop breaks right away",
     "where": "client/src/utils/links.js:32:10 result.length > 0 -> result.length >= 0"
+  },
+  "19z1rswvb86": {
+    "reason": "equivalent: model が文字列でないときの '' をダミー文字列にしても、[1m] も MODELS_1M にも当たらないので窓は同じ",
+    "where": "server/jsonl-utils.js:520:50 '' -> 'Stryker was here!'"
   },
   "1agtw2kh8dy": {
     "reason": "equivalent: indexes past the end read undefined, whose ?.id is undefined, so they are skipped",
@@ -99,9 +115,17 @@
     "reason": "equivalent: an empty array maps to an empty points list and joins to '' without the guard",
     "where": "client/src/utils/heatmap.js:430:18 values.length === 0 -> false"
   },
+  "1ecc7cyj4nl": {
+    "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクト（文字列・数値・真偽値）なら result.agentId は undefined で、次の typeof result.agentId !== 'string' で同じく return する",
+    "where": "server/jsonl-utils.js:167:44 typeof result !== 'object' -> false"
+  },
   "1g4d6zm8g4w": {
     "reason": "equivalent: after trim, split yields '' only for an empty query; terms [''] match every dir with rank 0 and keep server order, same as list.slice(0, limit)",
     "where": "client/src/utils/recentDirs.js:25:17 (query || '').trim().toLowerCase().split(/\\s+/).filter(Bool… -> (query || '').trim().toLowerCase().split(/\\s+/)"
+  },
+  "1gcyrp32dlx": {
+    "reason": "equivalent: 呼び出し側が code を number か null に正規化済みで、null < 200 は true なので同じくタイトルなしになる",
+    "where": "server/jsonl-utils.js:271:7 typeof code !== 'number' -> false"
   },
   "1h340xxwdxq": {
     "reason": "equivalent: pos = found + 1 never exceeds length; at pos === length indexOf finds only an empty needle, which is returned early",
@@ -110,6 +134,10 @@
   "1h9b3t97r56": {
     "reason": "equivalent: the default isHidden result is only negated in filter, and !undefined === !false",
     "where": "client/src/utils/tabGroups.js:191:57 false -> undefined"
+  },
+  "1hjoo838ylj": {
+    "reason": "equivalent: 2 つ目の ?. は、match が null なら 1 つ目の ?. で式全体が短絡し、非 null ならキャプチャ群は必ず文字列なので . でも同じ",
+    "where": "server/jsonl-utils.js:355:78 ?. -> ."
   },
   "1hnap7vg8wr": {
     "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
@@ -122,6 +150,14 @@
   "1jdqqki8drh": {
     "reason": "equivalent: dropping a last character that is not a newline does not change the number of newlines, so the line count is the same (a single char gives [''] = 1)",
     "where": "client/src/utils/toolLines.js:29:16 text.endsWith('\\n') -> true"
+  },
+  "1jhj42j1fs0": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> true"
+  },
+  "1ji5bmeps1q": {
+    "reason": "equivalent: 文字列でない agentId で agentNames に登録されても、引く側（queuedAgentMessage）の from は正規表現か typeof 検査済みで常に文字列なので引き当たらない",
+    "where": "server/jsonl-utils.js:167:74 typeof result.agentId !== 'string' -> false"
   },
   "1jiczj7khdt": {
     "reason": "equivalent: splitting on single whitespace only adds empty terms, which filter((term) => term.length > 0) removes",
@@ -171,6 +207,18 @@
     "reason": "equivalent: BARE_URL_RE excludes the closing corner bracket, so a bare URL match can never end with it",
     "where": "client/src/utils/links.js:12:78 '」' -> ''"
   },
+  "1o8fn10vhdw": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> (pending.get(key) && 0)"
+  },
+  "1ojyyyd6ajj": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:88:11 n === 1 -> n !== 1"
+  },
+  "1p16ssalesl": {
+    "reason": "equivalent: questions が無いときの [] を文字列 1 要素の配列にしても、文字列の q?.question は undefined で filter(Boolean) に落ち、同じく AskUserQuestion になる",
+    "where": "server/jsonl-utils.js:493:29 [] -> [\"Stryker was here!\"]"
+  },
   "1pipvett5vx": {
     "reason": "equivalent: new Date(undefined) is an invalid date, so formatClock returns null through the NaN check anyway",
     "where": "client/src/utils/usageMeter.js:26:23 iso === undefined -> false"
@@ -186,6 +234,10 @@
   "1riwol4zvs6": {
     "reason": "equivalent: the fallback edit is a string; its ?.old_string/?.new_string are undefined so lineDiffStats adds 0/0",
     "where": "client/src/utils/toolLines.js:62:67 [] -> [\"Stryker was here!\"]"
+  },
+  "1rn2etn7zz0": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:88:11 n === 1 -> false"
   },
   "1rszyqlbbvz": {
     "reason": "equivalent: fallback for a missing e.code; 'Stryker was here!' does not match /^(?:Digit|Numpad)([0-9])$/ any more than '' does",
@@ -223,6 +275,14 @@
     "reason": "equivalent (assumes unique bridge ids): dropping a tab on itself removes it, the target is then not found, and it is reinserted at its original index",
     "where": "client/src/utils/tabOrder.js:37:19 fromId === targetId -> false"
   },
+  "1vfypapg15t": {
+    "reason": "equivalent: attachment が JSON 由来の非オブジェクトなら a.type は undefined で、次の a.type !== 'hook_non_blocking_error' で同じく null になる",
+    "where": "server/jsonl-utils.js:179:59 typeof record.attachment === 'object' -> true"
+  },
+  "1vxqg1rlwip": {
+    "reason": "equivalent: content が無いときの [] を文字列 1 要素の配列にしても、文字列には type が無いので tool_use / tool_result として拾われない",
+    "where": "server/jsonl-utils.js:158:86 [] -> [\"Stryker was here!\"]"
+  },
   "1w3fyjlr77a": {
     "reason": "equivalent: Object.values of a JSON array is its elements in order, the same as the array itself",
     "where": "client/src/utils/links.js:151:18 Array.isArray(input) -> false"
@@ -251,9 +311,17 @@
     "reason": "equivalent: TURN_LABELS.ended is never read; completionChecks uses the literal 'ターン終了' when turn === 'ended'",
     "where": "client/src/utils/completionState.js:25:10 'ターン終了' -> ''"
   },
+  "1z7lkhbplle": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:87:16 { if (n === 1) pending.delete(key); else pending.set(key, n… -> {}"
+  },
   "200uz498wwn": {
     "reason": "equivalent: this loop runs only when no block has x.line === line (exact matches return earlier), so <= and < select the same block",
     "where": "client/src/utils/sourceBlocks.js:30:9 x.line <= line -> x.line < line"
+  },
+  "20od1euym6m": {
+    "reason": "equivalent: 2 つ目の ?. は、match が null なら 1 つ目の ?. で式全体が短絡し、非 null ならキャプチャ群は必ず文字列なので . でも同じ",
+    "where": "server/jsonl-utils.js:44:101 ?. -> ."
   },
   "215s1jfeehy": {
     "reason": "equivalent: headings after the node in document order neither have FOLLOWING set nor equal the node, so continuing the loop never changes last",
@@ -295,6 +363,10 @@
     "reason": "equivalent: a sentinel string as a session has no slots (session.slots || []), so nothing is added",
     "where": "client/src/utils/calendar.js:229:37 [] -> [\"Stryker was here!\"]"
   },
+  "24pirhmb26v": {
+    "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクトなら result.url は undefined で、次の typeof url 検査で同じく null になる",
+    "where": "server/jsonl-utils.js:291:18 typeof result !== 'object' -> false"
+  },
   "24u5ctkinwu": {
     "reason": "equivalent: tokens ending in 8 digits are neither a family name nor a 1-2 digit version, so dropping them changes nothing",
     "where": "client/src/utils/modelLabel.js:16:46 /^\\d{8}$/ -> /\\d{8}$/"
@@ -319,9 +391,21 @@
     "reason": "equivalent: Date.parse('Stryker was here!') and Date.parse('') are both NaN, so timeOf returns null either way",
     "where": "client/src/utils/working.js:11:40 '' -> 'Stryker was here!'"
   },
+  "27owr5xz11d": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:88:20 pending.delete(key); -> ;"
+  },
+  "27rd1yyzmkj": {
+    "reason": "equivalent: msg が文字列なら msg.content は undefined で、次の Array.isArray(content) で同じく [] になる",
+    "where": "server/jsonl-utils.js:460:15 typeof msg === 'string' -> false"
+  },
   "287ulgc71t4": {
     "reason": "equivalent: when resetAt is set the date is valid, so remaining is always a non-empty string ('now' at the latest)",
     "where": "client/src/utils/usageMeter.js:73:39 remaining -> true"
+  },
+  "288gyyzd8oy": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:83:7 queued -> true"
   },
   "28n7u2osdgf": {
     "reason": "equivalent: 先頭の [\\s\\S]*? が空から伸びられるので、^ が無くても exec は必ず位置 0 から一致し、m[1] は同じになる",
@@ -335,6 +419,10 @@
     "reason": "equivalent: the placeholder text does not match the rgb() regex, so parseCssColor returns null just like for ''",
     "where": "client/src/utils/previewColorScheme.js:11:112 '' -> 'Stryker was here!'"
   },
+  "2aflamqv8zu": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:86:15 pending.get(key) || 0 -> false"
+  },
   "2b2uxun9ppg": {
     "reason": "equivalent: timeOf is only called on messages that passed isTurnStart (role === 'human'), so m is never nullish",
     "where": "client/src/utils/working.js:11:25 ?. -> ."
@@ -343,9 +431,17 @@
     "reason": "equivalent: cluster is empty only for the first segment (clusterEnd = -Infinity); flushing an empty cluster pushes nothing and resets already-empty arrays",
     "where": "client/src/utils/calendar.js:83:38 cluster.length > 0 -> true"
   },
+  "2cvdiaizbe9": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:85:10 { const n = pending.get(key) || 0; if (n > 0) { if (n === 1… -> {}"
+  },
   "2cwltaeaymu": {
     "reason": "equivalent: consecutive whitespace only produces '' terms, which filter(Boolean) drops",
     "where": "client/src/utils/recentDirs.js:25:58 /\\s+/ -> /\\s/"
+  },
+  "2d4tvaukhlw": {
+    "reason": "equivalent: text は '' で初期化済みなので、早期 return を消しても末尾で '' が返る",
+    "where": "server/jsonl-utils.js:19:20 { return ''; } -> {}"
   },
   "2djtkzh1d0n": {
     "reason": "equivalent: the placeholder string has no prs, so it contributes nothing to the counts",
@@ -366,6 +462,14 @@
   "2fdmx5k57y3": {
     "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
+  },
+  "2fgur0spfhd": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> false"
+  },
+  "2fpywxil4wc": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:83:15 { pending.set(key, (pending.get(key) || 0) + 1); } -> {}"
   },
   "2gadf25fgtf": {
     "reason": "equivalent: i === segs.length では segs[i] が undefined で、SENSITIVE_DIRS.has(undefined) も SUBDIRS の比較も偽になり結果が変わらない",
@@ -391,6 +495,10 @@
     "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
     "where": "client/src/utils/sensitiveSessions.js:33:12 Array.isArray(raw) -> true"
   },
+  "3uhswbi9jw": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:78:73 false -> true"
+  },
   "43e0a5gs6y": {
     "reason": "equivalent: the placeholder string has no sessionId, so filter(Boolean) removes it and runningIds stays empty",
     "where": "client/src/utils/runningSessions.js:45:50 [] -> [\"Stryker was here!\"]"
@@ -398,6 +506,14 @@
   "4p7ljk15ti": {
     "reason": "equivalent: letting value 0 through adds 0 to the day total",
     "where": "client/src/utils/calendar.js:232:11 value <= 0 -> value < 0"
+  },
+  "59l0xrtzbo": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:83:7 queued -> false"
+  },
+  "6deus6ugk5": {
+    "reason": "equivalent: 2 つ目の ?. は、match が null なら 1 つ目の ?. で式全体が短絡し、非 null ならキャプチャ群は必ず文字列なので . でも同じ",
+    "where": "server/jsonl-utils.js:357:78 ?. -> ."
   },
   "6eb7gjw1q8": {
     "reason": "equivalent: when idx is -1, clamped - idx equals clamped + 1",
@@ -415,9 +531,21 @@
     "reason": "equivalent: draft が null/undefined なら .items が TypeError になり catch で同じ { items: [] } を返す",
     "where": "server/storage.js:54:33 ?. -> ."
   },
+  "7ash5kw93z": {
+    "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクトなら result.type は undefined なので created は false のまま",
+    "where": "server/jsonl-utils.js:250:31 typeof result === 'object' -> true"
+  },
   "7jwqd9p23q": {
     "reason": "equivalent: indexes past the end read messages[i]?.contextUsage as undefined and are skipped, so the scan result is unchanged",
     "where": "client/src/utils/contextUsage.js:9:16 messages.length - 1 -> messages.length + 1"
+  },
+  "7khhd10zlw": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:87:9 n > 0 -> false"
+  },
+  "80qk4u6wdt": {
+    "reason": "equivalent: record が null なら次の行の record.type で同じ TypeError になるので、ここで落ちても外から見た結果は同じ",
+    "where": "server/jsonl-utils.js:158:39 ?. -> ."
   },
   "8mrlkfqera": {
     "reason": "equivalent: fallback for a missing e.key; VIM_NAV_BY_KEY has no 'stryker was here!' entry, so the lookup is undefined as with '' and the result is null",
@@ -455,13 +583,29 @@
     "reason": "equivalent: for an empty head the ratio is 0/0 = NaN and NaN > 0.05 is false, the same result as the early return",
     "where": "client/src/utils/binaryText.js:15:7 head.length === 0 -> false"
   },
+  "df2mueafh6": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:84:22 (pending.get(key) || 0) + 1 -> (pending.get(key) || 0) - 1"
+  },
   "do60oj4gb5": {
     "reason": "equivalent: bucketTicks only special-cases 'month'; any other default takes the same day/week path",
     "where": "client/src/utils/heatmap.js:274:52 'day' -> ''"
   },
+  "duejkhoxh2": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:89:29 n - 1 -> n + 1"
+  },
   "e1hx4lek3q": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
     "where": "client/src/utils/tabGroups.js:145:7 raw.colors && typeof raw.colors === 'object' -> (raw.colors || typeof raw.colors === 'object')"
+  },
+  "e3me3n9bs6": {
+    "reason": "equivalent: msg が文字列なら msg.content は undefined で、次の Array.isArray(content) で同じく [] になる",
+    "where": "server/jsonl-utils.js:460:30 'string' -> ''"
+  },
+  "f7793t6x3c": {
+    "reason": "equivalent: msg が文字列などの非オブジェクトなら msg.content は undefined で、次の Array.isArray で同じく '' になる",
+    "where": "server/jsonl-utils.js:210:26 typeof msg === 'object' -> true"
   },
   "fs23oc78yo": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
@@ -519,6 +663,10 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:35:41 '' -> 'Stryker was here!'"
   },
+  "lmis8xs2cp": {
+    "reason": "equivalent: usage が JSON 由来の非オブジェクトなら各トークンは undefined→0 で contextTokens が 0 になり、同じく null を返す",
+    "where": "server/jsonl-utils.js:533:17 typeof usage !== 'object' -> false"
+  },
   "lqnyv9p8fj": {
     "reason": "equivalent: occ is only read as occ.total > 1 (undefined > 1 is false), and occ.index only inside that branch",
     "where": "client/src/utils/previewLocation.js:124:88 { index: 0, total: 0 } -> {}"
@@ -526,6 +674,10 @@
   "lqxjqot9zu": {
     "reason": "equivalent: 8-letter non-digit tokens are neither a family name (max 7 letters) nor a version, so dropping them changes nothing",
     "where": "client/src/utils/modelLabel.js:16:46 /^\\d{8}$/ -> /^\\D{8}$/"
+  },
+  "ls9tafhctn": {
+    "reason": "equivalent: 直前で record.message?.usage が truthy なのを確かめているので、ここでは message は必ずある",
+    "where": "server/jsonl-utils.js:540:38 ?. -> ."
   },
   "lz4hiv0u77": {
     "reason": "equivalent: the placeholder string has no cwd, so its project is '' and never equals the truthy project filter",
@@ -598,6 +750,10 @@
   "vo3de5pqns": {
     "reason": "equivalent: width only feeds left; whenever width differs, left = viewport.width - margin - width falls below margin and is clamped to margin, the same as the original",
     "where": "client/src/utils/recentPeek.js:5:41 viewport.width - margin * 2 -> viewport.width + margin * 2"
+  },
+  "w1mz97yo1z": {
+    "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
+    "where": "server/jsonl-utils.js:88:11 n === 1 -> true"
   },
   "whauh8pcl9": {
     "reason": "equivalent: the placeholder string has no cwd, so parseCwd gives an empty project and it is skipped",

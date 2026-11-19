@@ -1,5 +1,7 @@
-import { describe, it } from 'vitest';
+import { afterEach, describe, it, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import {
   contextWindowFor,
   cwdToProjectDir,
@@ -20,6 +22,10 @@ import {
   parseTaskNotifications,
   taskNotificationMessage,
   createTaskNotificationState,
+  queuedAgentMessage,
+  noteAgentLaunch,
+  extractToolResultFlags,
+  parseSummaryTools,
 } from '../server/jsonl-utils.js';
 
 describe('extractTextContent', () => {
@@ -732,5 +738,735 @@ describe('taskNotificationMessage', () => {
 
   it('タスク通知でなければ null', () => {
     assert.equal(taskNotificationMessage({}, 'こんにちは', createTaskNotificationState()), null);
+  });
+});
+
+describe('queuedAgentMessage', () => {
+  const HANDBACK_BODY =
+    '[Subagent hand-back] The text below is the final report. The report follows:\n  ## 結果\n  - 完了';
+  const enqueueText = (from, body) => `<agent-message from="${from}">\n${body}\n</agent-message>`;
+  const peerRecord = (from, body) => ({ type: 'user', uuid: 'u-peer', origin: { kind: 'peer', from, body } });
+
+  it('enqueue の報告を subagent の human メッセージにし、種別名を引き当てる', () => {
+    const state = createTaskNotificationState();
+    // 種別名は Agent ツールのレコードから覚える（noteAgentLaunch）
+    noteAgentLaunch({ type: 'user', toolUseResult: { agentId: 'a1', agentType: 'Explore' } }, state);
+    const r = queuedAgentMessage({ uuid: 'u1', timestamp: 't1' }, enqueueText('a1', HANDBACK_BODY), state, {
+      queued: true,
+    });
+    assert.deepEqual(r, {
+      message: {
+        role: 'human',
+        content: '## 結果\n- 完了',
+        injected: true,
+        sender: { kind: 'subagent', name: 'Explore' },
+        uuid: 'u1',
+        timestamp: 't1',
+      },
+    });
+  });
+
+  it('報告の形でない本文は peer として本文をそのまま出し、timestamp が無ければ空文字', () => {
+    const state = createTaskNotificationState();
+    const r = queuedAgentMessage({ uuid: 'u2' }, enqueueText('a2', '  こんにちは  '), state, { queued: true });
+    assert.deepEqual(r.message, {
+      role: 'human',
+      content: 'こんにちは',
+      injected: true,
+      sender: { kind: 'peer' },
+      uuid: 'u2',
+      timestamp: '',
+    });
+  });
+
+  it('hand-back の前置きがあれば報告を取り出せなくても subagent', () => {
+    const state = createTaskNotificationState();
+    const r = queuedAgentMessage({}, enqueueText('a3', '[Subagent hand-back] no marker'), state, { queued: true });
+    assert.equal(r.message.sender.kind, 'subagent');
+    assert.equal(r.message.content, '[Subagent hand-back] no marker');
+  });
+
+  it('enqueue の後に来た同じ本文の peer レコードは捨て、2 件目以降は呼び出し側に任せる（null）', () => {
+    const state = createTaskNotificationState();
+    queuedAgentMessage({}, enqueueText('a1', HANDBACK_BODY), state, { queued: true });
+    assert.deepEqual(queuedAgentMessage(peerRecord('a1', HANDBACK_BODY), '', state), { message: null });
+    assert.equal(queuedAgentMessage(peerRecord('a1', HANDBACK_BODY), '', state), null);
+  });
+
+  it('同じ本文が 2 回積まれたら、後の peer レコードも 2 件まで捨てる（表示は 1 回）', () => {
+    const state = createTaskNotificationState();
+    const first = queuedAgentMessage({}, enqueueText('a1', 'x'), state, { queued: true });
+    const second = queuedAgentMessage({}, enqueueText('a1', 'x'), state, { queued: true });
+    assert.notEqual(first.message, null);
+    assert.deepEqual(second, { message: null });
+    assert.deepEqual(queuedAgentMessage(peerRecord('a1', 'x'), '', state), { message: null });
+    assert.deepEqual(queuedAgentMessage(peerRecord('a1', 'x'), '', state), { message: null });
+    assert.equal(queuedAgentMessage(peerRecord('a1', 'x'), '', state), null);
+  });
+
+  it('送り手が違えば同じ本文でも別の報告', () => {
+    const state = createTaskNotificationState();
+    queuedAgentMessage({}, enqueueText('a1', 'x'), state, { queued: true });
+    assert.equal(queuedAgentMessage(peerRecord('a2', 'x'), '', state), null);
+    assert.notEqual(queuedAgentMessage({}, enqueueText('a2', 'x'), state, { queued: true }).message, null);
+  });
+
+  it('agent-message でない enqueue・peer でないレコードは null', () => {
+    const state = createTaskNotificationState();
+    assert.equal(queuedAgentMessage({}, 'ふつうの文', state, { queued: true }), null);
+    assert.equal(queuedAgentMessage({}, null, state, { queued: true }), null);
+    assert.equal(queuedAgentMessage({}, `前置き ${enqueueText('a1', 'x')}`, state, { queued: true }), null);
+    assert.equal(queuedAgentMessage({}, `${enqueueText('a1', 'x')} 後ろ`, state, { queued: true }), null);
+    assert.equal(queuedAgentMessage({ type: 'user', origin: { kind: 'human' } }, '', state), null);
+    assert.equal(queuedAgentMessage({ type: 'user', origin: { kind: 'peer', from: 1, body: 'x' } }, '', state), null);
+    assert.equal(queuedAgentMessage({ type: 'user', origin: { kind: 'peer', from: 'a', body: 2 } }, '', state), null);
+    assert.equal(queuedAgentMessage(null, '', state), null);
+  });
+
+  it('属性付きの agent-message タグや前後の空白も読む', () => {
+    const state = createTaskNotificationState();
+    const text = '  <agent-message from="a9" extra="1">本文</agent-message>  ';
+    assert.equal(queuedAgentMessage({}, text, state, { queued: true }).message.content, '本文');
+  });
+});
+
+describe('noteAgentLaunch', () => {
+  const launch = (id, name, subagentType) => ({
+    type: 'assistant',
+    message: { content: [{ type: 'tool_use', id, name, input: { subagent_type: subagentType } }] },
+  });
+  const result = (toolUseId, toolUseResult) => ({
+    type: 'user',
+    message: { content: [{ type: 'tool_result', tool_use_id: toolUseId }] },
+    toolUseResult,
+  });
+  // 覚えた種別名は、その agentId からの報告の sender.name として見える
+  const nameAfter = (state, agentId) => {
+    const r = queuedAgentMessage({}, `<agent-message from="${agentId}">x</agent-message>`, state, { queued: true });
+    return r.message.sender.name;
+  };
+
+  it('Agent / Task の呼び出しの subagent_type を結果の agentId に結びつける', () => {
+    const state = createTaskNotificationState();
+    noteAgentLaunch(launch('t1', 'Agent', 'Explore'), state);
+    noteAgentLaunch(launch('t2', 'Task', 'Plan'), state);
+    noteAgentLaunch(result('t1', { agentId: 'a1', agentType: 'other' }), state);
+    noteAgentLaunch(result('t2', { agentId: 'a2' }), state);
+    assert.equal(nameAfter(state, 'a1'), 'Explore');
+    assert.equal(nameAfter(state, 'a2'), 'Plan');
+  });
+
+  it('種別名が分からない結果で、覚えていた種別名を消さない', () => {
+    const state = createTaskNotificationState();
+    noteAgentLaunch(launch('t1', 'Agent', 'Explore'), state);
+    noteAgentLaunch(result('t1', { agentId: 'a1' }), state);
+    noteAgentLaunch(result('t-unknown', { agentId: 'a1' }), state);
+    assert.equal(nameAfter(state, 'a1'), 'Explore');
+  });
+
+  it('呼び出しが見つからなければ結果の agentType を使う', () => {
+    const state = createTaskNotificationState();
+    noteAgentLaunch(result('t9', { agentId: 'a1', agentType: 'general' }), state);
+    assert.equal(nameAfter(state, 'a1'), 'general');
+  });
+
+  it('Agent 以外のツール・subagent_type の無い呼び出し・agentId の無い結果は覚えない', () => {
+    const state = createTaskNotificationState();
+    noteAgentLaunch(launch('t1', 'Read', 'Explore'), state);
+    noteAgentLaunch(launch('t2', 'Agent', ''), state);
+    noteAgentLaunch(result('t1', { agentId: 'a1' }), state);
+    noteAgentLaunch(result('t2', { agentId: 'a2', agentType: 5 }), state);
+    noteAgentLaunch(result('t1', { agentId: 7, agentType: 'x' }), state);
+    noteAgentLaunch({ ...result('t1', { agentId: 'a3', agentType: 'x' }), type: 'system' }, state);
+    noteAgentLaunch(result('t1', null), state);
+    assert.equal(nameAfter(state, 'a1'), undefined);
+    assert.equal(nameAfter(state, 'a2'), undefined);
+    assert.equal(nameAfter(state, 'a3'), undefined);
+  });
+
+  it('assistant レコードの toolUseResult は結果として扱わない', () => {
+    const state = createTaskNotificationState();
+    noteAgentLaunch(
+      { type: 'assistant', message: { content: [] }, toolUseResult: { agentId: 'a1', agentType: 'x' } },
+      state,
+    );
+    assert.equal(nameAfter(state, 'a1'), undefined);
+  });
+
+  it('agentNames を持たない state でも落ちず、content の無い結果は agentType で覚える', () => {
+    assert.doesNotThrow(() => noteAgentLaunch(launch('t1', 'Agent', 'Explore'), {}));
+    assert.doesNotThrow(() => noteAgentLaunch(launch('t1', 'Agent', 'Explore'), null));
+    const state = createTaskNotificationState();
+    noteAgentLaunch({ type: 'user', toolUseResult: { agentId: 'a1', agentType: 'x' } }, state);
+    assert.equal(nameAfter(state, 'a1'), 'x');
+  });
+});
+
+describe('extractToolResultFlags', () => {
+  const record = (content, toolUseResult) => ({ type: 'user', message: { content }, toolUseResult });
+  const ok = (id, extra = {}) => ({ type: 'tool_result', tool_use_id: id, ...extra });
+
+  it('失敗・新規作成・普通の成功をツールごとに返す', () => {
+    assert.deepEqual(extractToolResultFlags(record([ok('t1', { is_error: true }), ok('t2')])), [
+      { id: 't1', error: true },
+      { id: 't2' },
+    ]);
+    assert.deepEqual(extractToolResultFlags(record([ok('t3')], { type: 'create' })), [{ id: 't3', created: true }]);
+  });
+
+  it('失敗は新規作成より優先し、create 以外の結果は普通の成功', () => {
+    assert.deepEqual(extractToolResultFlags(record([ok('t1', { is_error: true })], { type: 'create' })), [
+      { id: 't1', error: true },
+    ]);
+    assert.deepEqual(extractToolResultFlags(record([ok('t1')], { type: 'update' })), [{ id: 't1' }]);
+    assert.deepEqual(extractToolResultFlags(record([ok('t1')], [{ type: 'create' }])), [{ id: 't1' }]);
+    assert.deepEqual(extractToolResultFlags(record([ok('t1')], 'create')), [{ id: 't1' }]);
+  });
+
+  it('tool_result 以外のブロック・id が文字列でないブロックは飛ばす', () => {
+    assert.deepEqual(
+      extractToolResultFlags(record([null, { type: 'text', text: 'x', tool_use_id: 'tx' }, ok(5), ok('t1')])),
+      [{ id: 't1' }],
+    );
+  });
+
+  it('user 以外・content が配列でないレコードは空', () => {
+    assert.deepEqual(extractToolResultFlags(null), []);
+    assert.deepEqual(extractToolResultFlags({ type: 'assistant', message: { content: [ok('t')] } }), []);
+    assert.deepEqual(extractToolResultFlags({ type: 'user', message: { content: 'text' } }), []);
+    assert.deepEqual(extractToolResultFlags({ type: 'user' }), []);
+  });
+});
+
+describe('parseSummaryTools', () => {
+  it('system-reminder だけの注記からツール名を取り出す（空の要素は捨てる）', () => {
+    assert.deepEqual(
+      parseSummaryTools(
+        '  <system-reminder> <tools-used-before-summary> Read ,, Grep </tools-used-before-summary> </system-reminder>\n',
+      ),
+      ['Read', 'Grep'],
+    );
+  });
+
+  it('前後に他の文があるもの・文字列でないものは null', () => {
+    const tag = '<system-reminder><tools-used-before-summary>Read</tools-used-before-summary></system-reminder>';
+    assert.equal(parseSummaryTools(`x${tag}`), null);
+    assert.equal(parseSummaryTools(`${tag}x`), null);
+    assert.equal(parseSummaryTools(null), null);
+  });
+
+  it('タグの間に空白が無くても読む', () => {
+    assert.deepEqual(
+      parseSummaryTools(
+        '<system-reminder><tools-used-before-summary>Read</tools-used-before-summary></system-reminder>',
+      ),
+      ['Read'],
+    );
+  });
+});
+
+describe('CLAUDE_PROJECTS_DIR', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('環境変数が無ければ ~/.claude/projects', async () => {
+    vi.stubEnv('CLAUDE_BRIDGE_PROJECTS_DIR', '');
+    vi.resetModules();
+    const mod = await import('../server/jsonl-utils.js');
+    assert.equal(mod.CLAUDE_PROJECTS_DIR, join(homedir(), '.claude', 'projects'));
+  });
+
+  it('CLAUDE_BRIDGE_PROJECTS_DIR があればそれを使う', async () => {
+    vi.stubEnv('CLAUDE_BRIDGE_PROJECTS_DIR', '/tmp/x-projects');
+    vi.resetModules();
+    const mod = await import('../server/jsonl-utils.js');
+    assert.equal(mod.CLAUDE_PROJECTS_DIR, '/tmp/x-projects');
+  });
+});
+
+describe('extractTextContent（content の形）', () => {
+  it('content が文字列でも配列でもなければ空文字', () => {
+    assert.equal(extractTextContent({}), '');
+    assert.equal(extractTextContent({ content: { type: 'text', text: 'x' } }), '');
+  });
+});
+
+describe('parseTaskNotifications（境界）', () => {
+  it('先頭の空白は許し、タグの値の前後の空白は落とす', () => {
+    const [t] = parseTaskNotifications('  \n<task-notification><task-id> x1 </task-id></task-notification>');
+    assert.equal(t.taskId, 'x1');
+  });
+
+  it('本文が通知で始まらなければ null', () => {
+    assert.equal(parseTaskNotifications('前置き <task-notification><task-id>x</task-id></task-notification>'), null);
+  });
+
+  it('閉じタグが無ければ null', () => {
+    assert.equal(parseTaskNotifications('<task-notification><task-id>x</task-id>'), null);
+  });
+
+  it('status も event も無ければ status は空文字', () => {
+    assert.equal(parseTaskNotifications('<task-notification><task-id>x</task-id></task-notification>')[0].status, '');
+  });
+
+  it('数値でない usage は null（数字が混ざっていても）', () => {
+    const [t] = parseTaskNotifications(
+      '<task-notification><usage><subagent_tokens>abc12</subagent_tokens><tool_uses>12abc</tool_uses><duration_ms>7</duration_ms></usage></task-notification>',
+    );
+    assert.equal(t.tokens, null);
+    assert.equal(t.toolUses, null);
+    assert.equal(t.durationMs, 7);
+  });
+
+  it('event と result は 2000 文字で切る', () => {
+    const long = 'あ'.repeat(2500);
+    const [t] = parseTaskNotifications(
+      `<task-notification><event>${long}</event><result>${long}</result></task-notification>`,
+    );
+    assert.equal(t.event.length, 2000);
+    assert.equal(t.result.length, 2000);
+  });
+});
+
+describe('taskNotificationMessage（メッセージの中身）', () => {
+  it('複数の通知の要約を改行でつなぎ、時刻を引き継ぐ（無ければ空文字）', () => {
+    const text =
+      '<task-notification><summary>A</summary></task-notification>\n<task-notification><summary>B</summary></task-notification>';
+    const m = taskNotificationMessage({ uuid: 'u', timestamp: 't9' }, text, createTaskNotificationState()).message;
+    assert.equal(m.content, 'A\nB');
+    assert.equal(m.timestamp, 't9');
+    assert.equal(m.uuid, 'u');
+    const m2 = taskNotificationMessage({ uuid: 'u' }, text, createTaskNotificationState()).message;
+    assert.equal(m2.timestamp, '');
+  });
+});
+
+describe('queuedAgentMessage（境界）', () => {
+  const queued = (text, state = createTaskNotificationState()) => queuedAgentMessage({}, text, state, { queued: true });
+
+  it('先頭の空白・前置きの無い hand-back は subagent、途中に出てくるだけなら peer', () => {
+    assert.equal(
+      queued('<agent-message from="a">\n  [Subagent hand-back] x\n</agent-message>').message.sender.kind,
+      'subagent',
+    );
+    assert.equal(
+      queued('<agent-message from="a">\nx [Subagent hand-back]\n</agent-message>').message.sender.kind,
+      'peer',
+    );
+  });
+
+  it('agentNames を持たない state でも種別名なしで出す', () => {
+    const state = { pending: new Map(), shown: new Set() };
+    assert.deepEqual(queued('<agent-message from="a">x</agent-message>', state).message.sender, { kind: 'peer' });
+  });
+
+  it('前後に空白のある本文の peer レコードも同じ報告として捨てる', () => {
+    const state = createTaskNotificationState();
+    queued('<agent-message from="a">\nx\n</agent-message>', state);
+    assert.deepEqual(queuedAgentMessage({ origin: { kind: 'peer', from: 'a', body: '  x  ' } }, '', state), {
+      message: null,
+    });
+  });
+
+  it('origin.from が文字列でない peer レコードは同じ報告とみなさない', () => {
+    const state = createTaskNotificationState();
+    queued('<agent-message from="1">x</agent-message>', state);
+    assert.equal(queuedAgentMessage({ origin: { kind: 'peer', from: 1, body: 'x' } }, '', state), null);
+  });
+});
+
+describe('noteAgentLaunch（壊れたブロック）', () => {
+  it('結果の tool_result が先頭のブロックでなくても呼び出しを引き当てる', () => {
+    const state = createTaskNotificationState();
+    noteAgentLaunch(
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id: 't1', name: 'Agent', input: { subagent_type: 'Explore' } }] },
+      },
+      state,
+    );
+    noteAgentLaunch(
+      {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'text', text: 'x' },
+            { type: 'tool_result', tool_use_id: 't1' },
+          ],
+        },
+        toolUseResult: { agentId: 'a1', agentType: 'other' },
+      },
+      state,
+    );
+    const r = queuedAgentMessage({}, '<agent-message from="a1">y</agent-message>', state, { queued: true });
+    assert.equal(r.message.sender.name, 'Explore');
+  });
+
+  it('null のブロックや input の無い tool_use があっても読み飛ばす', () => {
+    const state = createTaskNotificationState();
+    noteAgentLaunch(
+      { type: 'assistant', message: { content: [null, { type: 'tool_use', id: 't', name: 'Agent' }] } },
+      state,
+    );
+    noteAgentLaunch(
+      { type: 'user', message: { content: [null] }, toolUseResult: { agentId: 'a1', agentType: 'x' } },
+      state,
+    );
+    const r = queuedAgentMessage({}, '<agent-message from="a1">y</agent-message>', state, { queued: true });
+    assert.equal(r.message.sender.name, 'x');
+  });
+});
+
+describe('hookErrorMessage（境界）', () => {
+  const rec = (attachment, extra = {}) => ({ type: 'attachment', uuid: 'u1', attachment, ...extra });
+  const base = { type: 'hook_non_blocking_error', hookName: 'Stop' };
+
+  it('attachment 以外のレコード・null は null', () => {
+    assert.equal(hookErrorMessage({ type: 'user', attachment: base }), null);
+    assert.equal(hookErrorMessage(rec(null)), null);
+    assert.equal(hookErrorMessage(null), null);
+  });
+
+  it('stderr・exitCode・時刻が無ければ空・null・空文字', () => {
+    const m = hookErrorMessage(rec(base));
+    assert.equal(m.timestamp, '');
+    assert.deepEqual(m.hook, { name: 'Stop', exitCode: null, command: '', detail: '' });
+  });
+
+  it('前置きは先頭にあるときだけ外し、空白を詰める', () => {
+    assert.equal(
+      hookErrorMessage(rec({ ...base, stderr: 'Failed with non-blocking status code:boom  \n' })).hook.detail,
+      'boom',
+    );
+    assert.equal(
+      hookErrorMessage(rec({ ...base, stderr: 'x Failed with non-blocking status code: y' })).hook.detail,
+      'x Failed with non-blocking status code: y',
+    );
+  });
+
+  it('stderr は 500 文字で切る', () => {
+    assert.equal(hookErrorMessage(rec({ ...base, stderr: 'e'.repeat(800) })).hook.detail.length, 500);
+  });
+
+  it('フック名が無ければ hookEvent、それも無ければ hook', () => {
+    assert.equal(
+      hookErrorMessage(rec({ type: 'hook_non_blocking_error', hookEvent: 'PreToolUse' })).hook.name,
+      'PreToolUse',
+    );
+    assert.equal(hookErrorMessage(rec({ type: 'hook_non_blocking_error' })).hook.name, 'hook');
+  });
+
+  it('toolUseID が文字列でなければツールに紐づけない', () => {
+    assert.equal(hookErrorMessage(rec({ ...base, toolUseID: 123 })).role, 'hookerror');
+  });
+});
+
+describe('extractThinkingText（境界）', () => {
+  it('空白だけ・文字列でない thinking と null のブロックを除き、複数は空行でつなぐ', () => {
+    const msg = {
+      content: [
+        null,
+        { type: 'thinking', thinking: '   ' },
+        { type: 'thinking', thinking: 5 },
+        { type: 'text', thinking: 'text ブロック' },
+        { type: 'thinking', thinking: 'A' },
+        { type: 'thinking', thinking: 'B' },
+      ],
+    };
+    assert.equal(extractThinkingText(msg), 'A\n\nB');
+  });
+});
+
+describe('extractArtifactPublish（境界）', () => {
+  const URL = 'https://claude.ai/code/artifact/1';
+  const rec = (toolUseResult, content = [{ type: 'tool_result', tool_use_id: 't' }], extra = {}) => ({
+    type: 'user',
+    message: { content },
+    toolUseResult,
+    ...extra,
+  });
+
+  it('claude.ai の URL は先頭一致だけ', () => {
+    assert.equal(extractArtifactPublish(rec({ url: `https://example.com/?r=${URL}` })), null);
+  });
+
+  it('assistant のレコード・toolUseResult が null・url が文字列でないものは null', () => {
+    assert.equal(extractArtifactPublish(rec({ url: URL }, undefined, { type: 'assistant' })), null);
+    assert.equal(extractArtifactPublish(rec(null)), null);
+    assert.equal(extractArtifactPublish(rec({ url: [URL] })), null);
+  });
+
+  it('message が無ければ null', () => {
+    assert.equal(extractArtifactPublish({ type: 'user', toolUseResult: { url: URL } }), null);
+  });
+
+  it('成功した tool_result が 1 つでもあれば公開とみなし、tool_result が無ければ null', () => {
+    const content = [
+      { type: 'tool_result', tool_use_id: 'a', is_error: true },
+      { type: 'tool_result', tool_use_id: 'b' },
+    ];
+    assert.equal(extractArtifactPublish(rec({ url: URL }, content)).url, URL);
+    assert.equal(extractArtifactPublish(rec({ url: URL }, [{ type: 'text', text: 'x' }])), null);
+    assert.equal(extractArtifactPublish(rec({ url: URL }, [null, { type: 'tool_result', tool_use_id: 'b' }])).url, URL);
+  });
+
+  it('path が空文字・文字列でなければ path は null', () => {
+    assert.equal(extractArtifactPublish(rec({ url: URL, path: '' })).path, null);
+    assert.equal(extractArtifactPublish(rec({ url: URL, path: 5 })).path, null);
+  });
+});
+
+describe('extractToolResultFlags（toolUseResult が null）', () => {
+  it('toolUseResult が null でも普通の成功として返す', () => {
+    const r = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't' }] }, toolUseResult: null };
+    assert.deepEqual(extractToolResultFlags(r), [{ id: 't' }]);
+  });
+});
+
+describe('extractWebFetchResult（境界）', () => {
+  const rec = (toolUseResult, extra = {}) => ({
+    type: 'user',
+    message: { content: [{ type: 'tool_result', tool_use_id: 't' }] },
+    toolUseResult,
+    ...extra,
+  });
+  const ok = (result, extra = {}) => ({ url: 'https://example.com/a', code: 200, result, ...extra });
+  const title = (result, extra) => extractWebFetchResult(rec(ok(result, extra))).title;
+
+  it('2xx の境界（199・300 はタイトルなし、200・299 はあり）', () => {
+    assert.equal(title('# T', { code: 199 }), null);
+    assert.equal(title('# T', { code: 150 }), null);
+    assert.equal(title('# T', { code: 300 }), null);
+    assert.equal(title('# T', { code: 299 }), 'T');
+  });
+
+  it('空白だけの行は飛ばし、本文が空ならタイトルなし', () => {
+    assert.equal(title('   \n  # T'), 'T');
+    assert.equal(title('\n  \n'), null);
+    assert.equal(title('****'), null);
+  });
+
+  it('見出し記号は先頭のものだけ、何個でも外す', () => {
+    assert.equal(title('## T'), 'T');
+    assert.equal(title('#T'), 'T');
+    assert.equal(title('a # b'), 'a # b');
+  });
+
+  it('強調を外して残った前後の空白も落とす', () => {
+    assert.equal(title('** T **'), 'T');
+  });
+
+  it('Artifact の引用は行頭にあるときだけ、前後の空白を落として 120 文字で切る', () => {
+    assert.equal(title('[Artifact x " 週次 " — owned]'), '週次');
+    assert.equal(title(`[Artifact x "${'あ'.repeat(200)}"]`).length, 120);
+    assert.equal(title('見出し [Artifact x "T"]'), '見出し [Artifact x "T"]');
+  });
+
+  it('http も受け付け、url が先頭から http(s) でなければ null', () => {
+    assert.equal(extractWebFetchResult(rec(ok('# T', { url: 'http://example.com/' }))).url, 'http://example.com/');
+    assert.equal(extractWebFetchResult(rec(ok('# T', { url: 'xhttps://example.com/' }))), null);
+    assert.equal(extractWebFetchResult(rec(ok('# T', { url: ['https://example.com/'] }))), null);
+  });
+
+  it('toolUseResult が null なら null', () => {
+    assert.equal(extractWebFetchResult(rec(null)), null);
+  });
+});
+
+describe('isInjectedUserRecord（境界）', () => {
+  it('コマンドのタグは本文の先頭にあるときだけ人の操作とみなす', () => {
+    const r = { type: 'user', message: { content: '<x><command-name>/ship</command-name>' } };
+    assert.equal(isInjectedUserRecord(r), true);
+  });
+});
+
+describe('parseTeammateMessages（境界）', () => {
+  const wrap = (attrs, inner) =>
+    `Another Claude session sent a message:\n<teammate-message ${attrs}>${inner}</teammate-message>`;
+
+  it('先頭の空白は許し、前置きで始まらなければ null', () => {
+    assert.equal(parseTeammateMessages(`  ${wrap('teammate_id="a"', 'x')}`)[0].body, 'x');
+    assert.equal(parseTeammateMessages(`前置き ${wrap('teammate_id="a"', 'x')}`), null);
+  });
+
+  it('teammate_id は位置に関わらずその属性から読む', () => {
+    assert.equal(parseTeammateMessages(wrap('color="blue" teammate_id="impl"', 'x'))[0].from, 'impl');
+  });
+
+  it('{ で始まらない本文は JSON として読まない', () => {
+    assert.equal(parseTeammateMessages(wrap('teammate_id="a" summary="S"', '42'))[0].body, '42');
+  });
+
+  it('JSON の summary・result・failureReason・idle を使い分ける', () => {
+    const body = (json) => parseTeammateMessages(wrap('teammate_id="a"', JSON.stringify(json)))[0];
+    assert.deepEqual(body({ type: 'idle_notification', summary: '要約' }), {
+      from: 'a',
+      summary: '要約',
+      body: '要約',
+    });
+    assert.equal(body({ result: '  結果  ' }).body, '結果');
+    assert.equal(body({ result: '   ', failureReason: ' 失敗 ' }).body, '失敗');
+    assert.equal(body({ type: 'idle_notification' }).body, '（待機中）');
+    assert.equal(body({ type: 'other' }).body, '{"type":"other"}');
+    assert.equal(body({ summary: 5, type: 'other' }).summary, '');
+  });
+});
+
+describe('parseSlashCommand（境界）', () => {
+  it('前後の空白を許し、名前と引数の空白を落とし、/ が無ければ付ける', () => {
+    assert.deepEqual(parseSlashCommand('  <command-name> ship </command-name><command-args> a b </command-args>'), {
+      name: '/ship',
+      args: 'a b',
+    });
+  });
+
+  it('文字列でなければ null', () => {
+    assert.equal(parseSlashCommand(null), null);
+  });
+});
+
+describe('skillNameOf（境界）', () => {
+  const meta = (text, extra = {}) => ({ type: 'user', isMeta: true, message: { content: text }, ...extra });
+
+  it('ディレクトリ名の前後の空白・末尾の / を外す', () => {
+    assert.equal(skillNameOf(meta('  Base directory for this skill: /a/ship/  \n手順')), 'ship');
+    assert.equal(skillNameOf(meta('Base directory for this skill: /a/ship//')), 'ship');
+  });
+
+  it('/ を含まない名前はそのまま、空なら skill', () => {
+    assert.equal(skillNameOf(meta('Base directory for this skill: ship')), 'ship');
+    assert.equal(skillNameOf(meta('Base directory for this skill: /')), 'skill');
+  });
+
+  it('user 以外・null は null', () => {
+    assert.equal(skillNameOf(meta('Base directory for this skill: /a/ship', { type: 'assistant' })), null);
+    assert.equal(skillNameOf(null), null);
+  });
+});
+
+describe('humanMessageFields（引数付きコマンド）', () => {
+  it('引数があれば /name args を本文にする', () => {
+    const text = '<command-name>/review</command-name><command-args>123</command-args>';
+    const r = { type: 'user', message: { content: text }, origin: { kind: 'human' } };
+    assert.equal(humanMessageFields(r, text).content, '/review 123');
+  });
+});
+
+describe('injectedSenderOf（境界）', () => {
+  const TEAMMATE = 'Another Claude session sent a message:\n<teammate-message teammate_id="impl">x</teammate-message>';
+  const user = (content, extra = {}) => ({ type: 'user', message: { content }, ...extra });
+
+  it('null・user 以外は null', () => {
+    assert.equal(injectedSenderOf(null), null);
+    assert.equal(injectedSenderOf({ type: 'assistant', isMeta: true, message: { content: '<x>' } }), null);
+    assert.equal(injectedSenderOf({ type: 'assistant', origin: { kind: 'peer' }, message: { content: 'x' } }), null);
+  });
+
+  it('origin が null や文字列でもチームメイトの送信を拾う', () => {
+    assert.deepEqual(injectedSenderOf(user(TEAMMATE, { origin: null })), { kind: 'subagent', name: 'impl' });
+    assert.deepEqual(injectedSenderOf(user(TEAMMATE, { origin: 'peer' })), { kind: 'subagent', name: 'impl' });
+  });
+
+  it('origin が human ならタグで始まる本文でも人の発言', () => {
+    assert.equal(injectedSenderOf(user(TEAMMATE, { origin: { kind: 'human' } })), null);
+    assert.equal(injectedSenderOf(user('<system-reminder>x', { origin: { kind: 'human' } })), null);
+  });
+
+  it('teammate_id の無いブロックは名前に数えず、要約が無ければ付けない', () => {
+    const multi =
+      'Another Claude session sent a message:\n<teammate-message>x</teammate-message>\n<teammate-message teammate_id="b">y</teammate-message>';
+    assert.deepEqual(injectedSenderOf(user(multi)), { kind: 'subagent', name: 'b' });
+    const anon = 'Another Claude session sent a message:\n<teammate-message>x</teammate-message>';
+    assert.deepEqual(injectedSenderOf(user(anon)), { kind: 'subagent' });
+  });
+});
+
+describe('extractHandbackReport（境界）', () => {
+  const handback = (body) => ({ type: 'user', origin: { kind: 'peer', handback: true, body } });
+
+  it('マーカーが本文の先頭にあっても読む', () => {
+    assert.equal(extractHandbackReport(handback('The report follows:\n  r')), 'r');
+  });
+
+  it('マーカーの無い長い本文は null', () => {
+    assert.equal(extractHandbackReport(handback('x'.repeat(80))), null);
+  });
+
+  it('行頭の 2 スペースだけ外し、行中の空白は残す', () => {
+    assert.equal(extractHandbackReport(handback('The report follows:\n  a  b\nc  d')), 'a  b\nc  d');
+  });
+
+  it('null・body が文字列でなければ null', () => {
+    assert.equal(extractHandbackReport(null), null);
+    assert.equal(extractHandbackReport(handback(5)), null);
+  });
+});
+
+describe('extractToolUses（要約）', () => {
+  const summary = (name, input) =>
+    extractToolUses({ content: [{ type: 'tool_use', id: 't', name, input }] })[0].summary;
+
+  it('input が無ければツール名', () => {
+    assert.equal(summary('Bash', undefined), 'Bash');
+  });
+
+  it('Bash は説明、無ければコマンドの先頭 120 文字、どちらも無ければ Bash', () => {
+    assert.equal(summary('Bash', { description: '一覧', command: 'ls' }), '一覧');
+    assert.equal(summary('Bash', { command: 'x'.repeat(200) }).length, 120);
+    assert.equal(summary('Bash', {}), 'Bash');
+  });
+
+  it('Grep / Glob はパターンと場所', () => {
+    assert.equal(summary('Grep', { pattern: 'foo', path: '/a/b/c/d' }), 'foo in .../c/d');
+    assert.equal(summary('Glob', { pattern: '*.js' }), '*.js');
+  });
+
+  it('Agent は説明、無ければ Agent', () => {
+    assert.equal(summary('Agent', { description: '調査' }), '調査');
+    assert.equal(summary('Agent', {}), 'Agent');
+  });
+
+  it('Artifact の publish は対象ファイル、ファイルが無ければ publish だけ', () => {
+    assert.equal(summary('Artifact', { action: 'publish', file_path: '/a/b/c.html' }), 'publish .../b/c.html');
+    assert.equal(summary('Artifact', {}), 'publish');
+  });
+
+  it('AskUserQuestion は質問の無い要素を飛ばす', () => {
+    assert.equal(summary('AskUserQuestion', { questions: [null, { question: 'Q1' }, {}] }), 'Q1');
+  });
+
+  it('パスは 3 階層以上なら末尾 2 つ、2 階層以下はそのまま、無ければ空', () => {
+    assert.equal(summary('Read', { file_path: '/Users/u/project/src/App.jsx' }), '.../src/App.jsx');
+    assert.equal(summary('Read', { file_path: 'src/App.jsx' }), 'src/App.jsx');
+    assert.equal(summary('Read', { file_path: '/App.jsx' }), '/App.jsx');
+    assert.equal(summary('Read', {}), '');
+  });
+});
+
+describe('contextWindowFor（境界）', () => {
+  it('2 桁の版も 1M とみなす', () => {
+    assert.equal(contextWindowFor('claude-opus-4-10'), 1_000_000);
+    assert.equal(contextWindowFor('claude-opus-10'), 1_000_000);
+  });
+
+  it('ちょうど 200k は繰り上げない', () => {
+    assert.equal(contextWindowFor('claude-sonnet-4-5', 200_000), 200_000);
+  });
+});
+
+describe('extractContextUsage（境界）', () => {
+  it('message・usage が無い（null）なら null', () => {
+    assert.equal(extractContextUsage({ type: 'assistant' }), null);
+    assert.equal(extractContextUsage({ type: 'assistant', message: { usage: null } }), null);
+  });
+
+  it('model が文字列でなければ空文字', () => {
+    assert.equal(extractContextUsage({ type: 'assistant', message: { usage: { input_tokens: 1 } } }).model, '');
+    assert.equal(
+      extractContextUsage({ type: 'assistant', message: { model: 5, usage: { input_tokens: 1 } } }).model,
+      '',
+    );
   });
 });
