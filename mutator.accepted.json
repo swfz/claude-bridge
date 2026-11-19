@@ -123,6 +123,10 @@
     "reason": "equivalent: 件数 1 のキーを delete する代わりに 0 を入れても、読む側は pending.get(key) || 0 で同じ 0 になる",
     "where": "server/jsonl-utils.js:130:9 n === 1 -> false"
   },
+  "15kukn7hw8c": {
+    "reason": "equivalent: in git diff output the only unprefixed line starting with 'Binary files ' is 'Binary files ... differ', which always ends with 'differ'",
+    "where": "server/session-diff.js:76:38 /^Binary files .* differ$/ -> /^Binary files .* differ/"
+  },
   "15wbd46ma9o": {
     "reason": "equivalent: BARE_URL_RE excludes the full-width closing bracket, so a bare URL match can never end with it",
     "where": "client/src/utils/links.js:12:73 '）' -> ''"
@@ -379,6 +383,10 @@
     "reason": "equivalent: a pending tool keeps its request info alive through pruneRequests, so info is never undefined here",
     "where": "server/activity-heatmap.js:322:9 info -> true"
   },
+  "1j5mppdus4b": {
+    "reason": "equivalent: parseUnifiedDiff only keeps chunks that start with 'diff --git ', so the line is always anchored at the start anyway",
+    "where": "server/session-diff.js:61:32 /^diff --git a\\/(.*) b\\/(.*)$/ -> /diff --git a\\/(.*) b\\/(.*)$/"
+  },
   "1jdqqki8drh": {
     "reason": "equivalent: dropping a last character that is not a newline does not change the number of newlines, so the line count is the same (a single char gives [''] = 1)",
     "where": "client/src/utils/toolLines.js:29:16 text.endsWith('\\n') -> true"
@@ -615,6 +623,14 @@
     "reason": "equivalent: with turn 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'; other turns take the same branch",
     "where": "client/src/utils/completionState.js:87:29 'ended' -> ''"
   },
+  "1sha0nhc16x": {
+    "reason": "equivalent: for scope 'all' sessionFiles is empty, so the session-only block adds no entries",
+    "where": "server/session-diff.js:216:7 scope === 'session' -> true"
+  },
+  "1sjzlu84egm": {
+    "reason": "equivalent: status 'renamed' is set only when a 'rename from' line exists, so find() never returns undefined here",
+    "where": "server/session-diff.js:86:91 ?. -> ."
+  },
   "1sne8zchnht": {
     "reason": "equivalent: whenever a date key exists the timestamp parses, so the slot always exists",
     "where": "server/activity-heatmap.js:617:7 slot -> true"
@@ -823,6 +839,10 @@
     "reason": "equivalent: at left === margin, setting left = margin changes nothing",
     "where": "client/src/utils/recentPeek.js:11:7 left < margin -> left <= margin"
   },
+  "2535ri4r1hn": {
+    "reason": "equivalent: the stat failure result is only tested for truthiness, and undefined is falsy like false",
+    "where": "server/session-diff.js:226:15 false -> undefined"
+  },
   "253g31uoxo4": {
     "reason": "equivalent: the mutant only widens the push prefilter; collect() checks pr-link / Bash tool_use / error tool_result itself, so extra parsed lines add nothing",
     "where": "server/session-completion.js:77:6 line.includes('\"Bash\"') && line.includes('push') -> (line.includes('\"Bash\"') || line.includes('push'))"
@@ -999,6 +1019,10 @@
     "reason": "equivalent: for a non-directory entry the following readdirSync throws (ENOTDIR) and the same catch skips it",
     "where": "server/claude-sessions.js:51:9 { if (!statSync(projectPath).isDirectory()) continue; } -> {}"
   },
+  "2d2a3uxmxvk": {
+    "reason": "equivalent: only renamed chunks contain a 'rename from' line, so for other statuses find() returns undefined and ?.slice gives undefined as before",
+    "where": "server/session-diff.js:86:21 status === 'renamed' -> true"
+  },
   "2d3oewfcy9d": {
     "reason": "equivalent: adjustAutoTools with empty lists returns {}",
     "where": "server/activity-heatmap.js:910:17 hasAuto -> true"
@@ -1078,6 +1102,10 @@
   "2fpywxil4wc": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:83:15 { pending.set(key, (pending.get(key) || 0) + 1); } -> {}"
+  },
+  "2fss973dlzl": {
+    "reason": "equivalent: every chunk starts with its 'diff --git' line, so the first @@ is never at index 0",
+    "where": "server/session-diff.js:54:18 hunk < 0 -> hunk <= 0"
   },
   "2ft3zaw3ri5": {
     "reason": "equivalent: allocateApprovedTools returns {} when there are no approved tools",
@@ -1218,6 +1246,10 @@
   "7gqrnub0gr": {
     "reason": "equivalent: a placeholder string in approved never falls in a cost-state window (NaN start)",
     "where": "server/activity-heatmap.js:888:19 [] -> [\"Stryker was here!\"]"
+  },
+  "7gyom20fdc": {
+    "reason": "equivalent: for a non-file entry (directory, nested repo) reading it fails with EISDIR and the catch returns the same untracked/binary entry",
+    "where": "server/session-diff.js:124:9 !info.isFile() -> false"
   },
   "7jwqd9p23q": {
     "reason": "equivalent: indexes past the end read messages[i]?.contextUsage as undefined and are skipped, so the scan result is unchanged",
@@ -1563,6 +1595,10 @@
     "reason": "equivalent: always ending a trailing record only adds a single empty-field record after a final newline, which the blank-record trim removes",
     "where": "client/src/utils/delimited.js:81:7 field !== '' || cells.length > 0 || inQuotes -> true"
   },
+  "np3yilzvau": {
+    "reason": "equivalent: lines[0] is a single line and the greedy (.*) already runs to its end",
+    "where": "server/session-diff.js:61:32 /^diff --git a\\/(.*) b\\/(.*)$/ -> /^diff --git a\\/(.*) b\\/(.*)/"
+  },
   "nqht3wh83u": {
     "reason": "equivalent: the tool_use_id cache is performance-only; a fresh entry rescans the whole parent JSONL and collects the same ids",
     "where": "server/subagent-tasks.js:21:7 !entry -> true"
@@ -1606,6 +1642,10 @@
   "rginfcukpj": {
     "reason": "equivalent: if the target file is missing, continuing re-arms the watch (directory watcher or a new poll) and the read fails silently, so the watcher keeps waiting for the same file just as the early return does",
     "where": "server/jsonl-watcher.js:136:11 !existsSync(state.targetFile) -> false"
+  },
+  "rgs8api504": {
+    "reason": "equivalent: an extra undefined in the 'changed' set never matches a relative path from sessionFiles",
+    "where": "server/session-diff.js:220:54 [f.path, f.oldPath].filter(Boolean) -> [f.path, f.oldPath]"
   },
   "rjpdmyrhg7": {
     "reason": "equivalent: findIndex is restricted to i > 0, so end is never 0",
@@ -1786,6 +1826,10 @@
   "x19ko44nnj": {
     "reason": "equivalent: the TypeError for an assistant record without message is caught and the catch sets value = false, same as the original result",
     "where": "server/subagent-tasks.js:96:56 ?. -> ."
+  },
+  "x1wrjxhsx1": {
+    "reason": "equivalent: sessionFiles is only read when scope is 'session', where it is reassigned first",
+    "where": "server/session-diff.js:174:22 [] -> [\"Stryker was here!\"]"
   },
   "x3evwng44q": {
     "reason": "equivalent: when cwd === realCwd the rewrite replaces the prefix with itself",
