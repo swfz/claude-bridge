@@ -1,4 +1,8 @@
 {
+  "106fa1m8ngh": {
+    "reason": "equivalent: for an empty list files[0].path throws inside the try and the catch returns null",
+    "where": "server/jsonl-watcher.js:124:14 files.length > 0 -> true"
+  },
   "10l4py29gx2": {
     "reason": "equivalent: bucketDays(days, 'day') yields one bucket per day with the same metric values, so the stacked max is identical",
     "where": "client/src/utils/heatmap.js:350:21 granularity === 'day' -> false"
@@ -7,9 +11,17 @@
     "reason": "equivalent: the fallback element is a string whose ?.claudeSessionId is undefined, so isSensitive is false and nothing is counted",
     "where": "client/src/utils/sensitiveSessions.js:64:29 [] -> [\"Stryker was here!\"]"
   },
+  "10n4r2pd0iv": {
+    "reason": "equivalent: the targetFile branch above returns early, so state.targetFile is always null here and both forms reduce to !newestPath",
+    "where": "server/jsonl-watcher.js:144:9 !newestPath || state.targetFile === newestPath -> (!newestPath && state.targetFile === newestPath)"
+  },
   "114dqx61hv1": {
     "reason": "equivalent: JSON.parse never yields a non-array with a filter method; calling filter on anything else throws and the catch returns []",
     "where": "client/src/utils/filerRoots.js:73:12 Array.isArray(raw) -> true"
+  },
+  "11acfrn9pct": {
+    "reason": "equivalent: readFirstLines never rejects for a string path, so the .catch fallback is unreachable",
+    "where": "server/claude-sessions.js:271:70 [] -> undefined"
   },
   "11b77v49rnh": {
     "reason": "equivalent: shiftDate is only used by weekStartOf as a bucket id compared for equality within bucketDays; the full ISO string compares the same way as its date part and never appears in the output",
@@ -22,6 +34,14 @@
   "12gl9342ay5": {
     "reason": "equivalent: when resetAt is set the date is valid, so remaining is always a non-empty string and the '' branch is never taken",
     "where": "client/src/utils/usageMeter.js:73:73 '' -> 'Stryker was here!'"
+  },
+  "12uqethkkwv": {
+    "reason": "equivalent: this fallback watcher is only installed when targetFile is set (with no target the same projectPath watch has just failed), and _detectNewFile on a set target ends in _readNewLines",
+    "where": "server/jsonl-watcher.js:184:15 !state.targetFile -> state.targetFile"
+  },
+  "13i4ybmwgxb": {
+    "reason": "equivalent: when no latest file exists targetFile is null, readFileSync(null) throws and the catch leaves linesRead at 0, same as skipping",
+    "where": "server/jsonl-watcher.js:55:11 targetFile -> true"
   },
   "13iabbwu8n7": {
     "reason": "equivalent: at d = 7, starts[8] is undefined so ms < undefined is false and totals[7] is never written",
@@ -67,6 +87,10 @@
     "reason": "equivalent: when out is empty out[-1] is undefined, which is not '', so the trailing-blank loop stops without popping",
     "where": "server/choice-prompt.js:169:10 out.length > 0 -> true"
   },
+  "16qwpgomrxs": {
+    "reason": "equivalent: continue is the last statement of the loop body, so removing it changes nothing",
+    "where": "server/claude-sessions.js:31:13 { continue; } -> {}"
+  },
   "17944cbcj81": {
     "reason": "equivalent: an oversized buffer is filled only up to bytesRead, and only buf.subarray(0, bytesRead) is used",
     "where": "server/shell-tasks.js:192:20 fileStat.size - entry.offset -> fileStat.size + entry.offset"
@@ -87,6 +111,10 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:66:38 '' -> 'Stryker was here!'"
   },
+  "198gs7eydue": {
+    "reason": "equivalent: for an empty list files[0].path throws inside the try and the catch returns null",
+    "where": "server/jsonl-watcher.js:124:14 files.length > 0 -> files.length >= 0"
+  },
   "19jd9zbhotq": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:86:15 pending.get(key) || 0 -> (pending.get(key) && 0)"
@@ -106,6 +134,10 @@
   "1b0byu6nfze": {
     "reason": "equivalent: with nothing stored, JSON.parse('') throws and the catch returns EMPTY_STATE, the same value the null branch returns",
     "where": "client/src/utils/tabGroups.js:134:68 'null' -> ''"
+  },
+  "1b8s48ryl6d": {
+    "reason": "equivalent: with a target file, _detectNewFile checks it exists, re-arms the watch and calls _readNewLines, which is the same output as calling _readNewLines directly (a missing file yields nothing either way)",
+    "where": "server/jsonl-watcher.js:174:13 !state.targetFile -> true"
   },
   "1bcejfkf51f": {
     "reason": "equivalent: the text of a non-string/non-array tool_result is only searched for the background-ID marker, which neither '' nor the placeholder contains",
@@ -146,6 +178,10 @@
   "1ecc7cyj4nl": {
     "reason": "equivalent: toolUseResult が JSON 由来の非オブジェクト（文字列・数値・真偽値）なら result.agentId は undefined で、次の typeof result.agentId !== 'string' で同じく return する",
     "where": "server/jsonl-utils.js:167:44 typeof result !== 'object' -> false"
+  },
+  "1g2x7y92srs": {
+    "reason": "equivalent: a missing worktreeSession makes '.' throw a TypeError inside the try, which is caught and the line is skipped exactly as '?.' skips it",
+    "where": "server/claude-sessions.js:200:37 ?. -> ."
   },
   "1g4d6zm8g4w": {
     "reason": "equivalent: after trim, split yields '' only for an empty query; terms [''] match every dir with rank 0 and keep server order, same as list.slice(0, limit)",
@@ -235,6 +271,10 @@
     "reason": "equivalent: BARE_URL_RE excludes the closing corner bracket, so a bare URL match can never end with it",
     "where": "client/src/utils/links.js:12:78 '」' -> ''"
   },
+  "1o5rkigtq6x": {
+    "reason": "equivalent: with empty text parseTaskNotifications returns null, so taskNotificationMessage returns null like the short-circuit",
+    "where": "server/jsonl-watcher.js:222:14 text -> true"
+  },
   "1o8fn10vhdw": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> (pending.get(key) && 0)"
@@ -247,6 +287,10 @@
     "reason": "equivalent: questions が無いときの [] を文字列 1 要素の配列にしても、文字列の q?.question は undefined で filter(Boolean) に落ち、同じく AskUserQuestion になる",
     "where": "server/jsonl-utils.js:493:29 [] -> [\"Stryker was here!\"]"
   },
+  "1pebuf6yki4": {
+    "reason": "equivalent: clearInterval(null) is a no-op",
+    "where": "server/jsonl-watcher.js:343:11 state.pollTimer -> true"
+  },
   "1pipvett5vx": {
     "reason": "equivalent: new Date(undefined) is an invalid date, so formatClock returns null through the NaN check anyway",
     "where": "client/src/utils/usageMeter.js:26:23 iso === undefined -> false"
@@ -254,6 +298,10 @@
   "1q4cphcvuqf": {
     "reason": "equivalent: when prevStatus is undefined the next check prevStatus === 'busy' is false anyway, so the session is skipped either way",
     "where": "client/src/utils/attention.js:47:9 prevStatus === undefined -> false"
+  },
+  "1q9n7evhe3p": {
+    "reason": "equivalent: the Error is thrown only to jump to the catch, which ignores it; its message is never read",
+    "where": "server/jsonl-watcher.js:45:40 'fromStart' -> ''"
   },
   "1qcc0c8adzo": {
     "reason": "equivalent: JSON.parse('') throws and the catch returns [], the same as parsing '[]'",
@@ -339,6 +387,10 @@
     "reason": "equivalent: unreachable; pos = found + 1 <= length always holds, so the loop only exits through its returns",
     "where": "client/src/utils/previewLocation.js:85:10 -1 -> +1"
   },
+  "1xdvpzdt677": {
+    "reason": "equivalent: the enqueue is shown and added to 'shown' either way; later identical user records are dropped via 'shown' when pending is not counted, so the output is the same",
+    "where": "server/claude-sessions.js:356:83 true -> false"
+  },
   "1y0xxmthpdc": {
     "reason": "equivalent: body.slice(0, MAX_TABLE_ROWS) equals body when body has at most MAX_TABLE_ROWS rows",
     "where": "client/src/utils/delimited.js:89:26 truncated -> true"
@@ -355,6 +407,14 @@
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:87:16 { if (n === 1) pending.delete(key); else pending.set(key, n… -> {}"
   },
+  "1zby0urc667": {
+    "reason": "equivalent: the enqueue is shown and added to 'shown' either way; later identical user records are dropped via 'shown' when pending is not counted, so the output is the same",
+    "where": "server/claude-sessions.js:356:73 { queued: true } -> {}"
+  },
+  "1zlfwuyqhv6": {
+    "reason": "equivalent: unreachable; this fallback watcher is only installed when targetFile is set",
+    "where": "server/jsonl-watcher.js:184:34 { this._detectNewFile(state); } -> {}"
+  },
   "200uz498wwn": {
     "reason": "equivalent: this loop runs only when no block has x.line === line (exact matches return earlier), so <= and < select the same block",
     "where": "client/src/utils/sourceBlocks.js:30:9 x.line <= line -> x.line < line"
@@ -367,6 +427,10 @@
     "reason": "equivalent: headings after the node in document order neither have FOLLOWING set nor equal the node, so continuing the loop never changes last",
     "where": "client/src/utils/previewLocation.js:101:12 { // 後続の見出しに来たら打ち切り break; } -> {}"
   },
+  "21geicnrx0d": {
+    "reason": "equivalent: continue is the last statement of the loop body, so removing it changes nothing",
+    "where": "server/claude-sessions.js:79:15 { continue; } -> {}"
+  },
   "21ilzlb2ydv": {
     "reason": "equivalent: Date.parse of the placeholder is NaN just like Date.parse(''), and both fall back to 0",
     "where": "client/src/utils/pins.js:19:68 '' -> 'Stryker was here!'"
@@ -378,6 +442,10 @@
   "21pm1w91hdk": {
     "reason": "equivalent: after trim() the label has no trailing whitespace, so /\\s+$/ never matches and the replacement string is never inserted",
     "where": "server/choice-prompt.js:67:47 '' -> 'Stryker was here!'"
+  },
+  "22a39muh34f": {
+    "reason": "equivalent: readFileSync(null) throws and the catch returns, same as the guard",
+    "where": "server/jsonl-watcher.js:202:9 !state.targetFile -> false"
   },
   "22w9o6qr67r": {
     "reason": "equivalent: the placeholder text for null has no NUL and no U+FFFD, so looksBinary returns false just like for ''",
@@ -475,6 +543,10 @@
     "reason": "equivalent: the placeholder string has no repository, so the if (pr.repository) guard skips it",
     "where": "client/src/utils/sessionTurns.js:50:31 [] -> [\"Stryker was here!\"]"
   },
+  "29h2mr0oux": {
+    "reason": "equivalent: with empty text parseTaskNotifications returns null, so taskNotificationMessage returns null like the short-circuit",
+    "where": "server/claude-sessions.js:300:12 text -> true"
+  },
   "2a5fje276wt": {
     "reason": "equivalent: the placeholder text does not match the rgb() regex, so parseCssColor returns null just like for ''",
     "where": "client/src/utils/previewColorScheme.js:11:112 '' -> 'Stryker was here!'"
@@ -486,6 +558,10 @@
   "2b2uxun9ppg": {
     "reason": "equivalent: timeOf is only called on messages that passed isTurnStart (role === 'human'), so m is never nullish",
     "where": "client/src/utils/working.js:11:25 ?. -> ."
+  },
+  "2byoc66hi38": {
+    "reason": "equivalent: webFetch null makes webFetch.title throw after every other message for the record was pushed; the per-line catch swallows it",
+    "where": "server/claude-sessions.js:340:13 webFetch -> true"
   },
   "2camx43sohe": {
     "reason": "equivalent: cluster is empty only for the first segment (clusterEnd = -Infinity); flushing an empty cluster pushes nothing and resets already-empty arrays",
@@ -499,9 +575,17 @@
     "reason": "equivalent: consecutive whitespace only produces '' terms, which filter(Boolean) drops",
     "where": "client/src/utils/recentDirs.js:25:58 /\\s+/ -> /\\s/"
   },
+  "2d09b238gvt": {
+    "reason": "equivalent: for a non-directory entry the following readdirSync throws (ENOTDIR) and the same catch skips it",
+    "where": "server/claude-sessions.js:51:9 { if (!statSync(projectPath).isDirectory()) continue; } -> {}"
+  },
   "2d4tvaukhlw": {
     "reason": "equivalent: text は '' で初期化済みなので、早期 return を消しても末尾で '' が返る",
     "where": "server/jsonl-utils.js:19:20 { return ''; } -> {}"
+  },
+  "2dhrequrs8o": {
+    "reason": "equivalent: the enqueue is shown and added to 'shown' either way; later identical user records are dropped via 'shown' when pending is not counted, so the output is the same",
+    "where": "server/jsonl-watcher.js:288:81 { queued: true } -> {}"
   },
   "2djtkzh1d0n": {
     "reason": "equivalent: the placeholder string has no prs, so it contributes nothing to the counts",
@@ -554,6 +638,10 @@
   "2jj4n004l6": {
     "reason": "equivalent: pos = found + 1 never exceeds length; at pos === length indexOf finds only an empty needle, which is returned early",
     "where": "client/src/utils/previewLocation.js:61:10 pos <= text.length -> pos < text.length"
+  },
+  "32eywbcryk": {
+    "reason": "equivalent: the enqueue is shown and added to 'shown' either way; later identical user records are dropped via 'shown' when pending is not counted, so the output is the same",
+    "where": "server/jsonl-watcher.js:288:91 true -> false"
   },
   "32hwu6c84l": {
     "reason": "equivalent: with '' the day case goes through bucketDays(days, 'day'), which yields the same per-day metric values",
@@ -631,6 +719,10 @@
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:87:9 n > 0 -> false"
   },
+  "7m6kyic2hw": {
+    "reason": "equivalent: readFirstLines never rejects for a string path and summarizeHead does not throw; even if reached, falling through returns the same empty cwd",
+    "where": "server/claude-sessions.js:207:11 { return ''; } -> {}"
+  },
   "80qk4u6wdt": {
     "reason": "equivalent: record が null なら次の行の record.type で同じ TypeError になるので、ここで落ちても外から見た結果は同じ",
     "where": "server/jsonl-utils.js:158:39 ?. -> ."
@@ -658,6 +750,10 @@
   "9tvvwco2jx": {
     "reason": "equivalent: without the branch, '~' expands to home + '/' and the trailing slash is then removed, giving home",
     "where": "client/src/utils/filerRoots.js:19:12 path === '~' -> false"
+  },
+  "ako90smsmu": {
+    "reason": "equivalent: readFirstLines resolves (with [] on read errors) for any string path, so this catch is unreachable",
+    "where": "server/claude-sessions.js:102:11 { return null; } -> {}"
   },
   "box5f11qqk": {
     "reason": "equivalent: a truthy non-object colors (string/number/true) gives Object.entries values that are characters or nothing, none of which pass isPaletteIndex, so colors is {} either way",
@@ -695,6 +791,10 @@
     "reason": "equivalent: msg が文字列なら msg.content は undefined で、次の Array.isArray(content) で同じく [] になる",
     "where": "server/jsonl-utils.js:460:30 'string' -> ''"
   },
+  "f1zb8c5ar0": {
+    "reason": "equivalent: unreachable; this fallback watcher is only installed when targetFile is set",
+    "where": "server/jsonl-watcher.js:185:13 this._detectNewFile(state); -> ;"
+  },
   "f7793t6x3c": {
     "reason": "equivalent: msg が文字列などの非オブジェクトなら msg.content は undefined で、次の Array.isArray で同じく '' になる",
     "where": "server/jsonl-utils.js:210:26 typeof msg === 'object' -> true"
@@ -706,6 +806,10 @@
   "g372z8uexz": {
     "reason": "equivalent: the greedy [^/]+ always stops right before '/' or the end of the string, so the lookahead (?=\\/|$) is always satisfied and dropping $ changes no match",
     "where": "client/src/utils/tabGroups.js:186:23 /^\\/(?:home|Users)\\/[^/]+(?=\\/|$)/ -> /^\\/(?:home|Users)\\/[^/]+(?=\\/|)/"
+  },
+  "gi9oz1l3f0": {
+    "reason": "equivalent: for a non-string query the replacement 'Stryker was here!' contains spaces and '!', which SESSION_ID_QUERY_RE rejects, so [] is returned either way",
+    "where": "server/claude-sessions.js:264:70 '' -> 'Stryker was here!'"
   },
   "gug07pz3uo": {
     "reason": "equivalent: with an empty Map every index.get misses, so no parts are pushed and the result is '' anyway",
@@ -727,9 +831,17 @@
     "reason": "equivalent: with no foreground running task pairs is 0 and the loop assigns nothing",
     "where": "server/shell-tasks.js:317:7 foregroundRunning.length === 0 -> false"
   },
+  "iq954cfjub": {
+    "reason": "equivalent: a null root is merged under the null key and then dropped by existsSync(null) === false before slicing",
+    "where": "server/claude-sessions.js:228:9 !root -> false"
+  },
   "iytu4kbcvj": {
     "reason": "equivalent: raw is trimmed and non-empty, so path === '' is never true and '~' still expands to home via the other branch and trailing-slash removal",
     "where": "client/src/utils/filerRoots.js:19:21 '~' -> ''"
+  },
+  "j1t5f7d8qc": {
+    "reason": "equivalent: the injected string entry has no filePath, readStartCwd(undefined) returns '' and projectRootOf(undefined) is null, so it is dropped",
+    "where": "server/claude-sessions.js:219:17 [] -> [\"Stryker was here!\"]"
   },
   "jmpafd0jdy": {
     "reason": "equivalent: at equality the shifted left (viewport.width - margin - width) equals the current left, so >= and > give the same position",
@@ -783,6 +895,10 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:42:41 '' -> 'Stryker was here!'"
   },
+  "mktk1sirgp": {
+    "reason": "equivalent: webFetch null makes webFetch.title throw after every other message for the record was emitted; the per-line catch swallows it",
+    "where": "server/jsonl-watcher.js:269:15 webFetch -> true"
+  },
   "n7ysnadd2v": {
     "reason": "equivalent: when i === -1, shown.slice(0, i + 1) is '' and shown.slice(i + 1) is shown, same as the i < 0 branch",
     "where": "client/src/utils/toolLines.js:23:10 i < 0 -> false"
@@ -790,6 +906,10 @@
   "nak07yomy3": {
     "reason": "equivalent: the fallback result is a string whose ?.id is undefined, so nothing is added to resolved",
     "where": "client/src/utils/working.js:29:36 [] -> [\"Stryker was here!\"]"
+  },
+  "ne04xqwga7": {
+    "reason": "equivalent: whitespace-only lines make JSON.parse throw and the catch skips them",
+    "where": "server/claude-sessions.js:293:10 line.trim() -> line"
   },
   "njnucljzlg": {
     "reason": "equivalent: always ending a trailing record only adds a single empty-field record after a final newline, which the blank-record trim removes",
@@ -806,6 +926,14 @@
   "rfdm28ktj7": {
     "reason": "equivalent: lastTimestamp is always a string (set from publish.timestamp || ''), so the || '' fallback in the sort is never taken",
     "where": "client/src/utils/artifacts.js:30:65 '' -> 'Stryker was here!'"
+  },
+  "rginfcukpj": {
+    "reason": "equivalent: if the target file is missing, continuing re-arms the watch (directory watcher or a new poll) and the read fails silently, so the watcher keeps waiting for the same file just as the early return does",
+    "where": "server/jsonl-watcher.js:136:11 !existsSync(state.targetFile) -> false"
+  },
+  "rkteozauh2": {
+    "reason": "equivalent: readFirstLines never rejects for a string path and summarizeHead does not throw, so this catch is unreachable",
+    "where": "server/claude-sessions.js:208:12 '' -> 'Stryker was here!'"
   },
   "rstkbxt9yg": {
     "reason": "equivalent: a line that passes the prefilter contains a string literal, so JSON.parse can never return null/undefined for it",
@@ -827,9 +955,21 @@
     "reason": "equivalent: the placeholder label is always overwritten by bucketLabel before bucketDays returns",
     "where": "client/src/utils/heatmap.js:242:16 '' -> 'Stryker was here!'"
   },
+  "stdxn47w9k": {
+    "reason": "equivalent: the targetFile branch above returns early, so state.targetFile is always null here and the comparison is always false",
+    "where": "server/jsonl-watcher.js:144:24 state.targetFile === newestPath -> false"
+  },
   "su1um2enmy": {
     "reason": "equivalent: indexes past the end read undefined, which is neither a turn start, a toolresult nor an assistant, so they are skipped",
     "where": "client/src/utils/working.js:25:16 messages.length - 1 -> messages.length + 1"
+  },
+  "sw4sjo2qqx": {
+    "reason": "equivalent: if statSync throws the entry is gone/broken, so the following readdirSync also throws and the entry is skipped",
+    "where": "server/claude-sessions.js:53:13 { continue; } -> {}"
+  },
+  "t0g14zug7": {
+    "reason": "equivalent: this fallback watcher is only installed when targetFile is set (with no target the same projectPath watch has just failed), and _detectNewFile on a set target ends in _readNewLines",
+    "where": "server/jsonl-watcher.js:184:15 !state.targetFile -> true"
   },
   "t582wwhvls": {
     "reason": "equivalent: a marker starting at index 0 has projectIdx = -1 and never returns, so skipping start = 0 changes nothing",
@@ -838,6 +978,14 @@
   "t5okwackdb": {
     "reason": "equivalent: lastTimestamp is always a string (set from publish.timestamp || ''), so the || '' fallback in the sort is never taken",
     "where": "client/src/utils/artifacts.js:30:102 '' -> 'Stryker was here!'"
+  },
+  "ti5pzcanyw": {
+    "reason": "equivalent: readFirstLines never rejects for a string path, so the .catch fallback is unreachable",
+    "where": "server/claude-sessions.js:271:70 [] -> [\"Stryker was here!\"]"
+  },
+  "tj449moixd": {
+    "reason": "equivalent: replacing the first '-' (wherever it is) with '/' and then every remaining '-' with '/' yields the same string as anchoring the first replacement",
+    "where": "server/claude-sessions.js:57:36 /^-/ -> /-/"
   },
   "toivh7kb00": {
     "reason": "equivalent: values failing isPaletteIndex are never integers in 0..7, so leaving them in the fixed set never removes a palette index from free",
@@ -858,6 +1006,10 @@
   "v7cbr33akx": {
     "reason": "equivalent: replacing the earliest offset with an equal offset returns the same value",
     "where": "client/src/utils/calendar.js:290:32 offset < earliest -> offset <= earliest"
+  },
+  "vcmzflqreb": {
+    "reason": "equivalent: continue is the last statement of the loop body, so removing it changes nothing",
+    "where": "server/claude-sessions.js:394:13 { continue; } -> {}"
   },
   "vo3de5pqns": {
     "reason": "equivalent: width only feeds left; whenever width differs, left = viewport.width - margin - width falls below margin and is clamped to margin, the same as the original",
@@ -883,6 +1035,10 @@
     "reason": "equivalent: for null the property access throws and the catch returns EMPTY_STATE; for a non-object primitive every field falls back to its empty default, so the returned state has the same content (only object identity differs, which no caller relies on)",
     "where": "client/src/utils/tabGroups.js:135:9 !raw || typeof raw !== 'object' -> false"
   },
+  "xd8ffqw4yh": {
+    "reason": "equivalent: blank/whitespace-only lines make JSON.parse throw and the catch skips them",
+    "where": "server/claude-sessions.js:293:9 !line.trim() -> false"
+  },
   "xoy4ze0gko": {
     "reason": "equivalent: contextOf is only called with ranges from extractUrls; text[start] and text[start+1] are inside the URL or link notation and never a newline, so lastIndexOf finds the same line start",
     "where": "client/src/utils/links.js:120:44 start - 1 -> start + 1"
@@ -906,6 +1062,14 @@
   "z15m3gkrfv": {
     "reason": "equivalent: differs only when every line is blank; then line 0 is blank and fails the footer regex, so the result is running with the same body",
     "where": "server/shell-tasks.js:80:10 last >= 0 -> last > 0"
+  },
+  "z6um1o95or": {
+    "reason": "equivalent: this fallback watcher is only installed when targetFile is set (with no target the same projectPath watch has just failed), so the else branch is always taken",
+    "where": "server/jsonl-watcher.js:184:15 !state.targetFile -> false"
+  },
+  "zdqhrz9iy1": {
+    "reason": "equivalent: for a non-directory entry the following readdirSync throws (ENOTDIR) and the same catch skips it",
+    "where": "server/claude-sessions.js:52:11 !statSync(projectPath).isDirectory() -> false"
   },
   "zfzpccndoe": {
     "reason": "equivalent: tokens starting with 8 digits are neither a family name nor a 1-2 digit version, so dropping them changes nothing",
