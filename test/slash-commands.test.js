@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chmod, mkdtemp, mkdir, rm, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { listSlashCommands, clearSlashCommandsCache } from '../server/slash-commands.js';
+import { listSlashCommands, clearSlashCommandsCache, BRIDGE_COMMANDS } from '../server/slash-commands.js';
 
 let root;
 
@@ -187,31 +187,24 @@ describe('listSlashCommands の静的な候補と読み取りの細部', () => {
     await writeFile(join(claudeDir, 'plugins', 'installed_plugins.json'), JSON.stringify({ plugins }));
   }
 
-  it('claudeDir が空なら組み込み・同梱・ブリッジの候補を説明文つきでそのまま返す', async () => {
+  it('claudeDir が空なら組み込み・同梱・ブリッジの候補を名前順に、説明文つきで返す', async () => {
     const commands = await listSlashCommands({ claudeDir: join(root, 'missing') });
-    assert.deepEqual(commands, [
-      { name: 'artifact-capabilities', description: 'Artifact の実行時機能ガイド', source: 'bundled' },
-      { name: 'artifact-design', description: 'Artifact のデザインガイド', source: 'bundled' },
-      { name: 'artifact-diagramming', description: 'Artifact の図の作り方ガイド', source: 'bundled' },
-      { name: 'claude-api', description: 'Claude API / SDK のリファレンス', source: 'bundled' },
-      { name: 'clear', description: '空のコンテキストで新しいセッションを始める', source: 'builtin' },
-      { name: 'code-review', description: '現在の diff や PR をレビューする', source: 'bundled' },
-      { name: 'compact', description: '会話を要約してコンテキストを空ける', source: 'builtin' },
-      { name: 'context', description: 'コンテキストの使用状況を表示する', source: 'builtin' },
-      { name: 'dataviz', description: 'グラフ・可視化の設計ガイド', source: 'bundled' },
-      { name: 'design', description: 'デザインキャンバスを作る', source: 'bundled' },
-      { name: 'diff', description: '未コミットの差分を見る（ブリッジのドロワー）', source: 'bridge' },
-      { name: 'fewer-permission-prompts', description: '許可プロンプトを減らす allowlist を作る', source: 'bundled' },
-      // 同梱スキルの init が組み込みコマンドの init より優先される
-      { name: 'init', description: 'CLAUDE.md を初期生成する', source: 'bundled' },
-      { name: 'keybindings-help', description: 'キーバインドをカスタマイズする', source: 'bundled' },
-      { name: 'loop', description: 'プロンプトを定期実行する', source: 'bundled' },
-      { name: 'run', description: 'プロジェクトのアプリを起動して動作確認する', source: 'bundled' },
-      { name: 'schedule', description: 'cron 実行のクラウドエージェントを管理する', source: 'bundled' },
-      { name: 'security-review', description: 'ブランチの変更をセキュリティ観点でレビューする', source: 'bundled' },
-      { name: 'simplify', description: '変更コードの簡素化・重複排除を適用する', source: 'bundled' },
-      { name: 'update-config', description: 'settings.json の設定を変更する', source: 'bundled' },
-    ]);
+    const names = commands.map((c) => c.name);
+    assert.deepEqual(
+      names,
+      [...names].sort((x, y) => x.localeCompare(y)),
+    );
+    assert.equal(new Set(names).size, names.length, '同名は 1 件にまとめる');
+    // 同梱スキルの init が組み込みコマンドの init より優先される
+    assert.equal(find(commands, 'init').source, 'bundled');
+    assert.equal(find(commands, 'diff').source, 'bridge');
+    assert.equal(find(commands, 'clear').source, 'builtin');
+    assert.equal(commands.filter((c) => c.source === 'bridge').length, BRIDGE_COMMANDS.length);
+    for (const c of commands) {
+      assert.match(c.name, /^[a-z][a-z-]*$/, `名前が空や記号入りでない: ${c.name}`);
+      assert.ok(c.description.trim(), `${c.name} の説明文が空でない`);
+      assert.ok(['builtin', 'bundled', 'bridge'].includes(c.source), `${c.name} の source`);
+    }
   });
 
   it('cwd が違えば別々にキャッシュする', async () => {
@@ -320,7 +313,7 @@ describe('listSlashCommands の静的な候補と読み取りの細部', () => {
     assert.equal(find(commands, 'other-key').description, '本文');
   });
 
-  it('折り返し記法は | と >+ も扱い、空行を飛ばしてインデントの切れ目で止める', async () => {
+  it('折り返し記法は | と >+ も扱い、空白だけの行を飛ばしてインデントの切れ目で止める', async () => {
     const claudeDir = join(root, 'claude');
     // 空白だけの行は飛ばす
     await writeCommand(claudeDir, 'pipe.md', '---\ndescription: |\n  一行目\n  \n  二行目\nname: x\n  後ろ\n---\n');

@@ -587,10 +587,6 @@
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:84:23 pending.get(key) || 0 -> (pending.get(key) && 0)"
   },
-  "1oicv12dal1": {
-    "reason": "equivalent: 経過時間が startCheckMs とちょうど等しいミリ秒かどうかの境界で、決定的に観測できない",
-    "where": "server/tmux-session.js:235:9 Date.now() - lastCheck < startCheckMs -> Date.now() - lastCheck <= startCheckMs"
-  },
   "1ojyyyd6ajj": {
     "reason": "equivalent: taskNotificationMessage の戻り値は shown だけで決まる。pending を増やすのは queued の経路だけで、その経路は必ず shown.add(key) まで進むので n > 0 なら必ず shown.has(key)。pending をどう壊しても戻り値は変わらない（queuedAgentMessage のキーは agent: 始まりで衝突しない）",
     "where": "server/jsonl-utils.js:88:11 n === 1 -> n !== 1"
@@ -714,10 +710,6 @@
   "1tm1yyvauye": {
     "reason": "equivalent: when turn is 'ended' the mutant reads TURN_LABELS.ended, which equals the literal 'ターン終了'",
     "where": "client/src/utils/completionState.js:87:20 turn !== 'ended' -> true"
-  },
-  "1ubmrxkqvvi": {
-    "reason": "equivalent: 落ち着いた経過時間が settleMs とちょうど等しいミリ秒かどうかの境界で、決定的に観測できない",
-    "where": "server/tmux-session.js:172:33 Date.now() - stableSince >= settleMs -> Date.now() - stableSince > settleMs"
   },
   "1ud75afqnzx": {
     "reason": "equivalent: readFile の encoding が '' だと Buffer が返るが JSON.parse は Buffer を文字列化して読むので結果は同じ",
@@ -1187,10 +1179,6 @@
     "reason": "equivalent: with 200 or fewer pending tools ids.slice(0, length - 200) is empty, so nothing is deleted",
     "where": "server/activity-heatmap.js:295:9 ids.length > MAX_PENDING_TOOLS -> true"
   },
-  "2db4yylf1gz": {
-    "reason": "equivalent: Date.now() が deadline とちょうど等しいミリ秒での 1 回の差で、決定的に観測できない時刻の境界",
-    "where": "server/tmux-session.js:184:9 Date.now() > deadline -> Date.now() >= deadline"
-  },
   "2de6iiviju7": {
     "reason": "equivalent: rest 0 gives ratio 0, so every share is 0 and skipped by share > 0",
     "where": "server/activity-heatmap.js:570:9 rest <= 0 -> false"
@@ -1366,10 +1354,6 @@
   "45fimf0cag": {
     "reason": "equivalent: the line was selected by the anchored regex, so its first 'description:' match is at the start either way",
     "where": "server/slash-commands.js:223:38 /^description\\s*:/ -> /description\\s*:/"
-  },
-  "48zewunurk": {
-    "reason": "equivalent: Date.now() が deadline とちょうど等しいミリ秒に 1 回多く回るかどうかの境界で、決定的に観測できない",
-    "where": "server/new-session.js:108:10 Date.now() < deadline -> Date.now() <= deadline"
   },
   "4gejuacb4s": {
     "reason": "equivalent: an error result without tool_use_id adds undefined to errorIds, but pushIds only holds truthy ids, so no push is ever matched by it",
@@ -1627,10 +1611,6 @@
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:67:38 '' -> 'Stryker was here!'"
   },
-  "fy8o5r6g25": {
-    "reason": "equivalent: Date.now() がちょうど deadline に等しいミリ秒に 1 回多く回るかどうかだけの差で、テストから決定的に観測できない時刻の境界",
-    "where": "server/tmux-session.js:167:10 Date.now() < deadline -> Date.now() <= deadline"
-  },
   "g372z8uexz": {
     "reason": "equivalent: the greedy [^/]+ always stops right before '/' or the end of the string, so the lookahead (?=\\/|$) is always satisfied and dropping $ changes no match",
     "where": "client/src/utils/tabGroups.js:186:23 /^\\/(?:home|Users)\\/[^/]+(?=\\/|$)/ -> /^\\/(?:home|Users)\\/[^/]+(?=\\/|)/"
@@ -1706,10 +1686,6 @@
   "ihevwrqhak": {
     "reason": "equivalent: a null content block makes extractTextContent (b.type) throw on the next line anyway, so both versions throw",
     "where": "server/session-recent.js:78:49 ?. -> ."
-  },
-  "iigtqzub2j": {
-    "reason": "equivalent: Date.now() が deadline とちょうど等しいミリ秒に 1 回多く回るかどうかの境界で、決定的に観測できない",
-    "where": "server/new-session.js:90:10 Date.now() < deadline -> Date.now() <= deadline"
   },
   "iku9vi624a": {
     "reason": "equivalent: resetting offset/ids before every scan only forces a full rescan, which collects the same ids",
@@ -1850,10 +1826,6 @@
   "o11h45kfto": {
     "reason": "equivalent: a zero-length interval adds nothing to any slot, union or cap",
     "where": "server/activity-heatmap.js:384:7 end <= start -> end < start"
-  },
-  "o1khmbykz0": {
-    "reason": "equivalent: Date.now() が deadline とちょうど等しいミリ秒での 1 回の差で、決定的に観測できない時刻の境界",
-    "where": "server/tmux-session.js:226:9 Date.now() > deadline -> Date.now() >= deadline"
   },
   "oapivmzc94": {
     "reason": "equivalent: stat 失敗時に false の代わりに undefined を返しても、呼び出し側は真偽でしか見ない",

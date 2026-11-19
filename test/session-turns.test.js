@@ -529,7 +529,10 @@ describe('readSessionTurns (git との突き合わせ)', () => {
     const env = { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date };
     await writeFile(join(repo, 'f.txt'), `${subject}\n`);
     await execAsync('git add .', { cwd: repo, env });
-    await execAsync(`git -c user.email=t@example.com -c user.name=t commit -q -m "${subject}"`, { cwd: repo, env });
+    await execAsync(
+      `git -c user.email=t@example.com -c user.name=t -c commit.gpgsign=false commit -q -m "${subject}"`,
+      { cwd: repo, env },
+    );
     const { stdout } = await execAsync('git log -1 --format=%h', { cwd: repo });
     return stdout.trim();
   }

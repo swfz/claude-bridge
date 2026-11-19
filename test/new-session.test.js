@@ -192,6 +192,18 @@ describe('waitForSessionCwd', () => {
     assert.equal(await waitForSessionCwd(1, { dir, intervalMs: 5, timeoutMs: 60 }), null);
     assert.ok(Date.now() - t0 >= 50);
   });
+
+  it('timeoutMs が 0 なら worktree の cwd が書かれていても読まずに null を返す', async () => {
+    const dir = await makeDir('cb-sess-');
+    await writeFile(join(dir, '42.json'), JSON.stringify({ cwd: '/r/.claude/worktrees/w' }));
+    // 時刻を止めて「今がちょうど期限」の状態を作る（setTimeout は本物のまま）
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      assert.equal(await waitForSessionCwd(42, { dir, intervalMs: 5, timeoutMs: 0 }), null);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('waitForSessionCwdById', () => {
@@ -222,5 +234,16 @@ describe('waitForSessionCwdById', () => {
     await writeFile(join(dir, '1.json'), '{broken');
     await writeFile(join(dir, '2.json'), JSON.stringify({ sessionId: 'me', cwd: '/r/.claude/worktrees/ok' }));
     assert.equal(await waitForSessionCwdById('me', { dir, intervalMs: 5, timeoutMs: 2000 }), '/r/.claude/worktrees/ok');
+  });
+
+  it('timeoutMs が 0 なら worktree の cwd が書かれていても読まずに null を返す', async () => {
+    const dir = await makeDir('cb-sess-');
+    await writeFile(join(dir, '1.json'), JSON.stringify({ sessionId: 'me', cwd: '/r/.claude/worktrees/ok' }));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      assert.equal(await waitForSessionCwdById('me', { dir, intervalMs: 5, timeoutMs: 0 }), null);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

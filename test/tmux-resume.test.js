@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, vi } from 'vitest';
+import { describe, it, beforeEach, afterEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
 // child_process.exec をモック。コマンドごとに stdout を出し分ける
@@ -483,7 +483,12 @@ describe('sendCommandWhenShellReady', () => {
       'display-message': shellUntilEnter,
     };
 
-    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', {
+      ...FAST,
+      // 打ち切りのテストではないので、ポーリングが遅くても期限に届かないよう遠ざける
+      readyTimeoutMs: 5000,
+      timeoutMs: 6000,
+    });
 
     const literalIdx = execCalls.findIndex((c) => c.includes('send-keys -t %7 -l'));
     const capturesBeforeTyping = execCalls.slice(0, literalIdx).filter((c) => c.includes('capture-pane')).length;
@@ -502,7 +507,12 @@ describe('sendCommandWhenShellReady', () => {
       'display-message': shellUntilEnter,
     };
 
-    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', {
+      ...FAST,
+      // 打ち切りのテストではないので、ポーリングが遅くても期限に届かないよう遠ざける
+      readyTimeoutMs: 5000,
+      timeoutMs: 6000,
+    });
 
     const literalIdx = execCalls.findIndex((c) => c.includes('send-keys -t %7 -l'));
     const capturesBeforeTyping = execCalls.slice(0, literalIdx).filter((c) => c.includes('capture-pane')).length;
@@ -542,7 +552,12 @@ describe('sendCommandWhenShellReady', () => {
       'display-message': shellUntilEnter,
     };
 
-    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
+    await sendCommandWhenShellReady('%7', 'claude --resume abc-123', {
+      ...FAST,
+      // 打ち切りのテストではないので、ポーリングが遅くても期限に届かないよう遠ざける
+      readyTimeoutMs: 5000,
+      timeoutMs: 6000,
+    });
 
     const literalIdx = execCalls.findIndex((c) => c.includes('send-keys -t %7 -l'));
     const capturesBeforeTyping = execCalls.slice(0, literalIdx).filter((c) => c.includes('capture-pane')).length;
@@ -773,5 +788,94 @@ describe('sendCommandWhenShellReady', () => {
     await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 1000 });
 
     assert.equal(enterCount(), 1);
+  });
+
+  // 期限・経過時間の比較の境界。Date だけ止めて（setTimeout は本物のまま）「ちょうど」を作る
+  describe('at exact time boundaries', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const capturesBeforeTyping = () => {
+      const literalIdx = execCalls.findIndex((c) => c.includes('send-keys -t %7 -l'));
+      return execCalls.slice(0, literalIdx).filter((c) => c.includes('capture-pane')).length;
+    };
+
+    it('types without looking at the pane when readyTimeoutMs is 0', async () => {
+      responses = {
+        'capture-pane': () => (literalSendsOf().length ? 'user@host:~$ claude --resume abc-123\n' : 'user@host:~$\n'),
+        'display-message': shellUntilEnter,
+      };
+
+      await sendCommandWhenShellReady('%7', 'claude --resume abc-123', {
+        ...FAST,
+        settleMs: 0,
+        readyTimeoutMs: 0,
+        timeoutMs: 1000,
+      });
+
+      assert.equal(capturesBeforeTyping(), 0);
+      assert.equal(literalSendsOf().length, 1);
+      assert.equal(enterCount(), 1);
+    });
+
+    it('types as soon as the prompt has stayed unchanged for exactly settleMs', async () => {
+      responses = {
+        'capture-pane': () => {
+          // 画面を 1 回読むごとに 10ms 進める
+          vi.setSystemTime(Date.now() + 10);
+          return literalSendsOf().length ? 'user@host:~$ claude --resume abc-123\n' : 'user@host:~$\n';
+        },
+        'display-message': shellUntilEnter,
+      };
+
+      await sendCommandWhenShellReady('%7', 'claude --resume abc-123', {
+        ...FAST,
+        settleMs: 10,
+        readyTimeoutMs: 1000,
+        timeoutMs: 2000,
+      });
+
+      // 1 回目で画面を覚え、10ms 後の 2 回目で変化なし＝settleMs ちょうどで打つ
+      assert.equal(capturesBeforeTyping(), 2);
+    });
+
+    it('still accepts the echo and the started claude at the exact deadline (timeoutMs 0)', async () => {
+      responses = {
+        'capture-pane': () => (literalSendsOf().length ? 'user@host:~$ claude --resume abc-123\n' : 'user@host:~$\n'),
+        'display-message': shellUntilEnter,
+      };
+
+      await sendCommandWhenShellReady('%7', 'claude --resume abc-123', { ...FAST, timeoutMs: 0 });
+
+      assert.equal(literalSendsOf().length, 1);
+      assert.equal(enterCount(), 1);
+    });
+
+    it('re-sends Enter on the first shell-foreground check when startCheckMs is 0', async () => {
+      let displayCount = 0;
+      responses = {
+        'capture-pane': () => (literalSendsOf().length ? 'user@host:~$ claude --resume abc-123\n' : 'user@host:~$\n'),
+        // Enter の後の 1 回目はまだシェル、2 回目で claude
+        'display-message': () => {
+          displayCount += 1;
+          return displayCount === 1 ? 'zsh\n' : 'claude\n';
+        },
+      };
+
+      await sendCommandWhenShellReady('%7', 'claude --resume abc-123', {
+        ...FAST,
+        // 時刻が止まっているので、settleMs が 0 でないとプロンプト待ちが終わらない
+        settleMs: 0,
+        startCheckMs: 0,
+        timeoutMs: 1000,
+      });
+
+      assert.equal(enterCount(), 2, 'the command was left on the input line, so Enter is pressed again');
+      assert.ok(!execCalls.some((c) => c.includes('C-u')));
+    });
   });
 });
