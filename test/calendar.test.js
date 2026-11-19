@@ -1,6 +1,11 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  APPROVALS_TITLE,
+  BUSY_TITLE,
+  COLOR_MODES,
+  DAY_MS,
+  PHASES,
   assignLanes,
   buildCalendarDays,
   buildLegend,
@@ -393,5 +398,182 @@ describe('dailyApprovals / formatApprovals', () => {
     assert.equal(formatApprovals(0), '');
     assert.equal(formatApprovals(undefined), '');
     assert.equal(formatApprovals(2), '許可 2');
+  });
+});
+
+describe('calendar: 境界と表示用の定数', () => {
+  const weekStartMs = local(2026, 9, 28);
+  const seg = (id, startMs, endMs) => ({ id, startMs, endMs });
+  const lanesById = (result) => Object.fromEntries(result.map((s) => [s.id, [s.lane, s.lanes]]));
+
+  it('1 日は 24 時間（ms）', () => {
+    assert.equal(DAY_MS, 86400000);
+  });
+
+  it('assignLanes は入力の順に関わらず開始順に並べ、同時に始まるものは長い方を左に置く', () => {
+    const result = assignLanes([seg('late', 50, 60), seg('short', 0, 10), seg('long', 0, 20)]);
+    assert.deepEqual(
+      result.map((s) => s.id),
+      ['long', 'short', 'late'],
+    );
+    assert.deepEqual(lanesById(result), { long: [0, 2], short: [1, 2], late: [0, 1] });
+  });
+
+  it('assignLanes は塊の終わりちょうどに始まる帯を別の塊にする', () => {
+    const result = assignLanes([seg('a', 0, 10), seg('b', 0, 10), seg('c', 10, 20)]);
+    assert.deepEqual(lanesById(result), { a: [0, 2], b: [1, 2], c: [0, 1] });
+  });
+
+  it('assignLanes はレーンが空いた時刻ちょうどに始まる帯をそのレーンに置き、置いた帯の終わりまで塞ぐ', () => {
+    const result = assignLanes([seg('a', 0, 20), seg('b', 0, 10), seg('c', 10, 30), seg('d', 15, 20)]);
+    assert.deepEqual(lanesById(result), { a: [0, 3], b: [1, 3], c: [1, 3], d: [2, 3] });
+  });
+
+  it('projectDir の末尾が - でもプロジェクト名を取れる', () => {
+    assert.equal(projectOf({ cwd: '', projectDir: '-home-me-foo-' }), 'foo');
+  });
+
+  it('buildLegend はセッションが無ければ空、同数ならプロジェクト名順', () => {
+    assert.deepEqual(buildLegend(undefined), []);
+    const legend = buildLegend([{ cwd: '/x/c' }, { cwd: '/x/b' }, { cwd: '/x/a' }, { cwd: '/x/a' }, { cwd: '/x/c' }]);
+    assert.deepEqual(
+      legend.map((l) => [l.project, l.count]),
+      [
+        ['a', 2],
+        ['c', 2],
+        ['b', 1],
+      ],
+    );
+  });
+
+  it('buildCalendarDays は 0:00 ちょうどで終わる・始まる帯を隣の日に出さず、日ごとに別のキーを付ける', () => {
+    const endsAtMidnight = local(2026, 9, 29, 23, 50);
+    const startsAtMidnight = local(2026, 10, 1, 0, 0);
+    const crossing = local(2026, 10, 2, 23, 50);
+    const days = buildCalendarDays(
+      [
+        {
+          sessionId: 's1',
+          cwd: '/x/app',
+          slots: [
+            [slotAt(endsAtMidnight), 1, 0, 0, 0],
+            [slotAt(startsAtMidnight), 1, 0, 0, 0],
+            [slotAt(crossing), 1, 0, 0, 0],
+            [slotAt(crossing) + 1, 1, 0, 0, 0],
+          ],
+        },
+      ],
+      { weekStartMs, slotMs: SLOT },
+    );
+    assert.deepEqual(
+      days.map((d) => d.segments.length),
+      [0, 1, 0, 1, 1, 1, 0],
+    );
+    assert.equal(days[4].segments[0].key, `s1:${crossing}:4`);
+    assert.equal(days[5].segments[0].key, `s1:${crossing}:5`);
+  });
+
+  it('buildCalendarDays の各日は翌日の 0:00 で終わる', () => {
+    const days = buildCalendarDays([], { weekStartMs, slotMs: SLOT });
+    assert.equal(days[0].dayStartMs, weekStartMs);
+    assert.equal(days[0].dayEndMs, local(2026, 9, 29));
+    assert.equal(days[6].dayEndMs, local(2026, 10, 5));
+  });
+
+  it('色分けのモードと作業の種類は表示名と説明を持つ', () => {
+    assert.deepEqual(
+      COLOR_MODES.map((m) => [m.key, m.label]),
+      [
+        ['project', 'プロジェクト'],
+        ['phase', '調査 / 実装'],
+      ],
+    );
+    assert.match(COLOR_MODES[0].title, /リポジトリごと/);
+    assert.match(COLOR_MODES[1].title, /調査系ツールと編集系ツール/);
+    assert.deepEqual(
+      Object.entries(PHASES).map(([key, p]) => [key, p.label]),
+      [
+        ['research', '調査'],
+        ['edit', '実装'],
+        ['talk', '対話'],
+      ],
+    );
+    assert.match(PHASES.research.title, /Read \/ Grep/);
+    assert.match(PHASES.edit.title, /同数なら実装/);
+    assert.match(PHASES.talk.title, /使っていない/);
+  });
+
+  it('formatHours は 10 時間ちょうどから整数で出す', () => {
+    assert.equal(formatHours(10 * 3600000), '10 時間');
+    assert.equal(formatHours(9.5 * 3600000), '9.5 時間');
+  });
+
+  it('日ごとの集計は負の値と週の前の枠を足さない', () => {
+    const sessions = [
+      {
+        slots: [
+          [slotAt(local(2026, 9, 28, 10)), 1, 1, 0, 0, -5000],
+          [slotAt(local(2026, 9, 28, 11)), 1, 1, 0, 0, 3000],
+          [slotAt(local(2026, 9, 27, 23)), 1, 1, 0, 0, 7000],
+        ],
+      },
+    ];
+    assert.deepEqual(dailyBusyMs(sessions, { weekStartMs, slotMs: SLOT }), [3000, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('許可回数と AI 稼働時間の説明は数え方の要点を全部含む', () => {
+    for (const phrase of ['Claude Code v2.1.293', '実測（cost-state）から配分', '配分が 0 になることがある']) {
+      assert.ok(APPROVALS_TITLE.includes(phrase), phrase);
+    }
+    for (const phrase of [
+      '呼び出しごとに合算',
+      '1 日 24 時間を超え得る',
+      '推論は 1 回 10 分まで',
+      '推論との重なりと順番待ちは除く',
+      'auto モードの判定待ち',
+      '実測に合わせて縮める',
+      '10/8 より前のツール',
+      '自動ツールで説明できない残りを配分',
+      'AskUserQuestion の回答待ちは除く',
+    ]) {
+      assert.ok(BUSY_TITLE.includes(phrase), phrase);
+    }
+  });
+
+  it('formatBusy は負の値を — にし、ちょうど 1 分は 1m と出す', () => {
+    assert.equal(formatBusy(-60000), '—');
+    assert.equal(formatBusy(60000), '1m');
+  });
+
+  it('earliestOffsetMs は後の日のより遅い帯で上書きしない', () => {
+    const days = [
+      { dayStartMs: 0, segments: [{ startMs: 5 }] },
+      { dayStartMs: 100, segments: [{ startMs: 190 }] },
+    ];
+    assert.equal(earliestOffsetMs(days), 5);
+  });
+
+  it('日付の見出しは全曜日を漢字 1 文字で出す', () => {
+    const labels = [];
+    for (let i = 0; i < 7; i++) labels.push(formatDayHeader(local(2026, 9, 27 + i)).split(' ')[0]);
+    assert.deepEqual(labels, ['日', '月', '火', '水', '木', '金', '土']);
+  });
+
+  it('ツールチップの所要時間は 60 分未満を分、ちょうどの時間は分を省いて出す', () => {
+    const tip = (minutes) =>
+      segmentTooltip({
+        sessionId: 's',
+        title: 'T',
+        cwd: '/x',
+        runStartMs: local(2026, 9, 28, 9),
+        runEndMs: local(2026, 9, 28, 9) + minutes * 60000,
+        prompts: 0,
+        replies: 0,
+        research: 0,
+        edit: 0,
+      }).split('\n')[2];
+    assert.equal(tip(30), '09:00〜09:30（30 分）');
+    assert.equal(tip(60), '09:00〜10:00（1 時間）');
+    assert.equal(tip(120), '09:00〜11:00（2 時間）');
   });
 });

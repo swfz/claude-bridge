@@ -15,6 +15,14 @@
     "reason": "equivalent: shiftDate is only used by weekStartOf as a bucket id compared for equality within bucketDays; the full ISO string compares the same way as its date part and never appears in the output",
     "where": "client/src/utils/heatmap.js:203:10 new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice… -> new Date(Date.UTC(y, m - 1, d + delta)).toISOString()"
   },
+  "11sk75ioyl5": {
+    "reason": "equivalent: a sentinel string as a session has no slots, so buildRuns(undefined) yields no runs and no segment is produced",
+    "where": "client/src/utils/calendar.js:113:37 [] -> [\"Stryker was here!\"]"
+  },
+  "13iabbwu8n7": {
+    "reason": "equivalent: at d = 7, starts[8] is undefined so ms < undefined is false and totals[7] is never written",
+    "where": "client/src/utils/calendar.js:234:23 d < totals.length -> d <= totals.length"
+  },
   "13uls4qj4eg": {
     "reason": "equivalent: tool input is JSON, so the non-string primitives that reach here (number, boolean) give Object.values() === [] just like the early return; only a function input could differ",
     "where": "client/src/utils/links.js:149:7 typeof input !== 'object' -> false"
@@ -31,9 +39,17 @@
     "reason": "equivalent: BARE_URL_RE excludes the full-width closing bracket, so a bare URL match can never end with it",
     "where": "client/src/utils/links.js:12:73 '）' -> ''"
   },
+  "162sktold7f": {
+    "reason": "equivalent: a sentinel string as a slot has slot[0]='S', so ms is NaN and matches no day (and slot[7]=' ' is skipped by value <= 0)",
+    "where": "client/src/utils/calendar.js:230:41 [] -> [\"Stryker was here!\"]"
+  },
   "16fiaxayp3g": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:76:40 '' -> 'Stryker was here!'"
+  },
+  "18bqajqyich": {
+    "reason": "equivalent: the final flush with an empty cluster (no segments) pushes nothing",
+    "where": "client/src/utils/calendar.js:94:7 cluster.length > 0 -> true"
   },
   "18xxspt59a5": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
@@ -67,6 +83,14 @@
     "reason": "equivalent: an empty array maps to an empty points list and joins to '' without the guard",
     "where": "client/src/utils/heatmap.js:430:18 values.length === 0 -> false"
   },
+  "1g4d6zm8g4w": {
+    "reason": "equivalent: after trim, split yields '' only for an empty query; terms [''] match every dir with rank 0 and keep server order, same as list.slice(0, limit)",
+    "where": "client/src/utils/recentDirs.js:25:17 (query || '').trim().toLowerCase().split(/\\s+/).filter(Bool… -> (query || '').trim().toLowerCase().split(/\\s+/)"
+  },
+  "1h340xxwdxq": {
+    "reason": "equivalent: pos = found + 1 never exceeds length; at pos === length indexOf finds only an empty needle, which is returned early",
+    "where": "client/src/utils/previewLocation.js:78:10 pos <= sourceText.length -> pos < sourceText.length"
+  },
   "1h9b3t97r56": {
     "reason": "equivalent: the default isHidden result is only negated in filter, and !undefined === !false",
     "where": "client/src/utils/tabGroups.js:191:57 false -> undefined"
@@ -91,9 +115,17 @@
     "reason": "equivalent: bucketIdOf and bucketLabel treat any value other than week/month as day, so the default '' behaves exactly like 'day'",
     "where": "client/src/utils/heatmap.js:230:48 'day' -> ''"
   },
+  "1la519gey6l": {
+    "reason": "equivalent: String.prototype.slice clamps an end past the length, so max and min give the same slice",
+    "where": "client/src/utils/previewLocation.js:46:25 min -> max"
+  },
   "1la8kv810kn": {
     "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
     "where": "client/src/utils/sensitiveSessions.js:32:67 '[]' -> ''"
+  },
+  "1lrq1hmopzd": {
+    "reason": "equivalent: the sentinel string slot gives slot[1]+slot[2] = 'tr', and 'tr' > 0 is false, so it is filtered out exactly like an empty list",
+    "where": "client/src/utils/calendar.js:44:32 [] -> [\"Stryker was here!\"]"
   },
   "1lzvln3c213": {
     "reason": "equivalent: the fallback tool is a string whose ?.id is undefined, so it is never returned as running",
@@ -151,9 +183,21 @@
     "reason": "equivalent: the fallback string ends with '!', so the extension regex does not match and getExt still returns ''",
     "where": "client/src/utils/previewExts.js:38:26 '' -> 'Stryker was here!'"
   },
+  "1xaoaolxkz6": {
+    "reason": "equivalent: unreachable; pos = found + 1 <= length always holds, so the loop only exits through its returns",
+    "where": "client/src/utils/previewLocation.js:85:10 -1 -> +1"
+  },
+  "1yvjp69w1hq": {
+    "reason": "equivalent: offset 0 also yields {line: 1, column: 1} through the normal path",
+    "where": "client/src/utils/previewLocation.js:34:7 offset < 0 -> offset <= 0"
+  },
   "1z6mh2ish97": {
     "reason": "equivalent: TURN_LABELS.ended is never read; completionChecks uses the literal 'ターン終了' when turn === 'ended'",
     "where": "client/src/utils/completionState.js:25:10 'ターン終了' -> ''"
+  },
+  "215s1jfeehy": {
+    "reason": "equivalent: headings after the node in document order neither have FOLLOWING set nor equal the node, so continuing the loop never changes last",
+    "where": "client/src/utils/previewLocation.js:101:12 { // 後続の見出しに来たら打ち切り break; } -> {}"
   },
   "239z2ga5ry1": {
     "reason": "equivalent: the fallback message is a string whose ?.role is not 'toolresult', so it is skipped and the index stays empty",
@@ -163,6 +207,14 @@
     "reason": "equivalent: when i === -1, path.slice(0, i + 1) is '' and path.slice(i + 1) is path, same as the i < 0 branch",
     "where": "client/src/utils/diffView.js:78:10 i < 0 -> false"
   },
+  "23mtvdq3qfe": {
+    "reason": "equivalent: a sentinel string as a session has no slots (session.slots || []), so nothing is added",
+    "where": "client/src/utils/calendar.js:229:37 [] -> [\"Stryker was here!\"]"
+  },
+  "25qd7ayohbs": {
+    "reason": "equivalent: leading/trailing whitespace only produces '' terms, which filter(Boolean) drops",
+    "where": "client/src/utils/recentDirs.js:25:17 (query || '').trim() -> (query || '')"
+  },
   "26j5skqqnv3": {
     "reason": "equivalent: Date.parse('Stryker was here!') and Date.parse('') are both NaN, so timeOf returns null either way",
     "where": "client/src/utils/working.js:11:40 '' -> 'Stryker was here!'"
@@ -171,6 +223,18 @@
     "reason": "equivalent: timeOf is only called on messages that passed isTurnStart (role === 'human'), so m is never nullish",
     "where": "client/src/utils/working.js:11:25 ?. -> ."
   },
+  "2camx43sohe": {
+    "reason": "equivalent: cluster is empty only for the first segment (clusterEnd = -Infinity); flushing an empty cluster pushes nothing and resets already-empty arrays",
+    "where": "client/src/utils/calendar.js:83:38 cluster.length > 0 -> true"
+  },
+  "2cwltaeaymu": {
+    "reason": "equivalent: consecutive whitespace only produces '' terms, which filter(Boolean) drops",
+    "where": "client/src/utils/recentDirs.js:25:58 /\\s+/ -> /\\s/"
+  },
+  "2estp09juxt": {
+    "reason": "equivalent: ms = 0 is already caught by !ms, so <= 0 and < 0 differ for no input",
+    "where": "client/src/utils/calendar.js:256:14 ms <= 0 -> ms < 0"
+  },
   "2fdmx5k57y3": {
     "reason": "equivalent: fallback for a missing e.key; 'Stryker was here!' does not match /^([0-9])$/ any more than '' does",
     "where": "client/src/utils/keys.js:80:89 '' -> 'Stryker was here!'"
@@ -178,6 +242,10 @@
   "2gb1iqdlgg7": {
     "reason": "equivalent: the fallback string does not start with '/', so normalizeRootInput returns null either way",
     "where": "client/src/utils/filerRoots.js:15:31 '' -> 'Stryker was here!'"
+  },
+  "2jj4n004l6": {
+    "reason": "equivalent: pos = found + 1 never exceeds length; at pos === length indexOf finds only an empty needle, which is returned early",
+    "where": "client/src/utils/previewLocation.js:61:10 pos <= text.length -> pos < text.length"
   },
   "32hwu6c84l": {
     "reason": "equivalent: with '' the day case goes through bucketDays(days, 'day'), which yields the same per-day metric values",
@@ -190,6 +258,18 @@
   "3pe1ar1ew5": {
     "reason": "equivalent: any non-array JSON value (object, number, string, null, boolean) has no .filter, so it throws inside the try and the catch returns []",
     "where": "client/src/utils/sensitiveSessions.js:33:12 Array.isArray(raw) -> true"
+  },
+  "4p7ljk15ti": {
+    "reason": "equivalent: letting value 0 through adds 0 to the day total",
+    "where": "client/src/utils/calendar.js:232:11 value <= 0 -> value < 0"
+  },
+  "6eb7gjw1q8": {
+    "reason": "equivalent: when idx is -1, clamped - idx equals clamped + 1",
+    "where": "client/src/utils/previewLocation.js:39:18 idx === -1 -> false"
+  },
+  "6xcjeh57h4": {
+    "reason": "equivalent: count starts at 1 and only grows, so it never equals a targetIndex < 1; the loop ends with -1 when indexOf stops finding",
+    "where": "client/src/utils/previewLocation.js:75:18 targetIndex < 1 -> false"
   },
   "701c6s0p4f": {
     "reason": "equivalent: JSON.parse('') throws inside the try and the catch returns [], same as parsing '[]'",
@@ -239,6 +319,10 @@
     "reason": "equivalent: raw is trimmed and non-empty, so path === '' is never true and '~' still expands to home via the other branch and trailing-slash removal",
     "where": "client/src/utils/filerRoots.js:19:21 '~' -> ''"
   },
+  "l5qv6k5ivi": {
+    "reason": "equivalent: cluster is empty only for the first segment (clusterEnd = -Infinity); flushing an empty cluster pushes nothing and resets already-empty arrays",
+    "where": "client/src/utils/calendar.js:83:38 cluster.length > 0 -> cluster.length >= 0"
+  },
   "l8a2ybil5f": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:27:41 '' -> 'Stryker was here!'"
@@ -246,6 +330,10 @@
   "lcx0785wpm": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
     "where": "client/src/utils/keys.js:35:41 '' -> 'Stryker was here!'"
+  },
+  "lqnyv9p8fj": {
+    "reason": "equivalent: occ is only read as occ.total > 1 (undefined > 1 is false), and occ.index only inside that branch",
+    "where": "client/src/utils/previewLocation.js:124:88 { index: 0, total: 0 } -> {}"
   },
   "m36xgg0wef": {
     "reason": "equivalent: fallback for a missing e.key; the lowercased 'stryker was here!' never equals the single compared letter, same result as ''",
@@ -278,6 +366,14 @@
   "toivh7kb00": {
     "reason": "equivalent: values failing isPaletteIndex are never integers in 0..7, so leaving them in the fixed set never removes a palette index from free",
     "where": "client/src/utils/tabGroups.js:202:25 list.map((g) => colors?.[g.key]).filter(isPaletteIndex) -> list.map((g) => colors?.[g.key])"
+  },
+  "uyoym35s8o": {
+    "reason": "equivalent: the final flush with an empty cluster (no segments) pushes nothing",
+    "where": "client/src/utils/calendar.js:94:7 cluster.length > 0 -> cluster.length >= 0"
+  },
+  "v7cbr33akx": {
+    "reason": "equivalent: replacing the earliest offset with an equal offset returns the same value",
+    "where": "client/src/utils/calendar.js:290:32 offset < earliest -> offset <= earliest"
   },
   "wlwnfzn3oh": {
     "reason": "equivalent: with '' the day case goes through bucketDays(days, 'day'), which yields the same per-day metric values",
