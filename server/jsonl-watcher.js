@@ -10,6 +10,7 @@ import {
   extractTextContent,
   extractThinkingText,
   hookErrorMessage,
+  awaySummaryMessage,
   taskNotificationMessage,
   queuedAgentMessage,
   noteAgentLaunch,
@@ -283,6 +284,9 @@ export class JsonlWatcher {
           const hookError = hookErrorMessage(record);
           if (hookError)
             state.onMessage({ type: 'chat_message', bridgeSessionId: state.bridgeSessionId, ...hookError });
+        } else if (record.type === 'system') {
+          const recap = awaySummaryMessage(record);
+          if (recap) state.onMessage({ type: 'chat_message', bridgeSessionId: state.bridgeSessionId, ...recap });
         } else if (record.type === 'queue-operation' && record.operation === 'enqueue' && record.content) {
           const task =
             taskNotificationMessage(record, record.content, state.pendingTasks, { queued: true }) ||
