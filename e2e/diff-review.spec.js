@@ -132,7 +132,7 @@ test.describe('差分ドロワーの行への指摘', () => {
     const textBefore = await rectOf(row('new:11').locator('.diff-line-text'));
     const nextBefore = await rectOf(row('new:12'));
     const scopeBefore = await rectOf(drawer.locator('.diff-drawer-scope'));
-    const refreshBefore = await rectOf(drawer.locator('.diff-drawer-icon'));
+    const refreshBefore = await rectOf(drawer.locator('.diff-drawer-refresh'));
     await row('new:11').hover();
     await expect(row('new:11').locator('.diff-gutter-plus')).toHaveCSS('opacity', '1');
     expect(await rectOf(row('new:11').locator('.diff-line-text'))).toEqual(textBefore);
@@ -176,7 +176,7 @@ test.describe('差分ドロワーの行への指摘', () => {
     // 未送信の印・件数が出ても本文・ヘッダは動かない
     expect(await rectOf(row('new:11').locator('.diff-line-text'))).toEqual(textBefore);
     expect(await rectOf(drawer.locator('.diff-drawer-scope'))).toEqual(scopeBefore);
-    expect(await rectOf(drawer.locator('.diff-drawer-icon'))).toEqual(refreshBefore);
+    expect(await rectOf(drawer.locator('.diff-drawer-refresh'))).toEqual(refreshBefore);
     await expect(drawer.locator('.diff-submit')).toHaveText('1件送信');
 
     // ── 削除行（旧 L11）に指摘。新 L11 と取り違えない
@@ -249,7 +249,7 @@ test.describe('差分ドロワーの行への指摘', () => {
       await page.locator('body').evaluate((b) => b.classList.remove('light-mode'));
     }
     mainPatch = MAIN_PATCH_AFTER;
-    await drawer.locator('.diff-drawer-icon').click();
+    await drawer.locator('.diff-drawer-refresh').click();
     const stale = app.locator('.diff-comment.stale');
     // L12 は消え、L13-L15 は行番号が同じでも中身がずれたので、どちらも「対象行が見つからない」で残す
     await expect(stale).toHaveCount(2);
@@ -284,11 +284,11 @@ test.describe('差分ドロワーの行への指摘', () => {
     await expect(drawer.locator('.diff-drawer-status.error')).toBeVisible();
     await drawer.locator('.diff-scope-btn', { hasText: '全体' }).click();
     await expect(stale).toHaveCount(2);
-    await drawer.locator('.diff-drawer-icon').click();
+    await drawer.locator('.diff-drawer-refresh').click();
     await expect(stale).toHaveCount(2);
 
     // ── 一括送信（失敗）: 下書きは残り、ドロワー内に失敗が出る。指摘欄の外（更新ボタン）にフォーカスがあっても効く
-    await expect(drawer.locator('.diff-drawer-icon')).toBeFocused();
+    await expect(drawer.locator('.diff-drawer-refresh')).toBeFocused();
     await page.keyboard.press('Control+Shift+Enter');
     await expect.poll(() => submits.length).toBe(2);
     const first = submits[1];
