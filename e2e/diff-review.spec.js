@@ -156,7 +156,8 @@ test.describe('差分ドロワーの行への指摘', () => {
       widths: [...el.querySelectorAll('.diff-line')].map((r) => r.getBoundingClientRect().width),
     }));
     expect(new Set(longRows.widths).size).toBe(1);
-    expect(longRows.widths[0]).toBeGreaterThanOrEqual(longRows.scrollWidth);
+    // scrollWidth は整数に丸められるので 1px の誤差を許す
+    expect(longRows.widths[0]).toBeGreaterThanOrEqual(longRows.scrollWidth - 1);
     expect((await rectOf(longBox)).left).toBe(boxLeft);
     expect((await rectOf(longGutter)).left).toBe(gutterLeft);
     await page.keyboard.press('Control+Shift+Backspace');

@@ -72,6 +72,8 @@ const FILE_LIST_STORAGE_KEY = 'diffFileListOpen';
 export const DIFF_WIDTH_STORAGE_KEY = 'diffDrawerWidth';
 const DRAWER_MIN_WIDTH = 480;
 const DRAWER_MAX_RATIO = 0.95;
+// n / p で hunk、] / [ でファイルの先頭へ（向き, 移動先の種類）
+const JUMP_KEYS = { n: [1, 'hunkStart'], p: [-1, 'hunkStart'], ']': [1, 'fileStart'], '[': [-1, 'fileStart'] };
 
 function readStorage(key) {
   try {
@@ -475,6 +477,14 @@ export default function DiffDrawer({
     // （本文のスクロール・ボタンの操作）を止めない
     const noNav = nav.length === 0;
     const vim = vimNavKey(e);
+    // 取り直し・範囲の切り替え直後（読み込み中）などで移動先が無くても、移動のキーを押したらボタンから本文へ
+    // フォーカスを移す。残すと続く Enter がそのボタン（取り直す等）をもう一度押してしまう
+    const navKey =
+      vim ||
+      e.key === 'ArrowDown' ||
+      e.key === 'ArrowUp' ||
+      (!e.altKey && !e.ctrlKey && !e.metaKey && JUMP_KEYS[e.key]);
+    if (noNav && onButton && navKey) focusBody();
     if (vim) {
       if (noNav || e.shiftKey || (vim !== 'ArrowDown' && vim !== 'ArrowUp')) return;
       e.preventDefault();
@@ -499,8 +509,7 @@ export default function DiffDrawer({
       setSelAnchor(null);
       return;
     }
-    const jumps = { n: [1, 'hunkStart'], p: [-1, 'hunkStart'], ']': [1, 'fileStart'], '[': [-1, 'fileStart'] };
-    const j = jumps[e.key];
+    const j = JUMP_KEYS[e.key];
     if (j && !noNav) {
       e.preventDefault();
       moveCursor(jumpNav(nav, cursorIdx, j[0], j[1]), false);
