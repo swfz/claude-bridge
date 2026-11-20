@@ -141,11 +141,14 @@
   opacity: 0.6;
 }
 
+/* 高さは固定する。「指摘 N」のラベル（日本語）の出し入れで、フォントの代替次第で見出しが 1px 伸びて下の行を押すため */
 .diff-file-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 8px;
   background: var(--bg-secondary);
   font-size: 12px;
 }
