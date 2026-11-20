@@ -193,10 +193,10 @@ importers:
         version: 10.0.1(eslint@10.14.0)
       '@mizchi/mutator':
         specifier: 0.2.0
-        version: 0.2.0(@playwright/test@1.65.0)(vite@8.3.8)(vitest@5.1.0)
+        version: 0.2.0(@playwright/test@1.65.1)(vite@8.3.8)(vitest@5.1.0)
       '@playwright/test':
-        specifier: 1.65.0
-        version: 1.65.0
+        specifier: 1.65.1
+        version: 1.65.1
       '@vitest/coverage-v8':
         specifier: 5.1.0
         version: 5.1.0(vitest@5.1.0)
@@ -639,8 +639,8 @@ packages:
   '@oxc-project/types@0.156.0':
     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
 
-  '@playwright/test@1.65.0':
-    resolution: {integrity: sha512-iGURLGuKDLakSEl7Pgfv8h7f+XLT+V861Wfhz0zlEl5nyFuKUopdkFBPKqTllTUp06aOwPuH8iuUEb3yp3MpbQ==}
+  '@playwright/test@1.65.1':
+    resolution: {integrity: sha512-y+NCIRm2LvY4slUVWvGh1nujJ8RF/hEisIsq2mtUPgdQC4L701bq5hZGMhrpeXjACvwvO9tj5dJqhvM6TP9lbw==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2036,13 +2036,13 @@ packages:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
-  playwright-core@1.65.0:
-    resolution: {integrity: sha512-vNSKgH6YqtN7cdT/L334zo0a+YwkrpicyrHJlWWPIm/Q+Nn2SWInil01oT0mbu96U4GgoRtCYQD9CzJQgju+lA==}
+  playwright-core@1.65.1:
+    resolution: {integrity: sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw==}
     engines: {node: '>=20'}
     hasBin: true
 
-  playwright@1.65.0:
-    resolution: {integrity: sha512-F3AMWcR44qMBt4kq+6Kb6mX7bjGXshktKFOPULd7reED6ZJWevjbNRqysP7q+AATE9kdPEZBibex1BYsvpVoeA==}
+  playwright@1.65.1:
+    resolution: {integrity: sha512-vJ1FuoOrNwOKHUIVEvSt3jT1L+wjjDpwhwIstKtfvTh8XIG4FG4bIFuvNdMxi81LGfAhUgUZleVFaOLY4RIUUw==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2670,11 +2670,11 @@ snapshots:
     dependencies:
       '@mizchi/mutator-core': 0.2.0
 
-  '@mizchi/mutator-playwright@0.2.0(@playwright/test@1.65.0)(vite@8.3.8)':
+  '@mizchi/mutator-playwright@0.2.0(@playwright/test@1.65.1)(vite@8.3.8)':
     dependencies:
       '@mizchi/mutator-core': 0.2.0
     optionalDependencies:
-      '@playwright/test': 1.65.0
+      '@playwright/test': 1.65.1
       vite: 8.3.8
 
   '@mizchi/mutator-typecheck@0.2.0':
@@ -2687,11 +2687,11 @@ snapshots:
     optionalDependencies:
       vitest: 5.1.0(@vitest/coverage-v8@5.1.0)(vite@8.3.8)
 
-  '@mizchi/mutator@0.2.0(@playwright/test@1.65.0)(vite@8.3.8)(vitest@5.1.0)':
+  '@mizchi/mutator@0.2.0(@playwright/test@1.65.1)(vite@8.3.8)(vitest@5.1.0)':
     dependencies:
       '@mizchi/mutator-core': 0.2.0
       '@mizchi/mutator-jest': 0.2.0
-      '@mizchi/mutator-playwright': 0.2.0(@playwright/test@1.65.0)(vite@8.3.8)
+      '@mizchi/mutator-playwright': 0.2.0(@playwright/test@1.65.1)(vite@8.3.8)
       '@mizchi/mutator-typecheck': 0.2.0
       '@mizchi/mutator-vitest': 0.2.0(vitest@5.1.0)
     transitivePeerDependencies:
@@ -2761,9 +2761,9 @@ snapshots:
 
   '@oxc-project/types@0.156.0': {}
 
-  '@playwright/test@1.65.0':
+  '@playwright/test@1.65.1':
     dependencies:
-      playwright: 1.65.0
+      playwright: 1.65.1
 
   '@rolldown/binding-android-arm-eabi@1.2.18':
     optional: true
@@ -4343,11 +4343,11 @@ snapshots:
 
   picomatch@4.0.7: {}
 
-  playwright-core@1.65.0: {}
+  playwright-core@1.65.1: {}
 
-  playwright@1.65.0:
+  playwright@1.65.1:
     dependencies:
-      playwright-core: 1.65.0
+      playwright-core: 1.65.1
 
   points-on-curve@0.2.0: {}
 
