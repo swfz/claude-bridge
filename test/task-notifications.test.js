@@ -137,3 +137,28 @@ describe('タスク通知の表示用の整形', () => {
     assert.equal(taskDetailText({}), '');
   });
 });
+
+describe('parseHistoryLines の recap（away_summary）', () => {
+  it('role: recap の 1 件にし、末尾の定型文を外す', () => {
+    const line = JSON.stringify({
+      type: 'system',
+      subtype: 'away_summary',
+      content: 'PR を作成済み。次はマージ対応。 (disable recaps in /config)',
+      uuid: 'r1',
+      timestamp: 't',
+    });
+    assert.deepEqual(parseHistoryLines(line), [
+      { role: 'recap', content: 'PR を作成済み。次はマージ対応。', uuid: 'r1', timestamp: 't' },
+    ]);
+  });
+
+  it('ほかの system レコードや空の要約は出さない', () => {
+    const lines = [
+      { type: 'system', subtype: 'turn_duration', durationMs: 1 },
+      { type: 'system', subtype: 'away_summary', content: ' (disable recaps in /config)' },
+    ]
+      .map((r) => JSON.stringify(r))
+      .join('\n');
+    assert.deepEqual(parseHistoryLines(lines), []);
+  });
+});

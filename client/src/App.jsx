@@ -465,7 +465,8 @@ export default function App() {
       // toolresult（ツールの失敗・新規作成。チャットのツール行の印用）も同じく種別を問わず受ける
       const isLinkRecord = msg.role === 'artifact' || msg.role === 'webfetch' || msg.role === 'toolresult';
       // thinking は Claude の途中経過（TUI で「· summary」付きで薄く出るもの）、hookerror はツールに紐づかないフックの失敗
-      const isNote = msg.role === 'thinking' || msg.role === 'hookerror' || msg.role === 'task';
+      // recap は離席から戻ったときの要約（TUI の「※ recap」）
+      const isNote = msg.role === 'thinking' || msg.role === 'hookerror' || msg.role === 'task' || msg.role === 'recap';
       if (!(msg.role === 'assistant' || isNote || isLinkRecord || (isTmux && msg.role === 'human'))) return;
 
       const newMsg = {
