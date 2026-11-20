@@ -38,6 +38,7 @@ import {
   TbFile,
   TbFilePlus,
   TbGripHorizontal,
+  TbHistory,
   TbLink,
   TbPencil,
   TbPin,
@@ -614,6 +615,24 @@ export const ChatMessage = memo(function ChatMessage({
       >
         <TbSparkles className="artifact-message-icon" aria-hidden="true" />
         <span className="thinking-message-text">{message.content}</span>
+        <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
+      </div>
+    );
+  }
+
+  // 離席から戻ったときに Claude Code が書く要約（TUI の「※ recap: …」）。本文ではないので途中経過と同じく薄い 1 行
+  if (message.role === 'recap') {
+    return (
+      <div
+        className={`chat-message thinking recap ${isHistory ? 'history' : ''}`}
+        data-message-uuid={message.uuid || undefined}
+        title="離席から戻ったときに Claude Code が書いた要約（recap）"
+      >
+        <TbHistory className="artifact-message-icon" aria-hidden="true" />
+        <span className="thinking-message-text">
+          <span className="recap-label">recap</span>
+          {message.content}
+        </span>
         <span className="chat-time">{new Date(message.timestamp).toLocaleTimeString('ja-JP')}</span>
       </div>
     );

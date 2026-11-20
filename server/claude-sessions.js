@@ -10,6 +10,7 @@ import {
   extractTextContent,
   extractThinkingText,
   hookErrorMessage,
+  awaySummaryMessage,
   taskNotificationMessage,
   queuedAgentMessage,
   noteAgentLaunch,
@@ -351,6 +352,9 @@ export function parseHistoryLines(content) {
       } else if (record.type === 'attachment') {
         const hookError = hookErrorMessage(record);
         if (hookError) messages.push(hookError);
+      } else if (record.type === 'system') {
+        const recap = awaySummaryMessage(record);
+        if (recap) messages.push(recap);
       } else if (record.type === 'queue-operation' && record.operation === 'enqueue' && record.content) {
         const task =
           taskNotificationMessage(record, record.content, pendingTasks, { queued: true }) ||

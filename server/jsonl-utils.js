@@ -195,6 +195,16 @@ export function extractHookError(record) {
 // フックの失敗をチャットのメッセージにする（履歴読み込みと JSONL 監視で共用）。
 // ツールのフックは toolresult として流し、チャットはそのツールの行に「フック失敗」を付ける。
 // ツールに紐づかないフックは role: 'hookerror' の 1 行として流す。該当しなければ null
+// 離席から戻ったときに Claude Code が書く要約（TUI の「※ recap: …」。`system` の `away_summary`）。
+// 人の発言でも Claude の本文でもないので role: 'recap' の 1 行にする。末尾の定型文「(disable recaps in /config)」は外す。
+// 該当しなければ null
+export function awaySummaryMessage(record) {
+  if (record?.type !== 'system' || record.subtype !== 'away_summary' || typeof record.content !== 'string') return null;
+  const content = record.content.replace(/\s*\(disable recaps in \/config\)\s*$/, '').trim();
+  if (!content) return null;
+  return { role: 'recap', content, uuid: record.uuid, timestamp: record.timestamp || '' };
+}
+
 export function hookErrorMessage(record) {
   const hook = extractHookError(record);
   if (!hook) return null;
