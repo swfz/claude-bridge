@@ -60,6 +60,21 @@
   border-radius: 2px;
 }
 
+/* リセットまでの残り。分が変わるたびに桁数が変わって左隣（タブ名など）が揺れないよう、最長の表記分の幅を取っておく */
+.usage-meter-reset {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.usage-meter-reset.reset-5h {
+  min-width: 13ch; /* "23:59 (4h59m)" */
+}
+
+.usage-meter-reset.reset-7d {
+  min-width: 11ch; /* "(6d23h59m)" + 括弧の幅の余裕 */
+}
+
 .usage-meter-value {
   font-variant-numeric: tabular-nums;
   font-weight: 500;

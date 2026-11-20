@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseHistoryLines } from '../server/claude-sessions.js';
 import { taskDetailText, taskKindOf, taskMetaText, taskStatusLabel } from '../client/src/utils/taskNotifications.js';
@@ -160,5 +160,34 @@ describe('parseHistoryLines の recap（away_summary）', () => {
       .map((r) => JSON.stringify(r))
       .join('\n');
     assert.deepEqual(parseHistoryLines(lines), []);
+  });
+});
+
+describe('タスク通知の表示用の整形（境界）', () => {
+  it('タスクが無くても落ちず、種類は other・メタも詳細も空', () => {
+    assert.equal(taskKindOf(null), 'other');
+    assert.equal(taskMetaText(null), '');
+    assert.equal(taskDetailText(null), '');
+  });
+
+  it('定型文は summary の先頭にあるときだけ種類として見る', () => {
+    assert.equal(taskKindOf({ summary: 'Done: Monitor event' }), 'other');
+    assert.equal(taskKindOf({ summary: 'Waiting for Agent "x"' }), 'other');
+    assert.equal(taskKindOf({ summary: 'Not Background command "x"' }), 'other');
+  });
+
+  it('所要時間が無くてもツール数だけを区切りなしで出す', () => {
+    assert.equal(taskMetaText({ toolUses: 3 }), 'ツール 3');
+    assert.equal(taskMetaText({ tokens: 1500 }), '1.5k tokens');
+  });
+
+  it('ツール数・トークンが 0 や有限でない値なら出さない', () => {
+    assert.equal(taskMetaText({ toolUses: 0, tokens: 0 }), '');
+    assert.equal(taskMetaText({ toolUses: Infinity, tokens: Infinity }), '');
+  });
+
+  it('定型文が先頭に無い result はそのまま見せる', () => {
+    const result = "Note: This agent's report was delivered elsewhere";
+    assert.equal(taskDetailText({ result }), result);
   });
 });

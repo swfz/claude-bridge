@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert';
 import { isScrolledToBottom, BOTTOM_THRESHOLD_PX } from '../client/src/utils/scroll.js';
 
@@ -9,6 +9,10 @@ describe('isScrolledToBottom', () => {
 
   it('閾値内の余りなら true（少し上で止めていても追従する）', () => {
     assert.strictEqual(isScrolledToBottom({ scrollHeight: 1000, scrollTop: 760, clientHeight: 200 }), true);
+  });
+
+  it('余りがちょうど閾値なら true', () => {
+    assert.strictEqual(isScrolledToBottom({ scrollHeight: 1000, scrollTop: 720, clientHeight: 200 }), true);
   });
 
   it('閾値を超えて上にいれば false', () => {

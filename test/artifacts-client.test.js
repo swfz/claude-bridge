@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { collectArtifacts, groupArtifactPublishes } from '../client/src/utils/artifacts.js';
 
@@ -85,6 +85,39 @@ describe('collectArtifacts', () => {
   it('path が無ければ null', () => {
     const result = collectArtifacts([artifactMsg('https://claude.ai/code/artifact/x', { title: 't' })]);
     assert.equal(result[0].path, null);
+  });
+
+  it('url を持っていても artifact 以外の role は数えない（null も飛ばす）', () => {
+    const messages = [null, { role: 'webfetch', url: 'https://example.com/', title: 'Example' }];
+    assert.deepEqual(collectArtifacts(messages), []);
+  });
+
+  it('timestamp が無ければ lastTimestamp は空文字', () => {
+    assert.equal(collectArtifacts([artifactMsg('https://claude.ai/code/artifact/x')])[0].lastTimestamp, '');
+  });
+});
+
+describe('groupArtifactPublishes（時刻の比較）', () => {
+  const url = 'https://claude.ai/code/artifact/a';
+
+  it('後から来ても時刻が古い publish では title/path を上書きしない', () => {
+    const [a] = groupArtifactPublishes([
+      { url, title: '新', path: '/n.html', timestamp: '2026-06-19T02:00:00.000Z' },
+      { url, title: '旧', path: '/o.html', timestamp: '2026-06-19T01:00:00.000Z' },
+    ]);
+    assert.equal(a.count, 2);
+    assert.equal(a.title, '新');
+    assert.equal(a.path, '/n.html');
+    assert.equal(a.lastTimestamp, '2026-06-19T02:00:00.000Z');
+  });
+
+  it('時刻が同じなら後に来たものを採る', () => {
+    const ts = '2026-06-19T02:00:00.000Z';
+    const [a] = groupArtifactPublishes([
+      { url, title: '先', timestamp: ts },
+      { url, title: '後', timestamp: ts },
+    ]);
+    assert.equal(a.title, '後');
   });
 });
 

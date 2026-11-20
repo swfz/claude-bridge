@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { halfScreenJump } from '../client/src/utils/pickJump.js';
 
@@ -19,6 +19,12 @@ describe('pickJump: halfScreenJump', () => {
   it('未選択なら進む方向の手前の端から', () => {
     assert.equal(halfScreenJump({ items, current: null, half: 250, direction: 'down' }), 6);
     assert.equal(halfScreenJump({ items, current: null, half: 250, direction: 'up' }), 1);
+  });
+  it('上方向で半画面ぶん進めないときは一番上の要素で止まる', () => {
+    assert.equal(halfScreenJump({ items, current: 5, half: 250, direction: 'up' }), 6);
+  });
+  it('ちょうど半画面離れた要素で止まる', () => {
+    assert.equal(halfScreenJump({ items, current: 6, half: 200, direction: 'down' }), 4);
   });
   it('要素が無ければ current のまま', () => {
     assert.equal(halfScreenJump({ items: [], current: 3, half: 250, direction: 'down' }), 3);

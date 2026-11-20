@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseCwd } from '../client/src/utils/cwdLabel.js';
 
@@ -73,5 +73,18 @@ describe('parseCwd', () => {
       project: 'bar',
       worktree: null,
     });
+  });
+
+  it('ルートだけ・スラッシュだけのパスは空の結果', () => {
+    assert.deepEqual(parseCwd('/'), { parent: null, project: '', worktree: null });
+    assert.deepEqual(parseCwd('///'), { parent: null, project: '', worktree: null });
+  });
+
+  it('マーカーが末尾にあり worktree 名が続かなければ、普通のパスとして扱う', () => {
+    assert.deepEqual(parseCwd('/home/u/repo/worktrees'), { parent: 'repo', project: 'worktrees', worktree: null });
+  });
+
+  it('project がルート直下の 2 段目なら、1 段目を parent にする', () => {
+    assert.deepEqual(parseCwd('/a/proj/worktrees/x'), { parent: 'a', project: 'proj', worktree: 'x' });
   });
 });

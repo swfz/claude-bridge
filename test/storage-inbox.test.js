@@ -1,6 +1,6 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync, rmSync } from 'fs';
+import { mkdtempSync, readFileSync, existsSync, rmSync, statSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -12,10 +12,10 @@ const { Storage } = await import('../server/storage.js');
 
 describe('Storage.appendInbox', () => {
   let storage;
-  before(() => {
+  beforeAll(() => {
     storage = new Storage();
   });
-  after(() => {
+  afterAll(() => {
     rmSync(TMP, { recursive: true, force: true });
   });
 
@@ -29,6 +29,11 @@ describe('Storage.appendInbox', () => {
     assert.equal(lines.length, 2);
     assert.deepEqual(JSON.parse(lines[0]), { id: 'm1', text: 'hello', ts: 't1' });
     assert.deepEqual(JSON.parse(lines[1]), { id: 'm2', text: 'world', ts: 't2' });
+  });
+
+  it('平文で保存するので inbox ファイルは本人だけが読み書きできる権限で作る', () => {
+    storage.appendInbox('perm', { text: 'secret' });
+    assert.equal(statSync(join(TMP, 'inbox', 'perm.jsonl')).mode & 0o777, 0o600);
   });
 
   it('fills missing id/ts and defaults text', () => {
@@ -45,5 +50,13 @@ describe('Storage.appendInbox', () => {
     assert.throws(() => storage.appendInbox('a/b', { text: 'x' }));
     assert.throws(() => storage.appendInbox('', { text: 'x' }));
     assert.throws(() => storage.appendInbox(undefined, { text: 'x' }));
+  });
+
+  it('書き込める位置を指す ID でも、英数字・_・- 以外を含めば書かずに拒否する', () => {
+    // '../evil' は inbox の外（データディレクトリ直下）、'x.y' は inbox 内に書けてしまう形
+    assert.throws(() => storage.appendInbox('../evil', { text: 'x' }), /invalid sessionId for inbox: \.\.\/evil/);
+    assert.throws(() => storage.appendInbox('x.y', { text: 'x' }), /invalid sessionId for inbox: x\.y/);
+    assert.equal(existsSync(join(TMP, 'evil.jsonl')), false);
+    assert.equal(existsSync(join(TMP, 'inbox', 'x.y.jsonl')), false);
   });
 });

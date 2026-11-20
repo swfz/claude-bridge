@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { MAX_TABLE_ROWS, delimiterFor, parseDelimited } from '../client/src/utils/delimited.js';
 
@@ -106,5 +106,39 @@ describe('delimited: parseDelimited', () => {
   it('TSV でも引用フィールドを解釈する', () => {
     const { rows } = parseDelimited('a\tb\n"x\ty"\tz\n', '\t');
     assert.deepEqual(rows[0].cells, ['x\ty', 'z']);
+  });
+});
+
+describe('delimited: parseDelimited（境界）', () => {
+  const cellsOf = (rows) => rows.map((r) => r.cells);
+
+  it('null・undefined は空の表', () => {
+    assert.deepEqual(parseDelimited(null), { header: [], rows: [], truncated: false });
+    assert.deepEqual(parseDelimited(undefined), { header: [], rows: [], truncated: false });
+  });
+
+  it('末尾の行でも、空セルだけの複数列や 1 列の値は空行として捨てない', () => {
+    assert.deepEqual(cellsOf(parseDelimited('a,b\n,\n').rows), [['', '']]);
+    assert.deepEqual(cellsOf(parseDelimited('a,b\n,x\n').rows), [['', 'x']]);
+    assert.deepEqual(cellsOf(parseDelimited('a\nx\n').rows), [['x']]);
+  });
+
+  it('フィールドの途中の引用符は文字として扱う', () => {
+    assert.deepEqual(cellsOf(parseDelimited('h\nab"c,d\n').rows), [['ab"c', 'd']]);
+  });
+
+  it('単独の CR も 1 行の区切りとして数える', () => {
+    const { header, rows } = parseDelimited('h\rx\ry');
+    assert.deepEqual(header, ['h']);
+    assert.deepEqual(cellsOf(rows), [['x'], ['y']]);
+    assert.deepEqual(
+      rows.map((r) => r.line),
+      [2, 3],
+    );
+  });
+
+  it('末尾に改行が無い最後のレコードも取り込む（1 列・空セルで終わる行とも）', () => {
+    assert.deepEqual(cellsOf(parseDelimited('h\nx').rows), [['x']]);
+    assert.deepEqual(cellsOf(parseDelimited('h,i\nx,').rows), [['x', '']]);
   });
 });

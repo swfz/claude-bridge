@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseChoicePrompt } from '../server/choice-prompt.js';
 
@@ -394,5 +394,384 @@ Enter to select · ↑/↓ to navigate · Esc to cancel`;
 
   it('preview の無い通常の選択肢は preview: false', () => {
     assert.equal(parseChoicePrompt(SINGLE_SELECT).preview, false);
+  });
+});
+
+// 行の配列から画面テキストを作る（先頭行 = 画面の 1 行目）
+const screen = (...lines) => lines.join('\n');
+const FOOTER = 'Enter to select · ↑/↓ to navigate · Esc to cancel';
+const PERMISSION_FOOTER = ' Esc to cancel · Tab to amend';
+
+describe('parseChoicePrompt: 選択肢行の読み取り', () => {
+  it('説明文の途中にある「2.」は選択肢として扱わない', () => {
+    const p = parseChoicePrompt(screen('好きな色は？', '❯ 1. 赤', '     暖色系 2. 補足', '  2. 青', FOOTER));
+    assert.deepEqual(
+      p.options.map((o) => [o.label, o.description]),
+      [
+        ['赤', '暖色系 2. 補足'],
+        ['青', ''],
+      ],
+    );
+  });
+
+  it('カーソルの後に空白が 2 つ以上あっても選択肢として読む', () => {
+    const p = parseChoicePrompt(screen('好きな色は？', '❯  1. 赤', '  2. 青', FOOTER));
+    assert.deepEqual(
+      p.options.map((o) => [o.label, o.cursor]),
+      [
+        ['赤', true],
+        ['青', false],
+      ],
+    );
+  });
+
+  it('番号とラベルの間に空白が無くても読む', () => {
+    const p = parseChoicePrompt(screen('続けますか？', '❯ 1.Yes', '  2.No', FOOTER));
+    assert.deepEqual(
+      p.options.map((o) => o.label),
+      ['Yes', 'No'],
+    );
+  });
+
+  it('2 桁の番号まで読み、100 番以降は選択肢にしない', () => {
+    const optionLines = Array.from({ length: 100 }, (_, i) => `${i === 0 ? '❯' : ' '} ${i + 1}. opt${i + 1}`);
+    const p = parseChoicePrompt(screen('どれ？', ...optionLines, FOOTER));
+    assert.equal(p.options.length, 99);
+    assert.equal(p.options[9].label, 'opt10');
+    assert.equal(p.options[98].index, 99);
+    assert.equal(p.options[98].label, 'opt99');
+  });
+
+  it('「0.」で始まる行は選択肢の並びを切らない（説明として読む）', () => {
+    const p = parseChoicePrompt(screen('どれ？', '❯ 1. a', '     0. note', '  2. b', FOOTER));
+    assert.deepEqual(
+      p.options.map((o) => [o.label, o.description]),
+      [
+        ['a', '0. note'],
+        ['b', ''],
+      ],
+    );
+  });
+
+  it('1 から始まらない番号付きリストは選択肢にしない', () => {
+    assert.equal(parseChoicePrompt(screen('どれ？', '❯ 2. a', '  3. b', '  4. c', FOOTER)), null);
+  });
+
+  it('選択肢が 1 つしか無い画面は選択肢プロンプトにしない', () => {
+    assert.equal(parseChoicePrompt(screen('どれ？', '❯ 1. only', FOOTER)), null);
+  });
+
+  it('番号が飛んだところで選択肢の並びを打ち切る', () => {
+    const p = parseChoicePrompt(screen('どれ？', '❯ 1. a', '  2. b', '', '  4. note', FOOTER));
+    assert.deepEqual(
+      p.options.map((o) => o.label),
+      ['a', 'b'],
+    );
+  });
+
+  it('次の選択肢が 6 行以内なら同じ並びとして読み、7 行離れたら別物とみなす', () => {
+    const near = parseChoicePrompt(
+      screen('どれ？', '❯ 1. a', '  d1', '  d2', '  d3', '  d4', '  d5', '  2. b', FOOTER),
+    );
+    assert.deepEqual(
+      near.options.map((o) => [o.label, o.description]),
+      [
+        ['a', 'd1 d2 d3 d4 d5'],
+        ['b', ''],
+      ],
+    );
+
+    const far = screen('どれ？', '❯ 1. a', '  d1', '  d2', '  d3', '  d4', '  d5', '  d6', '  2. b', FOOTER);
+    assert.equal(parseChoicePrompt(far), null);
+  });
+
+  it('説明文から空行・操作案内・会話ログの行を除き、残りを空白 1 つで繋ぐ', () => {
+    const p = parseChoicePrompt(
+      screen(
+        'どれ？',
+        '❯ 1. a',
+        '     line one',
+        '',
+        '     line two',
+        '     Esc to cancel',
+        '     ⎿ log',
+        '  2. b',
+        FOOTER,
+      ),
+    );
+    assert.equal(p.options[0].description, 'line one line two');
+  });
+
+  it('ラベルの末尾のピリオドだけを落とし、途中のピリオドは残す', () => {
+    const p = parseChoicePrompt(screen('どれ？', '❯ 1. Use v1.2', '  2. Other .', FOOTER));
+    assert.deepEqual(
+      p.options.map((o) => o.label),
+      ['Use v1.2', 'Other'],
+    );
+  });
+
+  it('チェックボックスは行頭の [ ] / [x] だけを見る（空白の有無・量を問わない）', () => {
+    const p = parseChoicePrompt(screen('どれ？', '❯ 1. Use [x] flag', '  2. [x]foo', '  3.  [x] bar', FOOTER));
+    assert.deepEqual(
+      p.options.map((o) => [o.label, o.checked]),
+      [
+        ['Use [x] flag', null],
+        ['foo', true],
+        ['bar', true],
+      ],
+    );
+    assert.equal(p.multiSelect, true);
+  });
+
+  it('「Type something」で始まる選択肢だけを自由入力とみなす', () => {
+    const p = parseChoicePrompt(screen('どれ？', '❯ 1. Or Type something', '  2. Type something.', FOOTER));
+    assert.deepEqual(
+      p.options.map((o) => o.freeText),
+      [false, true],
+    );
+  });
+});
+
+describe('parseChoicePrompt: プロンプトとみなす条件・フッター', () => {
+  it('文字列以外は null を返す', () => {
+    assert.equal(parseChoicePrompt(123), null);
+    assert.equal(parseChoicePrompt({ split: 1 }), null);
+    assert.equal(parseChoicePrompt(undefined), null);
+  });
+
+  it('フッターもタブも無くてもカーソルがあればプロンプトとみなす', () => {
+    const p = parseChoicePrompt(screen('どれ？', '❯ 1. a', '  2. b'));
+    assert.ok(p);
+    assert.equal(p.footer, '');
+    assert.equal(p.canCancel, false);
+  });
+
+  it('カーソルが無くてもフッターがあればプロンプトとみなす', () => {
+    const p = parseChoicePrompt(screen('どれ？', '  1. a', '  2. b', FOOTER));
+    assert.ok(p);
+    assert.deepEqual(
+      p.options.map((o) => o.cursor),
+      [false, false],
+    );
+  });
+
+  it('選択肢より上にある古いフッターは使わない', () => {
+    const p = parseChoicePrompt(screen(FOOTER, '● answered', '新しい質問？', '❯ 1. a', '  2. b'));
+    assert.equal(p.footer, '');
+    assert.equal(p.canCancel, false);
+  });
+
+  it('フッターは前後の空白を落として返す', () => {
+    assert.equal(parseChoicePrompt(PERMISSION_PROMPT).footer, 'Esc to cancel · Tab to amend');
+  });
+});
+
+describe('parseChoicePrompt: 質問文の集め方', () => {
+  it('画面の 1 行目にある質問文も拾う', () => {
+    assert.equal(parseChoicePrompt(screen('最初の行？', '❯ 1. a', '  2. b', FOOTER)).question, '最初の行？');
+  });
+
+  it('質問文は直近の 14 行までにする', () => {
+    const qLines = Array.from({ length: 16 }, (_, i) => `q${i + 1}`);
+    const p = parseChoicePrompt(screen(...qLines, '❯ 1. a', '  2. b', FOOTER));
+    assert.equal(p.question, qLines.slice(2).join('\n'));
+  });
+
+  it('選択肢の直前の空行は飛ばし、質問文の上に空行が 2 つ続いたら打ち切る', () => {
+    const p = parseChoicePrompt(screen('old text', '', '', '新しい質問？', '', '', '❯ 1. a', '  2. b', FOOTER));
+    assert.equal(p.question, '新しい質問？');
+  });
+
+  it('質問文の途中に出た操作案内の行は飛ばし、行末の空白は落とす', () => {
+    const p = parseChoicePrompt(screen('Line A   ', 'Esc to cancel', 'Line B  ', '❯ 1. a', '  2. b', FOOTER));
+    assert.equal(p.question, 'Line A\nLine B');
+  });
+
+  it('入力欄（❯ / >）の行で質問文の遡りを止める', () => {
+    for (const prompt of ['❯ my prompt', '> quoted prompt']) {
+      const p = parseChoicePrompt(screen(prompt, 'どれ？', '❯ 1. a', '  2. b', FOOTER));
+      assert.equal(p.question, 'どれ？');
+    }
+  });
+
+  it('質問文の途中にある記号（· │）や罫線風の文字列では打ち切らない', () => {
+    const p = parseChoicePrompt(screen('========== 上', 'A · B │ C', '下 ==========', '❯ 1. a', '  2. b', FOOTER));
+    assert.equal(p.question, '========== 上\nA · B │ C\n下 ==========');
+  });
+
+  it('文中に「do you want」があってもフッターに Tab to amend が無ければ permission にしない', () => {
+    const p = parseChoicePrompt(screen('So, do you want this? Allow it?', '❯ 1. a', '  2. b', FOOTER));
+    assert.equal(p.kind, 'other');
+    assert.equal(p.question, 'So, do you want this? Allow it?');
+    assert.equal(p.detail, '');
+  });
+});
+
+describe('parseChoicePrompt: 質問タブ', () => {
+  it('タブ行の無い質問は前後への移動を持たない', () => {
+    assert.deepEqual(parseChoicePrompt(SINGLE_SELECT).tabs, {
+      items: [{ label: '好きな色', checked: false }],
+      hasSubmit: false,
+      canPrev: false,
+      canNext: false,
+    });
+  });
+
+  it('字下げされたタブ行・空白の無い ✔Submit・空の見出しを読み分ける', () => {
+    const p = parseChoicePrompt(
+      screen('   ←  ☐ favorite color  ☒   ☐形  ✔Submit  →', '', 'どれ？', '❯ 1. a', '  2. b', FOOTER),
+    );
+    assert.deepEqual(p.tabs, {
+      items: [
+        { label: 'favorite color', checked: false },
+        { label: '形', checked: false },
+      ],
+      hasSubmit: true,
+      canPrev: true,
+      canNext: true,
+    });
+    assert.equal(p.question, 'どれ？');
+  });
+
+  it('見出しの無い ☐ だけの行はタブとみなさない', () => {
+    const p = parseChoicePrompt(screen('☐', 'どれ？', '❯ 1. a', '  2. b', FOOTER));
+    assert.equal(p.tabs, null);
+    assert.equal(p.kind, 'other');
+  });
+
+  it('選択肢のラベルにある ☐ はタブとみなさない', () => {
+    const p = parseChoicePrompt(screen('どれ？', '❯ 1. ☐ todo', '  2. done', FOOTER));
+    assert.equal(p.tabs, null);
+    assert.equal(p.options[0].label, '☐ todo');
+  });
+
+  it('画面の 1 行目にあるタブ行も拾う', () => {
+    const p = parseChoicePrompt(screen(' ☐ 色', 'どれ？', '❯ 1. a', '  2. b', FOOTER));
+    assert.deepEqual(p.tabs.items, [{ label: '色', checked: false }]);
+  });
+
+  it('タブ行は選択肢の 18 行上までを探す', () => {
+    const fillers = (n) => Array.from({ length: n }, (_, i) => `x${i + 1}`);
+    const within = parseChoicePrompt(screen('filler', ' ☐ 色', ...fillers(17), '❯ 1. a', '  2. b', FOOTER));
+    assert.deepEqual(within.tabs.items, [{ label: '色', checked: false }]);
+
+    const beyond = parseChoicePrompt(screen('filler', ' ☐ 色', ...fillers(18), '❯ 1. a', '  2. b', FOOTER));
+    assert.equal(beyond.tabs, null);
+  });
+});
+
+describe('parseChoicePrompt: preview レイアウト', () => {
+  it('フッターに「n to add notes」があれば preview とし、選択肢の間の行を説明にしない', () => {
+    const p = parseChoicePrompt(
+      screen('どれ？', '❯ 1. A', '     desc a', '  2. B', 'Enter to select · n to add notes · Esc to cancel'),
+    );
+    assert.equal(p.preview, true);
+    assert.deepEqual(
+      p.options.map((o) => o.description),
+      ['', ''],
+    );
+  });
+
+  it('1 つの選択肢の右にだけ枠があっても preview とし、枠の続きを説明にしない', () => {
+    const p = parseChoicePrompt(
+      screen(
+        'どれ？',
+        '❯ 1. A                ┌────┐',
+        '                      │ x  │',
+        '                      └────┘',
+        '  2. B',
+        FOOTER,
+      ),
+    );
+    assert.equal(p.preview, true);
+    assert.deepEqual(
+      p.options.map((o) => [o.label, o.description]),
+      [
+        ['A', ''],
+        ['B', ''],
+      ],
+    );
+  });
+
+  it('ラベル内の 2 つ続きの空白は枠とみなさない', () => {
+    const p = parseChoicePrompt(screen('どれ？', '❯ 1. A  B', '  2. C', FOOTER));
+    assert.equal(p.preview, false);
+    assert.equal(p.options[0].label, 'A  B');
+  });
+});
+
+describe('parseChoicePrompt: permission の detail', () => {
+  it('罫線から質問までを、空行を整え・ガターと Tip 行を落として切り出す', () => {
+    const p = parseChoicePrompt(
+      screen(
+        '─'.repeat(60),
+        '',
+        ' Bash command',
+        '   head ────────────',
+        '   ──────────── tail',
+        ' a · b',
+        '',
+        '',
+        ' Note Tip: keep',
+        ' Tip: drop me',
+        ' │ guttered',
+        ' │foo',
+        ' x │ y',
+        '',
+        '',
+        ' Do you want to proceed?',
+        ' ❯ 1. Yes',
+        '   2. No',
+        '',
+        PERMISSION_FOOTER,
+      ),
+    );
+    assert.equal(p.kind, 'permission');
+    assert.equal(p.question, 'Do you want to proceed?');
+    assert.equal(
+      p.detail,
+      [
+        'Bash command',
+        'head ────────────',
+        '──────────── tail',
+        'a · b',
+        '',
+        'Note Tip: keep',
+        'guttered',
+        'foo',
+        'x │ y',
+      ].join('\n'),
+    );
+  });
+
+  it('入力欄（❯ / >）の行で detail の遡りを止める', () => {
+    for (const prompt of ['❯ do something', '> quoted']) {
+      const p = parseChoicePrompt(
+        screen(prompt, '  some detail', ' Do you want to proceed?', ' ❯ 1. Yes', '   2. No', PERMISSION_FOOTER),
+      );
+      assert.equal(p.detail, 'some detail');
+    }
+  });
+
+  it('画面の 1 行目まで detail として拾う', () => {
+    const p = parseChoicePrompt(
+      screen('cmd here', ' Do you want to proceed?', ' ❯ 1. Yes', '   2. No', PERMISSION_FOOTER),
+    );
+    assert.equal(p.detail, 'cmd here');
+  });
+
+  it('罫線が見つからなければ直近の 40 行までを detail にする', () => {
+    const dLines = Array.from({ length: 45 }, (_, i) => `d${i + 1}`);
+    const p = parseChoicePrompt(
+      screen(...dLines, ' Do you want to proceed?', ' ❯ 1. Yes', '   2. No', PERMISSION_FOOTER),
+    );
+    assert.equal(p.detail, dLines.slice(5).join('\n'));
+  });
+
+  it('質問文が無ければ question も detail も空にする', () => {
+    const p = parseChoicePrompt(screen('─'.repeat(60), ' ❯ 1. Yes', '   2. No', PERMISSION_FOOTER));
+    assert.equal(p.kind, 'permission');
+    assert.equal(p.question, '');
+    assert.equal(p.detail, '');
   });
 });

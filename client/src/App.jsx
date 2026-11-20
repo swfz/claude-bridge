@@ -4,8 +4,6 @@ import { useGlobalKeys } from './hooks/useGlobalKeys.js';
 import SessionTabs from './components/SessionTabs.jsx';
 import TerminalView from './components/TerminalView.jsx';
 import ChatView from './components/ChatView.jsx';
-import ThreadPanel from './components/ThreadPanel.jsx';
-import CommentPanel from './components/CommentPanel.jsx';
 import ReviewDraftPanel from './components/ReviewDraftPanel.jsx';
 import InputBar from './components/InputBar.jsx';
 import ChoicePrompt from './components/ChoicePrompt.jsx';
@@ -21,7 +19,6 @@ import NewSessionDialog from './components/NewSessionDialog.jsx';
 import PreviewDrawer from './components/PreviewDrawer.jsx';
 import PreviewPip, { isDocumentPipSupported, openPreviewPipWindow } from './components/PreviewPip.jsx';
 import FileExplorer from './components/FileExplorer.jsx';
-import AgentSidePanel from './components/AgentSidePanel.jsx';
 import HomeView from './components/HomeView.jsx';
 import TopBar from './components/TopBar.jsx';
 import { loadStarred, saveStarred, toggleStarred } from './utils/starredSessions.js';
@@ -58,7 +55,7 @@ import { collectLinks } from './utils/links.js';
 import { collectSessionFiles } from './utils/sessionFiles.js';
 import { pinExcerpt } from './utils/pins.js';
 import { humanSenderLabel } from './utils/messageSender.js';
-import { TbBookmarks, TbChecklist, TbFiles, TbMessages, TbNote, TbRobot } from 'react-icons/tb';
+import { TbBookmarks, TbChecklist, TbFiles } from 'react-icons/tb';
 import './App.css';
 import { readonlyDeliveryState, terminateConfirmMessage } from './utils/runningSessions.js';
 
@@ -185,9 +182,6 @@ export default function App() {
   // 表示用の messages はここから activeSessionId で派生させる（単一 messages state や
   // messageCache の二重管理をやめ、active と表示内容のズレ＝混線を構造的に防ぐ）。
   const [messagesBySession, setMessagesBySession] = useState({});
-  const [threads, setThreads] = useState([]);
-  // セッションに対して残すコメント（送信しない・参照専用）
-  const [comments, setComments] = useState([]);
   // ピン留めしたメッセージ（サーバーの pins-<sessionKey>.json）
   const [pins, setPins] = useState([]);
   // セッション横断の pending review（Submit するまで溜める下書き）
@@ -218,13 +212,11 @@ export default function App() {
       return { ...prev, [sessionId]: next };
     });
   }, []);
-  const [showThreadPanel, setShowThreadPanel] = useState(false);
-  const [showCommentPanel, setShowCommentPanel] = useState(false);
   const [showReviewPanel, setShowReviewPanel] = useState(false);
   // 数字キーで選んだメッセージを、レビューパネルの下書きに引用として渡すための箱
   // （同じメッセージを続けて選べるよう nonce で更新を伝える）
   const [incomingAnchor, setIncomingAnchor] = useState(null);
-  // コメント一覧から本文へスクロールする際の対象メッセージ uuid
+  // Refs ドロワーなどから本文へスクロールする際の対象メッセージ uuid
   const [jumpToUuid, setJumpToUuid] = useState(null);
   const [showFileExplorer, setShowFileExplorer] = useState(false);
   const [claudeSessions, setClaudeSessions] = useState(null);
@@ -241,14 +233,10 @@ export default function App() {
   // Document Picture-in-Picture に出したプレビュー { pipWindow, filePath, markdown, title }。
   // previewData とは別に持ち、activeSessionId / showHome に依存させない（他セッションへ移っても残す）
   const [pipPreview, setPipPreview] = useState(null);
-  // agent view 連携パネル（一覧）。選択するとメインタブに readonly で開く
-  const [agents, setAgents] = useState([]);
-  const [showAgentPanel, setShowAgentPanel] = useState(false);
-  const [syncNotice, setSyncNotice] = useState(null);
   // Claude のレート制限（5h/7d ウィンドウの使用率）。サーバーが 3 分間隔で配ってくる
   const [rateLimits, setRateLimits] = useState(null);
 
-  // コメント/レビューの保存・取得キー。claudeSessionId を優先し（再オープン/resume/閲覧
+  // ピン/レビューの保存・取得キー。claudeSessionId を優先し（再オープン/resume/閲覧
   // をまたいで同じ Claude セッションを参照するため）、無ければブリッジ ID。
   const sessionKey = sessions.find((s) => s.id === activeSessionId)?.claudeSessionId || activeSessionId;
 
@@ -471,7 +459,7 @@ export default function App() {
 
       const newMsg = {
         id: `jsonl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        // JSONL の uuid を安定アンカーとして保持（コメント/レビューの位置紐付け用）
+        // JSONL の uuid を安定アンカーとして保持（ピン/レビューの位置紐付け用）
         uuid: msg.uuid || null,
         role: msg.role,
         content: msg.content,
@@ -507,25 +495,9 @@ export default function App() {
   }, [on, updateSessionMessages]);
 
   useEffect(() => {
-    return on('thread_update', (msg) => {
-      if (msg.sessionId === activeSessionId) {
-        setThreads(msg.threads);
-      }
-    });
-  }, [on, activeSessionId]);
-
-  useEffect(() => {
     return on('pins_update', (msg) => {
       if (msg.sessionId === activeSessionId) {
         setPins(msg.pins);
-      }
-    });
-  }, [on, activeSessionId]);
-
-  useEffect(() => {
-    return on('comments_update', (msg) => {
-      if (msg.sessionId === activeSessionId) {
-        setComments(msg.comments);
       }
     });
   }, [on, activeSessionId]);
@@ -537,16 +509,6 @@ export default function App() {
       }
     });
   }, [on, activeSessionId]);
-
-  useEffect(() => {
-    return on('submit_review_result', (msg) => {
-      setSyncNotice(
-        msg.ok
-          ? `レビュー ${msg.count} 件を送信しました（${msg.via === 'inbox' ? 'inbox 経由' : 'PTY'}）。`
-          : 'レビューの送信に失敗しました。',
-      );
-    });
-  }, [on]);
 
   useEffect(() => {
     return on('claude_sessions', (msg) => {
@@ -577,12 +539,6 @@ export default function App() {
       // 起動前の検証で弾かれた。ダイアログを開き直して理由を見せる
       setNewSessionError(msg.message);
       setShowNewSession(true);
-    });
-  }, [on]);
-
-  useEffect(() => {
-    return on('agents', (msg) => {
-      setAgents(msg.agents || []);
     });
   }, [on]);
 
@@ -1010,12 +966,10 @@ export default function App() {
     }
   }, [activeSessionId]);
 
-  // セッション切り替え時にスレッド・コメント・レビュー下書きを取得。
-  // コメント/レビューは sessionKey 依存にして、claudeSessionId が後から埋まった場合も再取得する。
+  // セッション切り替え時にピン・レビュー下書きを取得。
+  // sessionKey 依存にして、claudeSessionId が後から埋まった場合も再取得する。
   useEffect(() => {
     if (activeSessionId) {
-      send({ type: 'get_threads', sessionId: activeSessionId });
-      send({ type: 'get_comments', sessionId: activeSessionId, sessionKey });
       send({ type: 'get_pins', sessionId: activeSessionId, sessionKey });
       send({ type: 'get_review', sessionId: activeSessionId, sessionKey });
     }
@@ -1201,7 +1155,7 @@ export default function App() {
     [send],
   );
 
-  // claude を起動せず、既存セッションの JSONL を読むだけの閲覧（コメント可）ビューを開く
+  // claude を起動せず、既存セッションの JSONL を読むだけの閲覧ビューを開く（送信欄は inbox 経由）
   const handleOpenReadonly = useCallback(
     ({ claudeSessionId, name, cwd, projectDir }) => {
       send({ type: 'open_readonly_session', claudeSessionId, name, cwd, projectDir });
@@ -1227,39 +1181,19 @@ export default function App() {
     [send, sessions, activeSessionId],
   );
 
-  // --- agent view 連携パネル ---
-  const handleRefreshAgents = useCallback(() => {
-    send({ type: 'list_agents' });
-  }, [send]);
-
-  // 一覧で選んだ agent を、メインタブに readonly セッションとして開く
-  // （閲覧で開くのと同じ経路。会話はメインの大画面で表示し、送信欄から inbox へ送る）
-  const handleOpenAgent = useCallback(
-    (agent) => {
-      if (!agent?.sessionId) return;
-      handleOpenReadonly({
-        claudeSessionId: agent.sessionId,
-        name: agent.name || agent.sessionId.slice(0, 8),
-        cwd: agent.cwd,
-      });
-    },
-    [handleOpenReadonly],
-  );
-
   // readonly セッション（メインタブ）から、その claudeSessionId へフックベース送信
   // 切断中の送信は届かないので、送れたように見せず false を返す
   // （InputBar が入力欄のテキストを保持し、チャットに system メッセージを出す）
-  const notifySendFailure = useCallback(() => {
-    updateSessionMessages(activeSessionIdRef.current, (prev) => [
-      ...prev,
-      {
-        id: `senderror-${Date.now()}`,
-        role: 'system',
-        content: 'サーバーと切断中のため送信できませんでした。接続表示（ヘッダの●）が戻ってから再送してください。',
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-  }, [updateSessionMessages]);
+  // 送信結果の失敗（inbox 書き込み・レビュー送信）も content を渡してここで出す
+  const notifySendFailure = useCallback(
+    (content = 'サーバーと切断中のため送信できませんでした。接続表示（ヘッダの●）が戻ってから再送してください。') => {
+      updateSessionMessages(activeSessionIdRef.current, (prev) => [
+        ...prev,
+        { id: `senderror-${Date.now()}`, role: 'system', content, timestamp: new Date().toISOString() },
+      ]);
+    },
+    [updateSessionMessages],
+  );
 
   const handleSendToReadonly = useCallback(
     (text) => {
@@ -1277,14 +1211,17 @@ export default function App() {
     [send, activeSessionId, notifySendFailure],
   );
 
-  // コメント送信（inbox 書き込み）の結果
   useEffect(() => {
     return on('send_to_agent_result', (msg) => {
-      setSyncNotice(
-        msg.ok ? 'コメントを送信しました（対象セッションのフックが取り込みます）。' : '送信に失敗しました。',
-      );
+      if (!msg.ok) notifySendFailure(`送信に失敗しました${msg.error ? `: ${msg.error}` : '。'}`);
     });
-  }, [on]);
+  }, [on, notifySendFailure]);
+
+  useEffect(() => {
+    return on('submit_review_result', (msg) => {
+      if (!msg.ok) notifySendFailure('レビューの送信に失敗しました。');
+    });
+  }, [on, notifySendFailure]);
 
   const handleRequestTmuxPanes = useCallback(() => {
     send({ type: 'list_tmux_panes' });
@@ -1372,8 +1309,6 @@ export default function App() {
       // （cache 保存・復元やレース対策は不要になった）
       setShowHome(false);
       setActiveSessionId(sessionId);
-      setThreads([]);
-      setComments([]);
       setPins([]);
       setReviewItems([]);
       clearAttention(sessionId);
@@ -1491,70 +1426,6 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [clearAttention]);
 
-  const handleStartThread = useCallback(
-    (messageId, selectedText) => {
-      if (activeSessionId) {
-        send({
-          type: 'new_thread',
-          sessionId: activeSessionId,
-          messageId,
-          selectedText: selectedText || '(メッセージ全体)',
-        });
-        setShowThreadPanel(true);
-      }
-    },
-    [send, activeSessionId],
-  );
-
-  const handleThreadReplyBatch = useCallback(
-    (replies) => {
-      if (!activeSessionId || replies.length === 0) return;
-      send({
-        type: 'thread_reply_batch',
-        sessionId: activeSessionId,
-        replies,
-      });
-    },
-    [send, activeSessionId],
-  );
-
-  const handleResolveThread = useCallback(
-    (threadId) => {
-      if (activeSessionId) {
-        send({
-          type: 'resolve_thread',
-          sessionId: activeSessionId,
-          threadId,
-        });
-      }
-    },
-    [send, activeSessionId],
-  );
-
-  const handleDeleteThread = useCallback(
-    (threadId) => {
-      if (activeSessionId) {
-        send({
-          type: 'delete_thread',
-          sessionId: activeSessionId,
-          threadId,
-        });
-      }
-    },
-    [send, activeSessionId],
-  );
-
-  // コメント＝送信しない・参照専用。anchor があれば「この箇所」に紐付く、無ければセッション全体メモ。
-  const handleAddComment = useCallback(
-    (text, anchor = null) => {
-      const t = (text || '').trim();
-      if (activeSessionId && t) {
-        send({ type: 'save_comment', sessionId: activeSessionId, sessionKey, text: t, anchor });
-      }
-    },
-    [send, activeSessionId, sessionKey],
-  );
-
   const handleTogglePin = useCallback(
     (message, pin) => {
       if (!activeSessionId || !message?.uuid) return;
@@ -1579,15 +1450,6 @@ export default function App() {
   const handleUnpin = useCallback(
     (messageUuid) => {
       if (activeSessionId) send({ type: 'unpin_message', sessionId: activeSessionId, sessionKey, messageUuid });
-    },
-    [send, activeSessionId, sessionKey],
-  );
-
-  const handleDeleteComment = useCallback(
-    (commentId) => {
-      if (activeSessionId) {
-        send({ type: 'delete_comment', sessionId: activeSessionId, sessionKey, commentId });
-      }
     },
     [send, activeSessionId, sessionKey],
   );
@@ -1632,30 +1494,6 @@ export default function App() {
     setShowReviewPanel(true);
     setIncomingAnchor({ anchor, nonce: Date.now() });
   }, []);
-
-  // 範囲選択 → コメントに残す。選択箇所を anchor に、本文は別に書いて保存（送信しない）。
-  const handleAddAnchoredComment = useCallback(
-    ({ anchor, text }) => {
-      handleAddComment(text, anchor || null);
-      setShowCommentPanel(true);
-    },
-    [handleAddComment],
-  );
-
-  // コメント一覧 → コメントした箇所へ移動。メッセージ＝該当メッセージへスクロール、
-  // ファイル＝そのファイルのプレビューを開く。
-  const handleJumpToAnchor = useCallback(
-    (anchor) => {
-      if (!anchor) return;
-      if (anchor.type === 'message' && anchor.messageUuid) {
-        setJumpToUuid(anchor.messageUuid);
-      } else if (anchor.type === 'file' && anchor.filePath) {
-        setPreviewData({ filePath: anchor.filePath });
-        setDrawerOpenedAt((messagesBySession[activeSessionId] || []).length);
-      }
-    },
-    [messagesBySession, activeSessionId],
-  );
 
   // プレビュー系ハンドラ。inline の arrow で渡すと毎レンダー別物になり、memo した ChatMessage の
   // 再描画抑止が効かないので useCallback で固定する。messagesBySession はどのセッションに 1 通届いても
@@ -1715,46 +1553,12 @@ export default function App() {
     },
     [send],
   );
-  // プレビューで「コメントに残す」: 送信せずセッションのコメントに保存（ファイルアンカー付き）
-  const saveFileComment = useCallback(
-    (sessionId, key, filePath, note, location) => {
-      const t = (note || '').trim();
-      if (!sessionId || !t) return;
-      send({
-        type: 'save_comment',
-        sessionId,
-        sessionKey: key,
-        text: t,
-        anchor: {
-          type: 'file',
-          filePath: filePath || null,
-          quote: location?.selectedText || '',
-          label: location?.label || null,
-          line: location?.line ?? null,
-        },
-      });
-    },
-    [send],
-  );
   const handlePipReviewSubmit = useCallback(
     (target, items) => pipPreview && submitFileReview(pipPreview.sessionId, pipPreview.sessionKey, target, items),
     [pipPreview, submitFileReview],
   );
-  const handlePipSaveComment = useCallback(
-    (note, location) =>
-      pipPreview && saveFileComment(pipPreview.sessionId, pipPreview.sessionKey, pipPreview.filePath, note, location),
-    [pipPreview, saveFileComment],
-  );
-  // 小窓に出す「保存済みコメント」と「開いてからの Claude の応答」。コメントは今のセッションの分しか
-  // 手元に無いので、小窓を開いたセッションを見ている間だけ出す
+  // 小窓に出す「開いてからの Claude の応答」
   const pipSessionMessages = pipPreview ? messagesBySession[pipPreview.sessionId] : undefined;
-  const pipFileComments = useMemo(() => {
-    if (!pipPreview?.filePath) return [];
-    // 手元の comments は今のセッションの分だけ。別セッションを見ている間は undefined を渡し、
-    // ドロワー側で「この小窓で残したコメント」の表示に切り替えさせる
-    if (pipPreview.sessionId !== activeSessionId) return undefined;
-    return comments.filter((c) => c.anchor?.type === 'file' && c.anchor.filePath === pipPreview.filePath);
-  }, [pipPreview, activeSessionId, comments]);
   const pipResponses = useMemo(() => {
     if (!pipPreview || pipPreview.openedAt == null || !pipSessionMessages) return [];
     return pipSessionMessages.slice(pipPreview.openedAt).filter((m) => m.role === 'assistant');
@@ -1785,8 +1589,6 @@ export default function App() {
     return map;
   }, [messagesBySession]);
 
-  const unresolvedCount = threads.filter((t) => !t.resolved).length;
-
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   // 表示メッセージは唯一の真実 messagesBySession から activeSessionId で派生させる
   const messages = (activeSessionId && messagesBySession[activeSessionId]) || [];
@@ -1799,10 +1601,10 @@ export default function App() {
     setJumpToUuid(uuid);
     setShowRefDrawer(false);
   }, []);
-  // 閲覧専用セッションは JSONL を読むだけ。chat 固定でコメントは付けられるが送信はしない
+  // 閲覧専用セッションは JSONL を読むだけ。chat 固定で、送信は inbox 経由（send_to_agent）
   const isReadonly = activeSession?.type === 'readonly';
   const effectiveViewMode = isReadonly ? 'chat' : viewMode;
-  // ホーム表示中はセッション固有の UI（ビュー切替・スレッド/レビュー/メモ・入力欄）を出さない
+  // ホーム表示中はセッション固有の UI（ビュー切替・レビュー・Refs・入力欄）を出さない
   const sessionUiVisible = !showHome && !!activeSessionId;
   const chatPanelsVisible = sessionUiVisible && effectiveViewMode === 'chat';
   // 選択肢カードは今見ているセッションのものだけ。readonly は PTY が無いので操作できない
@@ -1898,17 +1700,6 @@ export default function App() {
         onClick: () => setShowFileExplorer(!showFileExplorer),
         title: 'ファイラを表示/非表示',
       },
-    sessionUiVisible &&
-      !isReadonly &&
-      viewMode === 'chat' && {
-        key: 'threads',
-        label: 'Threads',
-        icon: TbMessages,
-        active: showThreadPanel,
-        onClick: () => setShowThreadPanel(!showThreadPanel),
-        count: unresolvedCount,
-        title: 'スレッド',
-      },
     chatPanelsVisible && {
       key: 'review',
       label: 'Review',
@@ -1919,15 +1710,6 @@ export default function App() {
       title: 'レビュー（指摘を溜めて Submit で一括送信）',
     },
     chatPanelsVisible && {
-      key: 'memo',
-      label: 'Memo',
-      icon: TbNote,
-      active: showCommentPanel,
-      onClick: () => setShowCommentPanel(!showCommentPanel),
-      count: comments.length,
-      title: 'コメント（送信せずセッションに残す・参照専用）',
-    },
-    chatPanelsVisible && {
       key: 'refs',
       label: 'Refs',
       icon: TbBookmarks,
@@ -1935,18 +1717,6 @@ export default function App() {
       onClick: () => setShowRefDrawer(!showRefDrawer),
       count: links.length + sessionFiles.length + pins.length,
       title: 'このセッションでやり取りしたリンク・ファイルと、ピン留めしたメッセージ',
-    },
-    {
-      key: 'agents',
-      label: 'Agents',
-      icon: TbRobot,
-      active: showAgentPanel,
-      onClick: () => {
-        const next = !showAgentPanel;
-        setShowAgentPanel(next);
-        if (next) handleRefreshAgents();
-      },
-      title: 'agent view のセッション一覧とコメント',
     },
   ].filter(Boolean);
   // トップバーの「今見ているセッション」。共有モードでセンシティブ指定のものは名前を出さない
@@ -2093,13 +1863,8 @@ export default function App() {
                 ) : (
                   <ChatView
                     messages={messages}
-                    threads={threads}
-                    comments={comments}
                     sessionCwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
-                    onStartThread={handleStartThread}
                     onAddAnchoredReview={handleAddAnchoredReview}
-                    onAddAnchoredComment={handleAddAnchoredComment}
-                    onDeleteComment={handleDeleteComment}
                     jumpToUuid={jumpToUuid}
                     onJumpDone={handleJumpDone}
                     onOpenPreview={handleOpenPreview}
@@ -2109,7 +1874,6 @@ export default function App() {
                     pins={pins}
                     onTogglePin={handleTogglePin}
                     onOpenTaskNotice={handleOpenTaskNotice}
-                    readonly={isReadonly}
                     sessionId={activeSessionId}
                   />
                 )
@@ -2178,14 +1942,6 @@ export default function App() {
               )}
             </main>
 
-            {showThreadPanel && chatPanelsVisible && (
-              <ThreadPanel
-                threads={threads}
-                onReplyBatch={handleThreadReplyBatch}
-                onResolve={handleResolveThread}
-                onDelete={handleDeleteThread}
-              />
-            )}
             {showReviewPanel && chatPanelsVisible && (
               <ReviewDraftPanel
                 items={reviewItems}
@@ -2194,24 +1950,6 @@ export default function App() {
                 onSave={handleSaveReview}
                 onSubmit={handleSubmitReview}
                 onClose={() => setShowReviewPanel(false)}
-              />
-            )}
-            {showCommentPanel && chatPanelsVisible && (
-              <CommentPanel
-                comments={comments}
-                onAdd={handleAddComment}
-                onDelete={handleDeleteComment}
-                onJump={handleJumpToAnchor}
-                onClose={() => setShowCommentPanel(false)}
-              />
-            )}
-            {showAgentPanel && (
-              <AgentSidePanel
-                agents={agents}
-                activeClaudeSessionId={activeSession?.claudeSessionId}
-                syncNotice={syncNotice}
-                onSelectAgent={handleOpenAgent}
-                onRefreshAgents={handleRefreshAgents}
               />
             )}
           </div>
@@ -2311,15 +2049,6 @@ export default function App() {
             setDrawerOpenedAt(null);
           }}
           onReviewSubmit={(target, items) => submitFileReview(activeSessionId, sessionKey, target, items)}
-          onSaveComment={(note, location) =>
-            saveFileComment(activeSessionId, sessionKey, previewData.filePath, note, location)
-          }
-          onDeleteComment={handleDeleteComment}
-          fileComments={
-            previewData.filePath
-              ? comments.filter((c) => c.anchor?.type === 'file' && c.anchor.filePath === previewData.filePath)
-              : []
-          }
           responses={drawerOpenedAt != null ? messages.slice(drawerOpenedAt).filter((m) => m.role === 'assistant') : []}
           onOpenPip={isDocumentPipSupported() ? handleOpenPip : undefined}
         />
@@ -2334,9 +2063,6 @@ export default function App() {
           title={pipPreview.title}
           onClose={handleClosePip}
           onReviewSubmit={handlePipReviewSubmit}
-          onSaveComment={handlePipSaveComment}
-          onDeleteComment={pipPreview.sessionId === activeSessionId ? handleDeleteComment : undefined}
-          fileComments={pipFileComments}
           responses={pipResponses}
         />
       )}

@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   parseCssColor,
@@ -121,5 +121,26 @@ describe('resolveInjectedScheme', () => {
       previewScheme: 'dark',
     });
     assert.equal(scheme, 'dark');
+  });
+});
+
+describe('previewColorScheme（境界）', () => {
+  it('区切りの前後や閉じ括弧の前に空白があってもパースする', () => {
+    assert.deepEqual(parseCssColor('rgb(10 , 20 , 30 )'), { r: 10, g: 20, b: 30, a: 1 });
+    assert.deepEqual(parseCssColor('rgba(1, 2, 3,0.5)'), { r: 1, g: 2, b: 3, a: 0.5 });
+    assert.deepEqual(parseCssColor('rgba(1, 2, 3, 0.5 )'), { r: 1, g: 2, b: 3, a: 0.5 });
+  });
+
+  it('輝度ちょうど 0.5 は明色', () => {
+    // 0.2126*13 + 0.7152*163 + 0.0722*113 = 127.5
+    assert.equal(isDarkColor({ r: 13, g: 163, b: 113 }), false);
+  });
+
+  it('青の成分も明るさに足す', () => {
+    assert.equal(isDarkColor({ r: 150, g: 150, b: 255 }), false);
+  });
+
+  it('アルファちょうど 0.5 の背景は塗られているものとして扱う', () => {
+    assert.deepEqual(effectiveBackground('rgba(0, 0, 0, 0.5)', 'rgb(255, 255, 255)'), { r: 0, g: 0, b: 0, a: 0.5 });
   });
 });

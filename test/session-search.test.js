@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   parseSearchQuery,
@@ -6,6 +6,7 @@ import {
   filterBySearch,
   collectProjects,
   filterByProject,
+  rankProjects,
 } from '../client/src/utils/sessionSearch.js';
 
 describe('parseSearchQuery', () => {
@@ -191,5 +192,35 @@ describe('filterByProject', () => {
 
   it('list が null/undefined でも落ちない', () => {
     assert.deepEqual(filterByProject(null, 'alpha'), []);
+  });
+});
+
+describe('sessionSearch（境界）', () => {
+  it('セッション名と session ID も既定の検索対象', () => {
+    assert.equal(matchesSearch({ name: 'nightly-job' }, ['nightly']), true);
+    assert.equal(matchesSearch({ sessionId: 'abc-123' }, ['abc-1']), true);
+  });
+
+  it('空クエリでは同じ配列をそのまま返す', () => {
+    const list = [{ title: 'a' }];
+    assert.equal(filterBySearch(list, ''), list);
+  });
+
+  it('リストに null が混ざっていても落ちない', () => {
+    assert.deepEqual(collectProjects([null, { cwd: '/x/alpha' }]), ['alpha']);
+    assert.deepEqual(filterByProject([null, { cwd: '/x/alpha' }], 'alpha'), [{ cwd: '/x/alpha' }]);
+  });
+
+  it('rankProjects は件数の多い順、同数は名前順', () => {
+    const list = ['/x/b', '/x/a', '/x/c', '/x/c', '/x/d', '/x/d', '/x/d'].map((cwd) => ({ cwd }));
+    assert.deepEqual(
+      rankProjects(list).map((p) => [p.project, p.count]),
+      [
+        ['d', 3],
+        ['c', 2],
+        ['a', 1],
+        ['b', 1],
+      ],
+    );
   });
 });

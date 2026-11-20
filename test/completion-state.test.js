@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   classifyCompletion,
@@ -7,6 +7,7 @@ import {
   prOutcome,
   countByCompletion,
   filterByCompletion,
+  FILTERABLE_STATES,
 } from '../client/src/utils/completionState.js';
 
 const clean = { edited: 2, git: 'clean', uncommitted: [], uncommittedCount: 0, pushed: false, prCount: 0 };
@@ -266,5 +267,115 @@ describe('countByCompletion / filterByCompletion', () => {
       ['c', 'd'],
     );
     assert.equal(filterByCompletion(sessions, ''), sessions);
+  });
+});
+
+describe('completion: 表示文言と境界', () => {
+  const firstLine = (session, options) => completionTooltip(session, options).split('\n')[0];
+
+  it('絞り込みに出す状態の順は固定', () => {
+    assert.deepEqual(FILTERABLE_STATES, [
+      'unfinished',
+      'unpushed',
+      'merging',
+      'interrupted',
+      'asking',
+      'consult',
+      'done',
+    ]);
+  });
+
+  it('ツールチップの先頭行は状態のラベルと説明', () => {
+    const ended = { turnState: 'ended' };
+    assert.equal(firstLine({ status: 'busy' }, { running: true }), '作業中: Claude が応答を生成中');
+    assert.equal(
+      firstLine({ waitingFor: 'permission prompt' }, { running: true }),
+      '返事待ち: 選択肢・ツール許可の回答を待っている',
+    );
+    assert.equal(firstLine({ turnState: 'midway' }), '途中で終了: ターンの途中で止まった・中断した・エラーで終わった');
+    assert.equal(
+      firstLine({ ...ended, completion: { ...clean, prs: [{ url: 'u/1', state: 'open' }] } }),
+      'マージ待ち: PR を作ったが、まだマージされていない',
+    );
+    assert.equal(
+      firstLine({ ...ended, completion: clean }),
+      '反映前: コミットはあるが、このセッションで push も PR 作成もしていない',
+    );
+    assert.equal(
+      firstLine({ ...ended, lastAssistantQuestion: true }),
+      '回答待ち: 編集はなく、最後の応答が質問で終わっている（返事をしていない）',
+    );
+    assert.equal(firstLine(ended), '相談のみ: 編集はなく、調査・相談で終わった');
+    assert.equal(
+      firstLine({ ...ended, completion: { ...clean, pushed: true } }),
+      '完了: 編集をコミットして push まで済んでいる（PR を作ったならマージ済み）',
+    );
+  });
+
+  it('起動中で status が working のときも作業中', () => {
+    assert.equal(classifyCompletion({ status: 'working', turnState: 'ended' }, { running: true }), 'working');
+  });
+
+  it('ターンの終わり方ごとの内訳の文言', () => {
+    const label = (turnState) => completionChecks({ turnState })[0].label;
+    assert.equal(label('ended'), 'ターン終了');
+    assert.equal(label('midway'), 'ツールの実行中に止まった');
+    assert.equal(label('prompt'), '最後の指示に応答が無い');
+    assert.equal(label('interrupted'), 'ユーザーが中断');
+    assert.equal(label('error'), 'API エラーで終了');
+  });
+
+  it('PR が全部マージ済みなら push の記録が無くても完了', () => {
+    const session = {
+      turnState: 'ended',
+      completion: { ...clean, pushed: false, prs: [{ url: 'https://github.com/o/r/pull/7', state: 'merged' }] },
+    };
+    assert.equal(classifyCompletion(session), 'done');
+  });
+
+  it('PR の内訳は URL 末尾の番号で出す', () => {
+    const session = {
+      turnState: 'ended',
+      completion: {
+        ...clean,
+        prs: [{ url: 'https://github.com/o/r/pull/123', state: 'merged' }],
+      },
+    };
+    const labels = completionChecks(session).map((c) => c.label);
+    assert.equal(labels.at(-1), 'PR #123 マージ済み');
+  });
+
+  it('PR の内訳は 5 件まで', () => {
+    const prs = Array.from({ length: 6 }, (_, i) => ({ url: `u/${i + 1}`, state: 'merged' }));
+    const labels = completionChecks({ turnState: 'ended', completion: { ...clean, prs } }).map((c) => c.label);
+    assert.deepEqual(
+      labels.filter((l) => l.startsWith('PR #')),
+      ['PR #1 マージ済み', 'PR #2 マージ済み', 'PR #3 マージ済み', 'PR #4 マージ済み', 'PR #5 マージ済み'],
+    );
+  });
+
+  it('completion が無い・未コミットの一覧が無いときはファイルの行を出さない', () => {
+    assert.equal(
+      completionTooltip({ turnState: 'ended' }),
+      '相談のみ: 編集はなく、調査・相談で終わった\n✓ ターン終了\n✓ 編集なし\n✓ 最後の応答は質問ではない',
+    );
+    const noList = { turnState: 'ended', completion: { edited: 1, git: 'clean', pushed: true } };
+    assert.equal(completionTooltip(noList).split('\n').length, 4);
+    const emptyList = { turnState: 'ended', completion: { ...clean, pushed: true } };
+    assert.equal(completionTooltip(emptyList).split('\n').length, 4);
+  });
+
+  it('未コミットの一覧が全件なら「ほか」の行を出さない', () => {
+    const session = {
+      turnState: 'ended',
+      completion: { edited: 1, git: 'dirty', uncommitted: ['a.js'], uncommittedCount: 1 },
+    };
+    assert.deepEqual(completionTooltip(session).split('\n').slice(-2), ['', '  a.js']);
+  });
+
+  it('一覧が無い（null）ときは件数も絞り込みも空', () => {
+    assert.deepEqual(countByCompletion(null), {});
+    assert.deepEqual(filterByCompletion(null, 'done'), []);
+    assert.deepEqual(filterByCompletion(null, 'consult'), []);
   });
 });

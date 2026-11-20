@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, utimes } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -162,6 +162,38 @@ describe('listRecentSessions', () => {
       includeSessionIds: ['starred-out'],
     });
     assert.deepEqual(result.map((s) => s.sessionId).sort(), ['in-period', 'starred-out']);
+  });
+
+  it('includes a session updated exactly at the start of the period', async () => {
+    const now = Date.UTC(2026, 0, 31);
+    const dir = await mkdtemp(join(tmpdir(), 'cb-recent-'));
+    await mkdir(join(dir, '-home-me-a'));
+    for (const [id, at] of [
+      ['edge', now - 7 * DAY],
+      ['before', now - 7 * DAY - 1000],
+    ]) {
+      const file = join(dir, '-home-me-a', `${id}.jsonl`);
+      await writeFile(file, jsonl([userRecord('依頼')]));
+      await utimes(file, new Date(at), new Date(at));
+    }
+    const result = await listRecentSessions({ days: 7, dir, now });
+    assert.deepEqual(
+      result.map((s) => s.sessionId),
+      ['edge'],
+    );
+  });
+
+  it('sorts starred sessions together with the others by update time, newest first', async () => {
+    const dir = await makeProjects([
+      { projectDir: '-home-me-b', sessionId: 'starred-old', daysAgo: 100 },
+      { projectDir: '-home-me-a', sessionId: 'recent', daysAgo: 1 },
+      { projectDir: '-home-me-a', sessionId: 'newest', daysAgo: 0.5 },
+    ]);
+    const result = await listRecentSessions({ days: 7, dir, includeSessionIds: ['starred-old'] });
+    assert.deepEqual(
+      result.map((s) => s.sessionId),
+      ['newest', 'recent', 'starred-old'],
+    );
   });
 
   it('returns an empty list when the directory does not exist', async () => {

@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, utimes } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -191,5 +191,71 @@ describe('recentDirs utils', () => {
     assert.equal(defaultSessionName(''), 'New Session');
     assert.equal(defaultSessionName('~'), 'New Session');
     assert.equal(defaultSessionName('~/gh/claude-bridge/'), 'claude-bridge');
+  });
+
+  it('home が分からなければ ~ に畳まず・展開もしない', () => {
+    assert.equal(displayDir('/home/me/gh/x', ''), '/home/me/gh/x');
+    assert.equal(expandHome('~/gh/x', ''), '~/gh/x');
+  });
+
+  it('配列でない一覧は空として扱う', () => {
+    assert.deepEqual(filterDirSuggestions(null, ''), []);
+    assert.deepEqual(filterDirSuggestions(undefined, 'x'), []);
+  });
+
+  it('空のクエリは limit 件までをサーバーの順で返す（名前で並べ替えない）', () => {
+    const list = [{ cwd: '/a/one' }, { cwd: '/a/undefined' }, { cwd: '/a/three' }];
+    assert.deepEqual(
+      filterDirSuggestions(list, '', { limit: 2 }).map((d) => d.cwd),
+      ['/a/one', '/a/undefined'],
+    );
+    assert.deepEqual(
+      filterDirSuggestions(list, '').map((d) => d.cwd),
+      ['/a/one', '/a/undefined', '/a/three'],
+    );
+  });
+
+  it('クエリでも limit 件で打ち切る', () => {
+    assert.deepEqual(
+      filterDirSuggestions(dirs, 'home', { home, limit: 1 }).map((d) => d.cwd),
+      ['/home/me/gh/claude-bridge'],
+    );
+  });
+
+  it('~ に畳まれる home の部分でも一致する', () => {
+    assert.deepEqual(
+      filterDirSuggestions(dirs, 'home/me/gh', { home }).map((d) => d.cwd),
+      ['/home/me/gh/claude-bridge', '/home/me/gh/dotfiles'],
+    );
+  });
+
+  it('ディレクトリ名の前方一致 → 名前の途中に含む → パスの途中だけ一致 の順に並べる', () => {
+    const list = [{ cwd: '/w/bridge/x' }, { cwd: '/w/my-bridge' }, { cwd: '/w/bridge-app' }];
+    assert.deepEqual(
+      filterDirSuggestions(list, 'bridge').map((d) => d.cwd),
+      ['/w/bridge-app', '/w/my-bridge', '/w/bridge/x'],
+    );
+  });
+
+  it('末尾に / が付いたパスもディレクトリ名で順位を付ける', () => {
+    const list = [{ cwd: '/y/abridge' }, { cwd: '/x/bridge/' }];
+    assert.deepEqual(
+      filterDirSuggestions(list, 'bri').map((d) => d.cwd),
+      ['/x/bridge/', '/y/abridge'],
+    );
+  });
+
+  it('同じ順位の中ではサーバーの並びを保つ', () => {
+    const list = [{ cwd: '/a/app1' }, { cwd: '/b/app2' }, { cwd: '/c/app3' }];
+    assert.deepEqual(
+      filterDirSuggestions(list, 'app').map((d) => d.cwd),
+      ['/a/app1', '/b/app2', '/c/app3'],
+    );
+  });
+
+  it('既定のセッション名は前後の空白と末尾の / の連続を無視する', () => {
+    assert.equal(defaultSessionName('  /a/b  '), 'b');
+    assert.equal(defaultSessionName('~//'), 'New Session');
+    assert.equal(defaultSessionName('~/proj'), 'proj');
   });
 });

@@ -1,6 +1,7 @@
 // トップバーの使用量メーター（ctx / 5h / 7d）の整形。純粋関数だけを置き、描画は UsageMeter.jsx。
 // 普段はラベルと細いバーだけ、しきい値（contextUsage.js の USAGE_WARN / USAGE_DANGER）を超えたものだけ
-// 数値と注意色を出す。リセット時刻・残り時間はクリックで開くポップオーバーに回す。
+// 数値と注意色を出す。バーの横にはリセットまでの残り（5h は時刻も）を常に出し、日付付きの
+// リセット時刻・トークン内訳などの詳細はクリックで開くポップオーバーに回す。
 import { contextPercent, formatTokens, isUsageNotable, usageColor } from './contextUsage.js';
 
 // この時間より fetchedAt が古ければ「statusline 連携が止まっている（セッション非稼働?）」として薄く出す
@@ -52,7 +53,15 @@ function meter(key, label, pct, detail) {
   return { key, label, pct, value: rounded, notable: isUsageNotable(rounded), color: usageColor(rounded), detail };
 }
 
-function windowMeter(key, label, window, now) {
+// トップバーのバー横に出す短い表記。5h は "20:20 (4h56m)"、7d は日付が長いので残りだけ "(2d6h36m)"。
+// 5h の窓は最長 5 時間なので日付は付けず時刻だけにする
+function inlineResetText(withClock, iso, remaining) {
+  if (!remaining) return null;
+  const clock = withClock ? formatClock(iso) : null;
+  return clock ? `${clock} (${remaining})` : `(${remaining})`;
+}
+
+function windowMeter(key, label, window, now, { inlineClock = false } = {}) {
   const pct = clampPct(window?.utilization);
   if (pct === null) return null;
   const resetAt = formatResetAt(window.resetsAt, now);
@@ -60,6 +69,7 @@ function windowMeter(key, label, window, now) {
   return meter(key, label, pct, {
     resetAt,
     remaining,
+    inline: inlineResetText(inlineClock, window.resetsAt, remaining),
     text: resetAt ? `リセット ${resetAt}${remaining ? `（残り ${remaining}）` : ''}` : 'リセット時刻不明',
   });
 }
@@ -79,7 +89,7 @@ export function buildUsageMeters({ contextUsage, rateLimits, now = new Date() } 
   }
   const usage = rateLimits?.usage;
   if (usage) {
-    meters.push(windowMeter('5h', '5h', usage.fiveHour, now));
+    meters.push(windowMeter('5h', '5h', usage.fiveHour, now, { inlineClock: true }));
     meters.push(windowMeter('7d', '7d', usage.sevenDay, now));
     for (const extra of usage.extras || []) {
       // 追加分（モデル別 weekly など）はポップオーバーにだけ出す

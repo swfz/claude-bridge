@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   PTY_KEY_SEQUENCES,
@@ -89,6 +89,12 @@ describe('toPtySequence', () => {
     assert.equal(toPtySequence('Down'), '\x1b[B');
     assert.equal(toPtySequence('Right'), '\x1b[C');
     assert.equal(toPtySequence('Left'), '\x1b[D');
+  });
+
+  it('1 桁の数字以外は数字として素通しせず、定義が無ければ undefined', () => {
+    assert.equal(toPtySequence('10'), undefined);
+    assert.equal(toPtySequence('a1'), undefined);
+    assert.equal(toPtySequence('1a'), undefined);
   });
 
   it('名前付きキーは全て PTY_KEY_SEQUENCES に定義がある', () => {

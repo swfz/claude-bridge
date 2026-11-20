@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { collectSessionFiles, filesToMarkdown, isModified, relativeToCwd } from '../client/src/utils/sessionFiles.js';
 
@@ -132,5 +132,100 @@ describe('isModified / filesToMarkdown', () => {
     const files = [{ path: '/w/p/a.js' }, { path: '/etc/x' }];
     assert.equal(filesToMarkdown(files, '/w/p'), '- a.js\n- /etc/x');
     assert.equal(filesToMarkdown(null, '/w/p'), '');
+  });
+});
+
+describe('collectSessionFiles（境界）', () => {
+  const readOf = (path) => ({ name: 'Read', input: { file_path: path } });
+  const paths = (files) => files.map((f) => f.path);
+
+  it('publish 以外の action の Artifact と asset は数えない', () => {
+    const files = collectSessionFiles([
+      asst('u1', [
+        { name: 'Artifact', input: { action: 'read', file_path: '/p/read.html' } },
+        { name: 'Artifact', input: { action: 'publish', asset: true, file_path: '/p/asset.png' } },
+      ]),
+    ]);
+    assert.deepEqual(files, []);
+  });
+
+  it('timestamp の無いメッセージだけなら lastTimestamp は空文字', () => {
+    const [file] = collectSessionFiles([asst('u1', [readOf('/p/a.js')])]);
+    assert.equal(file.lastTimestamp, '');
+  });
+
+  it('最初の出現に uuid が無ければ、後の出現の uuid を firstUuid にする', () => {
+    const [file] = collectSessionFiles([asst(undefined, [readOf('/p/a.js')]), asst('u2', [readOf('/p/a.js')])]);
+    assert.equal(file.firstUuid, 'u2');
+    assert.equal(file.lastUuid, 'u2');
+  });
+
+  it('lastTimestamp は最後の出現の時刻、時刻が無い出現では直前の時刻を残す', () => {
+    const [file] = collectSessionFiles([asst('u1', [readOf('/p/a.js')], 't1'), asst('u2', [readOf('/p/a.js')], 't2')]);
+    assert.equal(file.lastTimestamp, 't2');
+    const [kept] = collectSessionFiles([asst('u1', [readOf('/p/a.js')], 't1'), asst('u2', [readOf('/p/a.js')])]);
+    assert.equal(kept.lastTimestamp, 't1');
+  });
+
+  it('時刻が両方あれば出現順ではなく時刻の新しい順', () => {
+    const files = collectSessionFiles([
+      asst('u1', [readOf('/p/late.js')], '2026-01-02T00:00:00Z'),
+      asst('u2', [readOf('/p/early.js')], '2026-01-01T00:00:00Z'),
+    ]);
+    assert.deepEqual(paths(files), ['/p/late.js', '/p/early.js']);
+  });
+
+  it('時刻が同じなら後に出たものが先', () => {
+    const files = collectSessionFiles([
+      asst('u1', [readOf('/p/a.js')], '2026-01-01T00:00:00Z'),
+      asst('u2', [readOf('/p/b.js')], '2026-01-01T00:00:00Z'),
+    ]);
+    assert.deepEqual(paths(files), ['/p/b.js', '/p/a.js']);
+  });
+
+  it('片方に時刻が無ければ出現順（後が先）で比べる', () => {
+    const files = collectSessionFiles([
+      asst('u1', [readOf('/p/a.js')], '2026-01-09T00:00:00Z'),
+      asst('u2', [readOf('/p/b.js')]),
+    ]);
+    assert.deepEqual(paths(files), ['/p/b.js', '/p/a.js']);
+  });
+
+  it('時刻が無ければ 3 件以上でも出現の新しい順', () => {
+    const files = collectSessionFiles([
+      asst('u1', [readOf('/p/a.js')]),
+      asst('u2', [readOf('/p/b.js')]),
+      asst('u3', [readOf('/p/c.js')]),
+      asst('u4', [readOf('/p/a.js')]),
+    ]);
+    assert.deepEqual(paths(files), ['/p/a.js', '/p/c.js', '/p/b.js']);
+  });
+});
+
+describe('relativeToCwd（境界）', () => {
+  it('path が文字列でなければ空文字', () => {
+    assert.equal(relativeToCwd(undefined, '/p'), '');
+    assert.equal(relativeToCwd(null, '/p'), '');
+  });
+
+  it('cwd が文字列でなければそのまま', () => {
+    assert.equal(relativeToCwd('/a/b', 123), '/a/b');
+  });
+
+  it('cwd 末尾の連続するスラッシュも落とす', () => {
+    assert.equal(relativeToCwd('/a/b', '/a//'), 'b');
+  });
+
+  it('cwd がルート（/）なら相対にしない', () => {
+    assert.equal(relativeToCwd('/a/b', '/'), '/a/b');
+  });
+});
+
+describe('isModified（op ごと）', () => {
+  const ops = (o) => ({ ops: { read: 0, edit: 0, write: 0, artifact: 0, ...o } });
+  it('edit・write・artifact のどれか 1 つだけでも変更', () => {
+    assert.equal(isModified(ops({ edit: 1 })), true);
+    assert.equal(isModified(ops({ write: 1 })), true);
+    assert.equal(isModified(ops({ artifact: 1 })), true);
   });
 });

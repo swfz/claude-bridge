@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { shortModelName, modelTitleLine } from '../client/src/utils/modelLabel.js';
 
@@ -31,5 +31,29 @@ describe('modelTitleLine', () => {
     assert.equal(modelTitleLine('claude-opus-5-5'), '\nモデル: claude-opus-5-5');
     assert.equal(modelTitleLine(''), '');
     assert.equal(modelTitleLine('<synthetic>'), '');
+  });
+
+  it('文字列でなければ空文字', () => {
+    assert.equal(modelTitleLine(123), '');
+    assert.equal(modelTitleLine(undefined), '');
+  });
+});
+
+describe('shortModelName（境界）', () => {
+  it('前後の空白を無視する', () => {
+    assert.equal(shortModelName('  claude-opus-5-5  '), 'opus 5.5');
+    assert.equal(shortModelName('  gpt-x  '), 'gpt-x');
+  });
+
+  it('ファミリー名はトークン全体が一致したときだけ認める', () => {
+    assert.equal(shortModelName('claude-opusx-1'), 'claude-opusx-1');
+    assert.equal(shortModelName('claude-xopus-1'), 'claude-xopus-1');
+  });
+
+  it('バージョンは 1〜2 桁の数字だけのトークン', () => {
+    assert.equal(shortModelName('claude-opus-10-1'), 'opus 10.1');
+    assert.equal(shortModelName('claude-opus-v4'), 'opus');
+    assert.equal(shortModelName('claude-opus-4x'), 'opus');
+    assert.equal(shortModelName('claude-opus-123'), 'opus');
   });
 });

@@ -1,6 +1,6 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'fs/promises';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { resolveResumeCwd, isValidProjectDir } from '../server/resume-cwd.js';
@@ -107,7 +107,82 @@ describe('resolveResumeCwd', () => {
   });
 });
 
+describe('resolveResumeCwd: 入力の検証', () => {
+  const opts = (onRead) => ({
+    isDir: dirs('/repo'),
+    readSummary: async () => {
+      onRead?.();
+      return { relocatedCwd: '/repo' };
+    },
+  });
+
+  it('claudeSessionId は文字列で、末尾まで英数字・_・- だけのものに限る', async () => {
+    for (const claudeSessionId of ['abc/..', 'abc\n', 123, undefined, '']) {
+      let read = false;
+      await assert.rejects(
+        resolveResumeCwd(
+          { cwd: '/gone', claudeSessionId, projectDir: '-repo' },
+          opts(() => (read = true)),
+        ),
+        /作業ディレクトリが見つかりません/,
+      );
+      assert.equal(read, false, `claudeSessionId=${String(claudeSessionId)}`);
+    }
+  });
+
+  it('サマリが読めなければ（null）見つからないエラー', async () => {
+    await assert.rejects(
+      resolveResumeCwd(
+        { cwd: '/gone', claudeSessionId: 'abc', projectDir: '-repo' },
+        { isDir: dirs('/repo'), readSummary: async () => null },
+      ),
+      /worktree が削除済みかもしれません/,
+    );
+  });
+
+  it('relocatedCwd が空なら、それを確かめずに見つからないエラー', async () => {
+    const checked = [];
+    await assert.rejects(
+      resolveResumeCwd(
+        { cwd: '/gone', claudeSessionId: 'abc', projectDir: '-repo' },
+        {
+          // cwd 以外はどれも在ることにする
+          isDir: async (p) => {
+            checked.push(p);
+            return p !== '/gone';
+          },
+          readSummary: async () => ({ relocatedCwd: '' }),
+        },
+      ),
+      /作業ディレクトリが見つかりません/,
+    );
+    assert.deepEqual(checked, ['/gone']);
+  });
+
+  it('既定の isDir はファイルをディレクトリとみなさない', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'cb-resume-cwd-'));
+    try {
+      const file = join(dir, 'file.txt');
+      await writeFile(file, 'x');
+      await assert.rejects(
+        resolveResumeCwd({ cwd: file, claudeSessionId: 'nope', projectDir: '-nope' }, { projectsDir: dir }),
+        /作業ディレクトリが見つかりません/,
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('isValidProjectDir', () => {
+  it('rejects values with anything outside [\\w.-] at either end', () => {
+    assert.equal(isValidProjectDir('a/'), false);
+    assert.equal(isValidProjectDir('/a'), false);
+    assert.equal(isValidProjectDir('a b'), false);
+    assert.equal(isValidProjectDir('.x'), true);
+    assert.equal(isValidProjectDir(123), false);
+  });
+
   it('accepts a single path segment only', () => {
     assert.equal(isValidProjectDir('-home-user-repo'), true);
     assert.equal(isValidProjectDir('..foo'), false);

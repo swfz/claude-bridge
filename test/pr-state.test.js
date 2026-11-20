@@ -1,6 +1,18 @@
-import { describe, it } from 'node:test';
+import { describe, it, vi, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { createPrStateReader, isPrUrl, parsePrState } from '../server/pr-state.js';
+
+// 既定の取得（gh pr view）は本物の gh を呼ばないよう execFile を差し替えて確かめる
+const execFileCalls = [];
+let ghStdout = '{"state":"MERGED"}';
+vi.mock('child_process', () => ({
+  execFile: (cmd, args, opts, cb) => {
+    execFileCalls.push({ cmd, args, opts });
+    cb(null, { stdout: ghStdout, stderr: '' });
+  },
+}));
+
+const { clearPrStateCache, createPrStateReader, getPrState, isPrUrl, parsePrState } =
+  await import('../server/pr-state.js');
 
 const URL1 = 'https://github.com/o/r/pull/1';
 const URL2 = 'https://github.com/o/r/pull/2';
@@ -126,5 +138,97 @@ describe('createPrStateReader', () => {
     reader.clear();
     await reader.get(URL1);
     assert.equal(n, 2);
+  });
+
+  it('rejects URLs with a prefix before https and non-string values that stringify to a PR URL', () => {
+    assert.equal(isPrUrl(`x${URL1}`), false);
+    assert.equal(isPrUrl([URL1]), false);
+    assert.equal(isPrUrl({ toString: () => URL1 }), false);
+  });
+
+  it('keeps open results for 5 minutes by default', async () => {
+    let clock = 0;
+    let n = 0;
+    const reader = createPrStateReader({ run: async () => (n++, 'open'), now: () => clock });
+    await reader.get(URL1);
+    clock = 5 * 60 * 1000 - 1;
+    await reader.get(URL1);
+    assert.equal(n, 1);
+    clock = 5 * 60 * 1000;
+    await reader.get(URL1);
+    assert.equal(n, 2);
+  });
+
+  it('measures the TTL from the time the result arrived', async () => {
+    let clock = 1000;
+    let n = 0;
+    const reader = createPrStateReader({ run: async () => (n++, 'open'), ttlMs: 1000, now: () => clock });
+    await reader.get(URL1);
+    clock = 1500;
+    await reader.get(URL1);
+    assert.equal(n, 1);
+    // ちょうど TTL が経ったら取り直す
+    clock = 2000;
+    await reader.get(URL1);
+    assert.equal(n, 2);
+  });
+
+  it('drops the whole cache once 1000 URLs are cached', async () => {
+    const calls = [];
+    const reader = createPrStateReader({ run: async (url) => (calls.push(url), 'merged') });
+    for (let i = 1; i <= 1000; i++) await reader.get(`https://github.com/o/r/pull/${i}`);
+    // 999 件目までは merged のまま使い回す
+    await reader.get(URL1);
+    assert.equal(calls.length, 1000);
+    // 1001 件目を入れるときに捨てるので、URL1 は取り直しになる
+    await reader.get('https://github.com/o/r/pull/1001');
+    await reader.get(URL1);
+    assert.equal(calls.length, 1002);
+    assert.equal(calls.at(-1), URL1);
+  });
+});
+
+describe('getPrState (default reader using gh)', () => {
+  let savedEnv;
+  beforeEach(() => {
+    savedEnv = process.env.CLAUDE_BRIDGE_DISABLE_GH;
+    delete process.env.CLAUDE_BRIDGE_DISABLE_GH;
+    execFileCalls.length = 0;
+    ghStdout = '{"state":"MERGED"}';
+    clearPrStateCache();
+  });
+  afterEach(() => {
+    if (savedEnv === undefined) delete process.env.CLAUDE_BRIDGE_DISABLE_GH;
+    else process.env.CLAUDE_BRIDGE_DISABLE_GH = savedEnv;
+    clearPrStateCache();
+  });
+
+  it('runs gh pr view without a shell and maps its JSON output', async () => {
+    ghStdout = '{"state":"OPEN","mergedAt":null}';
+    assert.equal(await getPrState(URL1), 'open');
+    assert.deepEqual(execFileCalls, [
+      { cmd: 'gh', args: ['pr', 'view', URL1, '--json', 'state,mergedAt'], opts: { timeout: 10000 } },
+    ]);
+  });
+
+  it('caches results until clearPrStateCache()', async () => {
+    assert.equal(await getPrState(URL1), 'merged');
+    assert.equal(await getPrState(URL1), 'merged');
+    assert.equal(execFileCalls.length, 1);
+    clearPrStateCache();
+    assert.equal(await getPrState(URL1), 'merged');
+    assert.equal(execFileCalls.length, 2);
+  });
+
+  it('returns unknown without running gh when CLAUDE_BRIDGE_DISABLE_GH=1', async () => {
+    process.env.CLAUDE_BRIDGE_DISABLE_GH = '1';
+    assert.equal(await getPrState(URL1), 'unknown');
+    assert.equal(execFileCalls.length, 0);
+  });
+
+  it('runs gh when CLAUDE_BRIDGE_DISABLE_GH is set to something other than 1', async () => {
+    process.env.CLAUDE_BRIDGE_DISABLE_GH = '';
+    assert.equal(await getPrState(URL1), 'merged');
+    assert.equal(execFileCalls.length, 1);
   });
 });

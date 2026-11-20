@@ -1,6 +1,6 @@
 // ホーム・トップバーのリデザインで足した純粋関数のテスト
 // （ディレクトリ色・プロジェクトの件数順・共有モードの非表示件数・使用量メーター）
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { dirColorOf, groupColorMap, shownTabGroups } from '../client/src/utils/tabGroups.js';
 import { rankProjects } from '../client/src/utils/sessionSearch.js';
@@ -191,6 +191,13 @@ describe('buildUsageMeters', () => {
     assert.equal(five.detail.text, 'リセット 12:20（残り 2h20m）');
     assert.equal(seven.detail.text, 'リセット 11/14 09:00（残り 1d23h0m）');
     assert.equal(extra.detail.text, 'リセット時刻不明');
+  });
+
+  it('バー横の表記は 5h が時刻 + 残り、7d は残りだけ、リセット時刻不明なら出さない', () => {
+    const [, five, seven, extra] = buildUsageMeters({ contextUsage, rateLimits, now });
+    assert.equal(five.detail.inline, '12:20 (2h20m)');
+    assert.equal(seven.detail.inline, '(1d23h0m)');
+    assert.equal(extra.detail.inline, null);
   });
 
   it('利用率の無い窓・データ無しは落とす', () => {

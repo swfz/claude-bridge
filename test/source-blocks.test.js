@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { LEAF_BLOCKS, ANY_BLOCK, collectSourceBlocks, blockForLine } from '../client/src/utils/sourceBlocks.js';
 
@@ -20,6 +20,10 @@ function rootOf(elements) {
 }
 
 describe('LEAF_BLOCKS / ANY_BLOCK', () => {
+  it('末端ブロックは表の行・リスト項目・段落・見出し・コード・引用', () => {
+    assert.deepEqual([...LEAF_BLOCKS], ['TR', 'LI', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'BLOCKQUOTE']);
+  });
+
   it('ANY_BLOCK は LEAF_BLOCKS にコンテナ要素を足したもの', () => {
     for (const tag of LEAF_BLOCKS) assert.ok(ANY_BLOCK.has(tag), tag);
     for (const tag of ['TABLE', 'UL', 'OL', 'DL', 'DIV']) {

@@ -6,8 +6,8 @@ import './UsageMeter.css';
 const TICK_INTERVAL_MS = 60_000;
 
 // トップバー右側の使用量メーター（ctx / 5h / 7d）を 1 つの塊にしたもの。
-// 普段はラベルと細いバーだけで、しきい値を超えたものだけ数値を注意色で出す。
-// クリックで各メーターの数値とリセット時刻・残り時間のポップオーバーを開く。
+// 普段はラベルと細いバーとリセットまでの残り（5h は時刻も）で、しきい値を超えたものだけ数値を注意色で出す。
+// クリックで各メーターの数値と日付付きのリセット時刻のポップオーバーを開く。
 export default function UsageMeter({ contextUsage, rateLimits }) {
   const [open, setOpen] = useState(false);
   const [, setTick] = useState(0);
@@ -66,6 +66,8 @@ export default function UsageMeter({ contextUsage, rateLimits }) {
                 {m.value}%
               </span>
             )}
+            {/* リセット時刻が届かない回も枠は残し、メーターの幅を変えない */}
+            {m.key !== 'ctx' && <span className={`usage-meter-reset reset-${m.key}`}>{m.detail?.inline ?? ''}</span>}
           </span>
         ))}
       </button>

@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { isSensitivePath } from '../server/sensitive-paths.js';
 
@@ -32,6 +32,7 @@ describe('isSensitivePath', () => {
       '/home/u/.pgpass',
       '/home/u/.my.cnf',
       '/home/u/.zsh_history',
+      '/home/u/.bash_history',
       '/home/u/gh/repo/.git/config',
       '/home/u/gh/repo/.env',
       '/home/u/gh/repo/.env.local',
@@ -72,5 +73,12 @@ describe('isSensitivePath', () => {
     assert.equal(isSensitivePath(''), false);
     assert.equal(isSensitivePath(null), false);
     assert.equal(isSensitivePath('/'), false);
+    assert.equal(isSensitivePath(123), false);
+    assert.equal(isSensitivePath({ toLowerCase: () => '/home/u/.ssh/id_rsa' }), false);
+  });
+
+  it('末尾にスラッシュが付いていても最後の名前で判定する', () => {
+    assert.equal(isSensitivePath('/home/u/.netrc/'), true);
+    assert.equal(isSensitivePath('/home/u/gh/repo/.env/'), true);
   });
 });

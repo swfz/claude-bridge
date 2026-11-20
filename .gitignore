@@ -6,3 +6,5 @@ client/dist/
 test-results/
 playwright-report/
 e2e/.tmp/
+coverage/
+.mutator/

@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
 // child_process.exec をモック。コマンドごとに stdout を出し分ける
@@ -13,19 +13,17 @@ function stdoutFor(cmd) {
   return '';
 }
 
-mock.module('child_process', {
-  namedExports: {
-    exec: (cmd, cb) => {
-      execCalls.push(cmd);
-      const value = stdoutFor(cmd);
-      if (value instanceof Error) {
-        cb(value);
-      } else {
-        cb(null, { stdout: value, stderr: '' });
-      }
-    },
+vi.mock('child_process', () => ({
+  exec: (cmd, cb) => {
+    execCalls.push(cmd);
+    const value = stdoutFor(cmd);
+    if (value instanceof Error) {
+      cb(value);
+    } else {
+      cb(null, { stdout: value, stderr: '' });
+    }
   },
-});
+}));
 
 const { killClaudePane } = await import('../server/tmux-session.js');
 
@@ -109,7 +107,7 @@ describe('killClaudePane', () => {
   });
 
   it('rejects an invalid paneId without running tmux', async () => {
-    for (const paneId of ['7', '%7; tmux kill-server', '', undefined, '$(whoami)']) {
+    for (const paneId of ['7', '%7; tmux kill-server', 'x%7', '', undefined, '$(whoami)']) {
       await assert.rejects(killClaudePane({ paneId, claudeSessionId: 'abc' }, deps()), /Invalid paneId/);
     }
     assert.equal(execCalls.length, 0);
@@ -166,5 +164,60 @@ describe('killClaudePane', () => {
     const d = deps({ metas: { '%7': { pid: 100, sessionId: 'abc', paneId: '%7' } } });
 
     await assert.rejects(killClaudePane({ paneId: '%7', expectedPid: 100 }, d), /pane gone/);
+  });
+
+  it('claudeSessionId があれば pid が一致しても sessionId で照合する', async () => {
+    responses = { 'display-message': 'claude\n' };
+    const d = deps({ metas: { '%7': { pid: 100, sessionId: 'other', paneId: '%7' } } });
+
+    await assert.rejects(
+      killClaudePane({ paneId: '%7', claudeSessionId: 'abc', expectedPid: 100 }, d),
+      /ペイン %7 で動いているのは別のセッションのため終了しませんでした/,
+    );
+    assert.equal(killCalls().length, 0);
+  });
+
+  it('照合に通ったセッションメタを返す', async () => {
+    responses = { 'display-message': 'claude\n' };
+    const meta = { pid: 100, sessionId: 'abc', paneId: '%7' };
+
+    assert.equal(await killClaudePane({ paneId: '%7', claudeSessionId: 'abc' }, deps({ metas: { '%7': meta } })), meta);
+  });
+
+  it('claude でない前景コマンドの名前をエラーに含める', async () => {
+    responses = { 'display-message': 'vim\n' };
+
+    await assert.rejects(
+      killClaudePane({ paneId: '%7', claudeSessionId: 'abc' }, deps()),
+      /ペイン %7 で claude が動いていないため終了しませんでした（vim）/,
+    );
+  });
+
+  it('前景コマンドはそのペインの pane_current_command を読む', async () => {
+    responses = { 'display-message': 'claude\n' };
+    await killClaudePane({ paneId: '%7', expectedPid: 100 }, deps({ metas: { '%7': { pid: 100, sessionId: 'x' } } }));
+    assert.equal(execCalls[0], "tmux display-message -p -t %7 '#{pane_current_command}'");
+  });
+
+  it('空文字の claudeSessionId は不正として扱う', async () => {
+    await assert.rejects(
+      killClaudePane({ paneId: '%7', claudeSessionId: '', expectedPid: 100 }, deps()),
+      /Invalid claudeSessionId/,
+    );
+    assert.equal(execCalls.length, 0);
+  });
+
+  it('不正な値をエラーに含める', async () => {
+    await assert.rejects(killClaudePane({ paneId: '%7', expectedPid: 1.5 }, deps()), /Invalid expectedPid: 1\.5/);
+    await assert.rejects(
+      killClaudePane({ paneId: '%7', claudeSessionId: 'a b' }, deps()),
+      /Invalid claudeSessionId: a b/,
+    );
+  });
+
+  it('依存を省くと本物の生存確認を使う（ここでは前景コマンドの確認で止まる）', async () => {
+    responses = { 'display-message': 'zsh\n' };
+    await assert.rejects(killClaudePane({ paneId: '%7', expectedPid: 100 }), /claude が動いていない/);
+    await assert.rejects(killClaudePane(), /Invalid paneId/);
   });
 });
