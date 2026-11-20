@@ -66,6 +66,13 @@ import {
   warmActivityCache,
 } from './activity-heatmap.js';
 import { isSensitivePath } from './sensitive-paths.js';
+import {
+  AttachmentError,
+  MAX_ATTACHMENT_BYTES,
+  checkUploadRequest,
+  resolveAttachmentCwd,
+  saveAttachment,
+} from './attachments.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -300,6 +307,48 @@ app.get('/search', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.json({ matches, truncated: matches.length >= MAX_MATCHES });
 });
+
+// 入力欄からの添付（画像・バイナリ）。保存したパスをクライアントが本文に足して既存の送信経路に流す。
+// 判定・保存は server/attachments.js。ヘッダの検証は express.raw より前に行う
+// （Content-Type が違うと raw は本文を読まずに素通しするため）
+app.post(
+  '/attachments',
+  (req, res, next) => {
+    const bad = checkUploadRequest(req.headers);
+    if (bad) return res.status(bad.status).json({ error: bad.error });
+    next();
+  },
+  express.raw({ type: 'application/octet-stream', limit: MAX_ATTACHMENT_BYTES }),
+  async (req, res) => {
+    try {
+      const session = findSession(typeof req.query.sessionId === 'string' ? req.query.sessionId : '');
+      if (!session) return res.status(404).json({ error: 'session not found' });
+      // cwd はクライアントから受け取らない（ステータスファイル → JSONL → セッションの順に解決）
+      const target = resolveClaudeTarget(session);
+      const cwd = await resolveAttachmentCwd({
+        claudePid: session.claudePid,
+        jsonlPath: target ? join(CLAUDE_PROJECTS_DIR, target.projectDir, `${target.claudeSessionId}.jsonl`) : null,
+        sessionCwd: session.cwd,
+        readSummaryCwd: async (p) => (await readSessionSummary(p)).cwd,
+      });
+      const name = typeof req.query.name === 'string' ? req.query.name : '';
+      // 0 バイトのファイルは express.raw が body を作らない（Content-Type は上で確かめ済み）
+      const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      res.json(await saveAttachment({ cwd, name, data }));
+    } catch (e) {
+      if (e instanceof AttachmentError) return res.status(e.status).json({ error: e.message });
+      console.error('attachment upload failed:', e.message);
+      res.status(500).json({ error: 'upload failed' });
+    }
+  },
+  // express.raw の上限超過（413）などを JSON で返す
+  // eslint-disable-next-line no-unused-vars
+  (err, req, res, next) => {
+    res
+      .status(err.status || err.statusCode || 400)
+      .json({ error: err.type === 'entity.too.large' ? 'file too large' : err.message });
+  },
+);
 
 // クライアントのビルド成果物を配信
 const __dirname = dirname(fileURLToPath(import.meta.url));

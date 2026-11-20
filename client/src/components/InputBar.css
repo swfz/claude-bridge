@@ -9,6 +9,133 @@
   position: relative;
 }
 
+/* ファイルのドラッグ中は入力欄全体を「今の操作対象」として示す（枠を足さず内側の線なので寸法は変わらない） */
+.input-bar.drop-active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-secondary));
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* 添付ボタン。送信ボタンと同じ寸法の枠なしアイコン */
+.input-attach {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.input-attach:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.input-attach:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 添付のチップ列。クリップと入力欄の間に同じ行で並べる。高さは入力欄（1 行で 43px）より低い 30px に固定し、
+   幅は行の 4 割まで・溢れたら横スクロール。上に重ねない（直上の選択肢カード・タスクのチップを覆うため）。
+   出し入れで変わるのは入力欄の幅だけで、行の高さと周りの位置は変わらない */
+.input-attachments {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  height: 30px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.input-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 2px 0 3px;
+  border-radius: 6px;
+  background: var(--bg-surface);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.input-attachment.uploading {
+  color: var(--text-secondary);
+}
+
+.input-attachment.error {
+  color: var(--danger);
+}
+
+.input-attachment-thumb {
+  width: 20px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.input-attachment-icon {
+  flex-shrink: 0;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.input-attachment-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.input-attachment-status {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.input-attachment-status.spinning {
+  animation: input-attachment-spin 1s linear infinite;
+}
+
+@keyframes input-attachment-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.input-attachment-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.input-attachment-remove:hover {
+  background: var(--bg-surface);
+  color: var(--danger);
+}
+
 /* スラッシュコマンド補完のドロップダウン（入力欄の直上に開く） */
 .slash-suggestions {
   position: absolute;
