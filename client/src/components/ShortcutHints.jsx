@@ -7,6 +7,19 @@ import './ShortcutHints.css';
 // ローカル state で、カンペのために App まで持ち上げると各コンポーネントに手が入るため。
 // 見るのは「その目印になる要素があるか」だけで、中身は読まない。
 const HINT_SETS = {
+  diffInput: [
+    ['Ctrl+Enter', '確定'],
+    ['Ctrl+Shift+Enter', '一括送信'],
+    ['Ctrl+Shift+⌫', 'この指摘を削除'],
+    ['Esc', '確定して戻る'],
+  ],
+  diff: [
+    ['行番号をクリック', '指摘を書く'],
+    ['Shift+クリック', '範囲を選ぶ'],
+    ['Ctrl+Shift+Enter', '一括送信'],
+    ['Ctrl+D U', '半画面スクロール'],
+    ['Esc', '閉じる'],
+  ],
   previewInput: [
     ['Ctrl+Enter', '確定して本文へ'],
     ['Ctrl+Shift+Enter', '一括送信'],
@@ -75,6 +88,12 @@ function detectMode() {
   const inPreviewInput = Boolean(active?.classList?.contains('review-pane-input'));
   const inReviewInput = Boolean(active?.classList?.contains('review-draft-item-input'));
   const inSendBox = Boolean(active?.classList?.contains('input-textarea'));
+
+  // 差分ドロワー（/diff）。指摘欄は .diff-comment-input
+  if (document.querySelector('.diff-drawer-overlay')) {
+    if (active?.classList?.contains('diff-comment-input')) return { key: 'diffInput', hints: HINT_SETS.diffInput };
+    return { key: 'diff', hints: HINT_SETS.diff };
+  }
 
   if (document.querySelector('.drawer-overlay')) {
     if (inPreviewInput) return { key: 'previewInput', hints: HINT_SETS.previewInput };

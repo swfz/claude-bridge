@@ -18,6 +18,7 @@ import { useStickToBottom } from '../hooks/useStickToBottom.js';
 import { useNumberPick } from '../hooks/useNumberPick.js';
 import { halfScreenJump } from '../utils/pickJump.js';
 import { halfPageScrollKey } from '../utils/keys.js';
+import { isBlockingDrawerOpen } from '../utils/drawers.js';
 import { collectArtifacts } from '../utils/artifacts.js';
 import { LEAF_BLOCKS, blockForLine, collectSourceBlocks } from '../utils/sourceBlocks.js';
 import { rehypeSourceLine } from '../utils/rehypeSourceLine.js';
@@ -1056,7 +1057,7 @@ export default function ChatView({
 
   const pick = useNumberPick({
     // プレビューのドロワーが開いている間はそちらの行ピックが対象なので譲る
-    enabled: useCallback(() => !document.querySelector('.drawer-overlay'), []),
+    enabled: useCallback(() => !isBlockingDrawerOpen(), []),
     max: pickable.length,
     // 入力欄に打った数字を誤って拾わないよう、チャットでは Alt+R での開始を必須にする
     allowBareDigits: false,

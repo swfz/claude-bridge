@@ -1321,9 +1321,12 @@ wss.on('connection', (ws) => {
       case 'submit_review': {
         // pending review を一括送信。送信先はサーバーが対象セッション種別で出し分ける:
         // readonly → inbox（agent 側フックが取り込む） / それ以外（PTY あり）→ session.write。
+        // requestId: どの送信の結果かをクライアントが突き合わせるために返す（差分ドロワーは成功した分だけ下書きを消す）
+        const requestId =
+          typeof msg.requestId === 'string' && /^[\w-]{1,64}$/.test(msg.requestId) ? msg.requestId : undefined;
         const key = sessionKeyOf(msg);
         if (!key) {
-          ws.send(JSON.stringify({ type: 'submit_review_result', ok: false }));
+          ws.send(JSON.stringify({ type: 'submit_review_result', ok: false, requestId }));
           break;
         }
         // 各項目を「対象（引用）について: 指摘本文」に整形する。anchor があれば引用を前置。
@@ -1336,7 +1339,7 @@ wss.on('connection', (ws) => {
           })
           .filter(Boolean);
         if (items.length === 0) {
-          ws.send(JSON.stringify({ type: 'submit_review_result', ok: false }));
+          ws.send(JSON.stringify({ type: 'submit_review_result', ok: false, requestId }));
           break;
         }
         const body =
@@ -1359,7 +1362,8 @@ wss.on('connection', (ws) => {
           console.error('submit_review failed:', e.message);
         }
 
-        if (ok) {
+        // keepDraft: Review パネル以外（差分ドロワー）からの送信。パネルの下書きは別物なので消さない
+        if (ok && msg.keepDraft !== true) {
           // 送信できたら下書きをクリアして同期
           storage.saveReviewDraft(key, { items: [], updatedAt: new Date().toISOString() });
           ws.send(JSON.stringify({ type: 'review_update', sessionId: msg.sessionId, items: [] }));
@@ -1370,6 +1374,7 @@ wss.on('connection', (ws) => {
             ok,
             via: session?.type === 'readonly' ? 'inbox' : 'pty',
             count: items.length,
+            requestId,
           }),
         );
         break;
