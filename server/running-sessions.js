@@ -111,13 +111,21 @@ export async function mapPaneIdsToPids(paneIds, options = {}) {
 // 起動中の Claude セッション一覧。~/.claude/sessions/*.json を読み、
 // プロセスが生きているものだけを最終更新の新しい順で返す。
 // dir / livePids はテストから差し替えられるようにしている。
-export async function listRunningSessions({ dir = SESSIONS_DIR, livePids, projectsDir = CLAUDE_PROJECTS_DIR } = {}) {
+// metaOnly: カード用のサマリ・やり残し判定（JSONL の全文走査・gh 呼び出し）を省き、ステータスファイルの値だけ返す。
+// 起動時の復元は sessionId しか使わず、キャッシュが空の起動直後に全件走査すると 10 秒を超えるため
+export async function listRunningSessions({
+  dir = SESSIONS_DIR,
+  livePids,
+  projectsDir = CLAUDE_PROJECTS_DIR,
+  metaOnly = false,
+} = {}) {
   const metas = await readSessionMetas(dir);
 
   const alive = livePids !== undefined ? livePids : await readLivePids();
   const running = metas
     .filter((m) => alive === null || alive.has(m.pid))
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  if (metaOnly) return running;
 
   // カードで中身が分かるよう JSONL からタイトル・直近のやりとりを添える
   // （mtime キャッシュ済みなのでポーリングしても読み直さない）

@@ -174,6 +174,21 @@ describe('listRunningSessions', () => {
     assert.equal(byId.b.completion, null);
   });
 
+  it('skips the summary and completion state with metaOnly (used by the startup restore)', async () => {
+    const dir = await makeDir({
+      '1.json': JSON.stringify({ pid: 1, sessionId: 'a', cwd: '/Users/x/gh/claude-bridge', updatedAt: 1 }),
+      '2.json': JSON.stringify({ pid: 2, sessionId: 'b', updatedAt: 2 }),
+      '3.json': JSON.stringify({ pid: 3, sessionId: 'c', updatedAt: 3 }),
+    });
+    const result = await listRunningSessions({ dir, livePids: new Set([1, 2]), metaOnly: true });
+    assert.deepEqual(
+      result.map((r) => r.sessionId),
+      ['b', 'a'],
+    );
+    assert.equal('completion' in result[0], false);
+    assert.equal('projectDir' in result[0], false);
+  });
+
   it('returns an empty list when the directory does not exist', async () => {
     const result = await listRunningSessions({
       dir: join(tmpdir(), 'cb-sessions-does-not-exist'),
