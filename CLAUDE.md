@@ -112,7 +112,7 @@ pnpm mutation --include <file>  # ミューテーションテスト（@mizchi/mu
 - `resumeInTmuxWindow({tmuxSession, windowName})` で、**元の tmux セッション名・window 名に作り直す**。セッションが無ければ `new-session` で作る。tmux セッション名は `/^[\w.-]{1,64}$/` だけを受け付け、合わなければ既定の選び方に戻す
 - **`-n` の window 名は tmux のフォーマットとして展開される**（tmux 3.7c で実測。`#(cmd)` はコマンド実行になる）。そのため `escapeTmuxFormat()` で `#` を `##` にしてから `escapeForShell()` を通す
 - ブリッジのタブだったものだけ、タブも同じ ID で開き直す。すでに同じ種類のタブがあれば開き直さない。1 件の失敗で残りを止めない
-- 生きているかの読み取り（`readLiveClaude()`）は 10 秒で打ち切る。tmux が固まっていると、listen 前の復元で起動が止まるため
+- 生きているかの読み取り（`readLiveClaude()`）は 10 秒で打ち切る。tmux が固まっていると、listen 前の復元で起動が止まるため。起動中セッションは `listRunningSessions({ metaOnly: true })` で読む（カード用のサマリ・やり残し判定は起動直後のキャッシュが空だと全件の JSONL 走査で 10 秒を超える）。**読み取りに失敗したら前回の `tabs` を `unrestoredTabs` に持ち、保存のたびに `mergeUnrestoredTabs()` で足す**（足さないと復元できなかったタブが次の保存で消え、次の起動でも戻らない）
 - 失敗はまとめて 1 回の `home_error` で知らせる
 
 `dismiss_restorable_tabs {claudeSessionIds?}` で破棄する（ID を省くと全件）。サーバーは接続時と変化時に `restorable_tabs {tabs, resuming}` を配り、ホームの `RestorableBanner.jsx` が描く（共有モードではセンシティブ指定のものを出さない）。

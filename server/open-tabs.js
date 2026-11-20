@@ -133,6 +133,14 @@ export function tabsFromSessions(sessions) {
   );
 }
 
+// 復元に失敗したとき、前回のタブ（unrestored）を今開いているタブ（current）に足して保存し続ける。
+// 足さないと、復元できなかったタブが「今開いていない」として次の保存で消え、次の起動でも戻らない。
+// 同じ claudeSessionId・同じ種類のタブが既に開いていれば今のものを使う
+export function mergeUnrestoredTabs(current, unrestored = []) {
+  const has = new Set(current.map((t) => `${t.type}:${t.claudeSessionId}`));
+  return [...current, ...unrestored.filter((t) => !has.has(`${t.type}:${t.claudeSessionId}`))];
+}
+
 // listClaudeTmuxPanes() の target（`sess:win.pane`）から tmux セッション名と window 番号を取る
 // （tmux セッション名も target から取る。enrichPanesWithSessionMeta() が sessionName を
 // Claude 側のセッション名（/rename）で上書きするため、pane.sessionName は tmux の名前ではない）

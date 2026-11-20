@@ -49,6 +49,7 @@ import {
   saveOpenTabs,
   splitPending,
   tabsFromSessions,
+  mergeUnrestoredTabs,
   updatePaneSnapshot,
   upsertPaneSnapshot,
 } from './open-tabs.js';
@@ -462,10 +463,16 @@ let paneSnapshot = [];
 // 起動時に動いていなかったもの（ホームの「まとめて tmux で再開」の対象）
 let pendingTabs = [];
 let resumingPending = false;
+// 起動時の復元に失敗したときの前回のタブ。保存時に足し、次の起動で復元できるよう残す
+let unrestoredTabs = [];
 
 function persistOpenTabs(sessions = allSessions()) {
   if (!openTabsReady) return;
-  const state = { tabs: tabsFromSessions(sessions), panes: paneSnapshot, pending: pendingTabs };
+  const state = {
+    tabs: mergeUnrestoredTabs(tabsFromSessions(sessions), unrestoredTabs),
+    panes: paneSnapshot,
+    pending: pendingTabs,
+  };
   const json = JSON.stringify(state);
   if (json === lastOpenTabsJson) return;
   try {
@@ -521,7 +528,7 @@ async function readLiveClaude() {
     const [panes, running, tmuxAlive] = await Promise.race([
       Promise.all([
         listClaudeTmuxPanes().then(enrichPanesWithSessionMeta),
-        listRunningSessions(),
+        listRunningSessions({ metaOnly: true }),
         isTmuxServerRunning(),
       ]),
       timeout,
@@ -760,6 +767,7 @@ async function restoreOpenTabs() {
     console.error('open-tabs: restore failed:', e.message);
     paneSnapshot = saved.panes;
     pendingTabs = saved.pending;
+    unrestoredTabs = saved.tabs;
   } finally {
     openTabsReady = true;
     persistOpenTabs();

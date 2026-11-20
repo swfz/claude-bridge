@@ -12,6 +12,7 @@ const {
   saveOpenTabs,
   sanitizeOpenTabs,
   tabsFromSessions,
+  mergeUnrestoredTabs,
   updatePaneSnapshot,
   removePaneSnapshot,
   upsertPaneSnapshot,
@@ -821,5 +822,25 @@ describe('removePaneSnapshot: 一致しないもの', () => {
     const snap = [{ claudeSessionId: 'a' }, { claudeSessionId: 'b' }];
     assert.deepEqual(removePaneSnapshot(snap, 'c'), snap);
     assert.equal(removePaneSnapshot(snap, ''), snap);
+  });
+});
+
+describe('mergeUnrestoredTabs', () => {
+  it('keeps the previous tabs that were not restored, after the currently open ones', () => {
+    const current = [{ type: 'tmux', id: 'x', claudeSessionId: 'a' }];
+    const unrestored = [
+      { type: 'tmux', id: 'old-a', claudeSessionId: 'a' },
+      { type: 'readonly', id: 'r', claudeSessionId: 'a' },
+      { type: 'tmux', id: 'b', claudeSessionId: 'b' },
+    ];
+    assert.deepEqual(
+      mergeUnrestoredTabs(current, unrestored).map((t) => t.id),
+      ['x', 'r', 'b'],
+    );
+  });
+
+  it('returns the current tabs as is when nothing is carried over', () => {
+    const current = [{ type: 'tmux', id: 'x', claudeSessionId: 'a' }];
+    assert.deepEqual(mergeUnrestoredTabs(current), current);
   });
 });
