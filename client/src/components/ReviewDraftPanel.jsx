@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TbFile, TbPlus, TbX } from 'react-icons/tb';
 import { isConfirmShortcut, isDeleteItemShortcut, isSubmitAllShortcut } from '../utils/keys.js';
+import { isBlockingDrawerOpen } from '../utils/drawers.js';
 import './ReviewDraftPanel.css';
 
 let seq = 0;
@@ -129,7 +130,7 @@ export default function ReviewDraftPanel({ items, incomingAnchor, readonly, onSa
   useEffect(() => {
     const handler = (e) => {
       if (!isSubmitAllShortcut(e) || e.defaultPrevented) return;
-      if (document.querySelector('.drawer-overlay')) return;
+      if (isBlockingDrawerOpen()) return;
       e.preventDefault();
       handleSubmitRef.current();
     };

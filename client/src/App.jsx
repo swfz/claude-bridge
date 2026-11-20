@@ -14,6 +14,7 @@ import SubagentDrawer from './components/SubagentDrawer.jsx';
 import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
 import DiffDrawer from './components/DiffDrawer.jsx';
 import { DIFF_SCOPE_STORAGE_KEY, isDiffCommand, normalizeDiffScope } from './utils/diffView.js';
+import { diffCommentStore } from './utils/diffComments.js';
 import RefDrawer from './components/RefDrawer.jsx';
 import NewSessionDialog from './components/NewSessionDialog.jsx';
 import PreviewDrawer from './components/PreviewDrawer.jsx';
@@ -76,6 +77,16 @@ function keepIfUnchanged(prev, sessionId, tasks) {
   const current = prev[sessionId];
   if (current && JSON.stringify(current) === JSON.stringify(next)) return prev;
   return { ...prev, [sessionId]: next };
+}
+
+// 差分ドロワーの範囲（保存値）
+function storedDiffScope() {
+  try {
+    return normalizeDiffScope(localStorage.getItem(DIFF_SCOPE_STORAGE_KEY));
+  } catch {
+    // localStorage が使えない環境は既定の範囲
+    return 'all';
+  }
 }
 
 export default function App() {
@@ -661,9 +672,10 @@ export default function App() {
     setShowRefDrawer(false);
   }, [activeSessionId, showHome]);
 
+  // focus: 差分が届いた後にスクロールして見せる行（{path, side, line, nonce}）。openDiffAt から渡す
   const requestDiff = useCallback(
-    (sessionId, scope) => {
-      setDiffDrawer({ sessionId, scope, data: { loading: true } });
+    (sessionId, scope, focus = null) => {
+      setDiffDrawer({ sessionId, scope, focus, data: { loading: true } });
       send({ type: 'get_session_diff', sessionId, scope });
     },
     [send],
@@ -673,16 +685,47 @@ export default function App() {
   const handleLocalCommand = useCallback(
     (text) => {
       if (!isDiffCommand(text) || !activeSessionId) return false;
-      let scope = 'all';
-      try {
-        scope = normalizeDiffScope(localStorage.getItem(DIFF_SCOPE_STORAGE_KEY));
-      } catch {
-        // localStorage が使えない環境は既定の範囲
-      }
-      requestDiff(activeSessionId, scope);
+      requestDiff(activeSessionId, storedDiffScope());
       return true;
     },
     [activeSessionId, requestDiff],
+  );
+
+  // 指定したファイル・行（側つき）で差分ドロワーを開き、届いたらそこへスクロールする。
+  // path はリポジトリ相対、side は 'new'（追加・文脈行の新しい行番号）| 'old'（削除行の旧行番号）。
+  // 今は UI から呼ばず、window.claudeBridge.openDiffAt として出しておく（Claude から差分へ誘導する段階で使う）
+  const openDiffAt = useCallback(
+    ({ path, side = 'new', line, scope } = {}) => {
+      const sessionId = activeSessionIdRef.current;
+      if (!sessionId || !path || !Number.isInteger(line)) return false;
+      requestDiff(sessionId, scope ? normalizeDiffScope(scope) : storedDiffScope(), {
+        path,
+        side: side === 'old' ? 'old' : 'new',
+        line,
+        nonce: Date.now(),
+      });
+      return true;
+    },
+    [requestDiff],
+  );
+  useEffect(() => {
+    window.claudeBridge = { ...window.claudeBridge, openDiffAt };
+  }, [openDiffAt]);
+
+  // 差分ドロワーの行への指摘を一括送信。Review パネルの下書きとは別物なので keepDraft で消させず、
+  // requestId で結果を突き合わせて成功した分だけ store から消す（失敗・無応答なら残す）
+  const diffRequestSeq = useRef(0);
+  const submitDiffReview = useCallback(
+    (sessionId, key, items, keys) => {
+      if (!sessionId || items.length === 0) return;
+      diffRequestSeq.current += 1;
+      const requestId = `diff-${Date.now()}-${diffRequestSeq.current}`;
+      diffCommentStore.markSending(key, keys, requestId);
+      send({ type: 'submit_review', sessionId, sessionKey: key, items, requestId, keepDraft: true });
+      // 切断などで結果が来なければ送信中を解いて残す（二重送信より取りこぼしを避ける）
+      setTimeout(() => diffCommentStore.resolveSending(requestId, false), 15000);
+    },
+    [send],
   );
 
   const handleChangeDiffScope = useCallback(
@@ -1219,6 +1262,7 @@ export default function App() {
 
   useEffect(() => {
     return on('submit_review_result', (msg) => {
+      if (msg.requestId) diffCommentStore.resolveSending(msg.requestId, !!msg.ok);
       if (!msg.ok) notifySendFailure('レビューの送信に失敗しました。');
     });
   }, [on, notifySendFailure]);
@@ -1552,6 +1596,21 @@ export default function App() {
       send({ type: 'submit_review', sessionId, sessionKey: key, items: labeled });
     },
     [send],
+  );
+  const diffSessionKey = diffDrawer
+    ? sessions.find((s) => s.id === diffDrawer.sessionId)?.claudeSessionId || diffDrawer.sessionId
+    : null;
+  // claudeSessionId が後から決まったタブ（tmux の起動直後など）は、ブリッジ ID をキーに書いた差分の指摘を
+  // claudeSessionId のキーへ移す（移さないとキーが変わった時点で見えなくなる）
+  useEffect(() => {
+    for (const s of sessions) {
+      if (s.claudeSessionId) diffCommentStore.migrateSession(s.id, s.claudeSessionId);
+    }
+  }, [sessions]);
+  const diffSessionId = diffDrawer?.sessionId;
+  const handleSubmitDiffComments = useCallback(
+    (items, keys) => submitDiffReview(diffSessionId, diffSessionKey, items, keys),
+    [submitDiffReview, diffSessionId, diffSessionKey],
   );
   const handlePipReviewSubmit = useCallback(
     (target, items) => pipPreview && submitFileReview(pipPreview.sessionId, pipPreview.sessionKey, target, items),
@@ -2030,8 +2089,11 @@ export default function App() {
 
       {diffDrawer && (
         <DiffDrawer
+          sessionKey={diffSessionKey}
           scope={diffDrawer.scope}
           data={diffDrawer.data}
+          focusTarget={diffDrawer.focus}
+          onSubmitComments={handleSubmitDiffComments}
           onChangeScope={handleChangeDiffScope}
           onRefresh={() => requestDiff(diffDrawer.sessionId, diffDrawer.scope)}
           onOpenPreview={(path) => {

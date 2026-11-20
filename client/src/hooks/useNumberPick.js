@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { INITIAL_PICK_STATE, keyToPickAction, pickReducer, resolveTarget } from '../utils/numberPick.js';
 import { isEnterKey, isPickModeShortcut, isFocusInputShortcut, vimNavKey } from '../utils/keys.js';
+import { isBlockingDrawerOpen } from '../utils/drawers.js';
 
 // テキスト入力中かどうか。数字キーの素通し判定に使う
 function isTextEntry(el) {
@@ -103,7 +104,7 @@ export function useNumberPick({
       // 送信欄への入力を数字キー等としてピックが奪い続けてしまうため、この判定だけは
       // e.defaultPrevented / enabled を見ずに常に行う（preventDefault はしない）。
       // ドロワー表示中は useGlobalKeys 側も何もしない（後ろの送信欄へ飛ばさない）ので、こちらも取消しない
-      if (stateRef.current.active && isFocusInputShortcut(e) && !document.querySelector('.drawer-overlay')) {
+      if (stateRef.current.active && isFocusInputShortcut(e) && !isBlockingDrawerOpen()) {
         dispatch({ type: 'clear' });
         onCancel?.();
         return;

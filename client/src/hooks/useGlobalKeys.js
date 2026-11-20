@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { halfPageScrollKey, tabNavKey, isFocusInputShortcut, isShareModeShortcut } from '../utils/keys.js';
+import { isBlockingDrawerOpen } from '../utils/drawers.js';
 
 // テキスト入力中か（Ctrl+D/U はエディタ操作と衝突するので入力中は触らない）
 function isTextEntry(el) {
@@ -13,6 +14,7 @@ function isTextEntry(el) {
 function scrollContainer() {
   return (
     document.querySelector('.drawer-overlay .drawer-body') ||
+    document.querySelector('.diff-drawer-overlay .diff-drawer-body') ||
     document.querySelector('.chat-view') ||
     document.querySelector('.home-view')
   );
@@ -46,7 +48,7 @@ export function useGlobalKeys({ tabs, activeId, onSelectTab, onHome, onToggleSha
 
       if (isFocusInputShortcut(e)) {
         // ドロワー表示中は後ろに隠れている送信欄へ飛ばさない
-        if (document.querySelector('.drawer-overlay')) return;
+        if (isBlockingDrawerOpen()) return;
         const textarea = document.querySelector('.input-textarea');
         if (!textarea) return; // ホーム表示中など送信欄が無い画面では何もしない
         e.preventDefault();

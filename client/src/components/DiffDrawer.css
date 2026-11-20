@@ -54,6 +54,7 @@
 .diff-drawer-meta {
   display: flex;
   gap: 8px;
+  min-width: 0;
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -140,11 +141,14 @@
   opacity: 0.6;
 }
 
+/* 高さは固定する。「指摘 N」のラベル（日本語）の出し入れで、フォントの代替次第で見出しが 1px 伸びて下の行を押すため */
 .diff-file-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 8px;
   background: var(--bg-secondary);
   font-size: 12px;
 }
@@ -212,18 +216,101 @@
 }
 
 .diff-lines {
-  margin: 0;
   font-family: monospace;
   font-size: 12px;
   line-height: 1.5;
   overflow-x: auto;
+  /* 指摘欄の幅（100cqi）を、スクロールする中身ではなく見えている幅にするための基準 */
+  container-type: inline-size;
+  /* 旧・新の行番号 2 列。固定幅にして、指摘の印や「＋」の出し入れで本文を動かさない */
+  --diff-ln-w: 44px;
+  --diff-gutter-w: calc(var(--diff-ln-w) * 2);
+}
+
+/* 行の幅を「見える幅」と「いちばん長い行」の大きい方にそろえる（中の行はこの幅いっぱいに伸びる）。
+   行ごとの幅（max-content）だと、横スクロールしたときに短い行の背景が途中で途切れるため */
+.diff-lines-inner {
+  width: max-content;
+  min-width: 100%;
 }
 
 .diff-line {
+  display: flex;
+  color: var(--text-primary);
+}
+
+.diff-line-text {
   padding: 0 12px;
   white-space: pre;
+}
+
+/* 行番号（クリックでその行に指摘を書く）。横スクロールしても見えるよう左に貼り付ける */
+.diff-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: 0 0 var(--diff-gutter-w);
+  width: var(--diff-gutter-w);
+  display: flex;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: right;
+  user-select: none;
+}
+
+button.diff-gutter {
+  cursor: pointer;
+}
+
+.diff-ln {
+  flex: 0 0 var(--diff-ln-w);
+  padding-right: 8px;
+  box-sizing: border-box;
+  opacity: 0.7;
+}
+
+/* ホバーで出す「＋」と未送信の印。どちらも重ねるだけで幅を取らない */
+.diff-gutter-plus {
+  position: absolute;
+  top: 50%;
+  right: -9px;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--bg-surface);
   color: var(--text-primary);
-  min-width: max-content;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.diff-line:hover .diff-gutter-plus {
+  opacity: 1;
+}
+
+.diff-gutter-mark {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--warning);
+  opacity: 0;
+}
+
+.diff-line.has-comment .diff-gutter-mark {
+  opacity: 1;
 }
 
 .diff-line.add {
@@ -239,6 +326,195 @@
   background: var(--bg-secondary);
 }
 
+.diff-line.hunk .diff-gutter {
+  background: var(--bg-secondary);
+}
+
 .diff-line.meta {
   color: var(--text-secondary);
+}
+
+/* 今の操作対象（指摘欄を開いている行・範囲）。内側の線で示し、行の高さ・幅は変えない */
+.diff-line.target {
+  box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.diff-line.target .diff-gutter {
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--text-primary);
+}
+
+.diff-line.flash .diff-line-text,
+.diff-comment.flash {
+  animation: diff-flash 1.5s ease-out;
+}
+
+@keyframes diff-flash {
+  from {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+/* 行への指摘欄。横スクロールしても見える幅に貼り付ける */
+.diff-comment {
+  position: sticky;
+  left: 0;
+  /* 横に長い行があっても、見えている幅に収める */
+  width: 100cqi;
+  box-sizing: border-box;
+  margin: 4px 0;
+  padding: 6px 10px 8px;
+  border-left: 2px solid var(--warning);
+  background: var(--bg-secondary);
+  font-family: inherit;
+  white-space: normal;
+}
+
+.diff-comment.active {
+  border-left-color: var(--accent);
+}
+
+.diff-comment.sending {
+  opacity: 0.6;
+}
+
+.diff-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  min-width: 0;
+}
+
+.diff-comment-where {
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.diff-comment-stale {
+  color: var(--warning);
+  white-space: nowrap;
+}
+
+.diff-comment-quote {
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.diff-comment-remove {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  padding: 0;
+  font-size: 14px;
+}
+
+.diff-comment-remove:hover {
+  color: var(--danger);
+}
+
+.diff-comment-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.diff-comment-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.diff-file-stale,
+.diff-orphans {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.diff-file-stale .diff-comment {
+  margin: 0;
+  border-top: 1px solid var(--border);
+}
+
+.diff-file-comments {
+  color: var(--warning);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ヘッダの未送信件数と一括送信。0 件でも場所を取っておく（visibility） */
+.diff-drawer-review {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diff-drawer-review.empty {
+  visibility: hidden;
+}
+
+.diff-comment-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  min-width: 32px;
+}
+
+.diff-comment-count:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.diff-comment-count-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.diff-submit {
+  padding: 3px 10px;
+  font-size: 12px;
+  min-width: 72px;
+  white-space: nowrap;
+}
+
+.diff-drawer-status {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-drawer-status.error {
+  color: var(--danger);
+}
+
+.diff-drawer-body:focus {
+  outline: none;
 }
