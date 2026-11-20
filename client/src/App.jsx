@@ -1925,6 +1925,8 @@ export default function App() {
                       slashCommands={slashCommands[activeSessionId] || []}
                       notice={readonlyNotice}
                       onLocalCommand={handleLocalCommand}
+                      sessionId={activeSessionId}
+                      shareMode={shareMode}
                     />
                   ) : (
                     <InputBar
@@ -1935,6 +1937,8 @@ export default function App() {
                       slashCommands={slashCommands[activeSessionId] || []}
                       onSendEscape={handleSendEscape}
                       onLocalCommand={handleLocalCommand}
+                      sessionId={activeSessionId}
+                      shareMode={shareMode}
                     />
                   )}
                 </div>

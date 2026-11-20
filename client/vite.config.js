@@ -13,6 +13,10 @@ export default defineConfig({
       '/preview': {
         target: 'http://localhost:3000',
       },
+      // 添付のアップロード。changeOrigin は付けない（Host を書き換えるとサーバーの Origin 照合に落ちる）
+      '/attachments': {
+        target: 'http://localhost:3000',
+      },
     },
   },
 });
