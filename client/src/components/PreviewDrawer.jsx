@@ -32,6 +32,7 @@ import { LEAF_BLOCKS, blockForLine, collectSourceBlocks } from '../utils/sourceB
 import { rehypeSourceLine } from '../utils/rehypeSourceLine.js';
 import { useNumberPick } from '../hooks/useNumberPick.js';
 import { usePreviewSource } from '../hooks/usePreviewSource.js';
+import useResizableWidth from '../hooks/useResizableWidth.js';
 import { previewUrl } from '../utils/previewUrl.js';
 import './PreviewDrawer.css';
 
@@ -160,40 +161,17 @@ export default function PreviewDrawer({
     prevOpenItemCountRef.current = openItemCount;
   }, [openItemCount]);
 
-  // ユーザーがドラッグで指定した幅(px)。null の間はクラスベースの既定幅を使う
-  const [width, setWidth] = useState(null);
-  const widthRef = useRef(width);
-  widthRef.current = width;
-  const dragging = useRef(false);
-  const startX = useRef(0);
-  const startWidth = useRef(0);
-
-  const onDragStart = useCallback(
-    (e) => {
-      e.preventDefault();
-      dragging.current = true;
-      startX.current = e.clientX;
-      // 未操作時は実際の描画幅を起点にする
-      const drawerEl = e.currentTarget.parentElement;
-      startWidth.current = widthRef.current ?? drawerEl?.getBoundingClientRect().width ?? 800;
-
-      const onMove = (ev) => {
-        if (!dragging.current) return;
-        // 左端のハンドルを左へ動かすと幅が増える
-        const delta = startX.current - ev.clientX;
-        const max = hostWin.innerWidth - 100;
-        setWidth(Math.max(400, Math.min(startWidth.current + delta, max)));
-      };
-      const onUp = () => {
-        dragging.current = false;
-        hostDoc.removeEventListener('mousemove', onMove);
-        hostDoc.removeEventListener('mouseup', onUp);
-      };
-      hostDoc.addEventListener('mousemove', onMove);
-      hostDoc.addEventListener('mouseup', onUp);
-    },
-    [hostDoc, hostWin],
-  );
+  // ユーザーがドラッグ・←/→ で指定した幅(px)。null の間はクラスベースの既定幅を使う。
+  // 差分ドロワーと同じ hook（つまみ・キー・ダブルクリックで既定に戻す）。プレビューは開くたびに既定幅から始める
+  // （本文の種類やレビュー欄の有無で既定幅が変わるため、幅は覚えない）
+  const { width, handleProps: resizeHandleProps } = useResizableWidth({
+    elementRef: drawerRef,
+    min: 400,
+    maxRatio: 1,
+    margin: 100,
+    hostWin,
+    label: 'プレビューの幅を変える',
+  });
 
   useEffect(() => {
     fileContentRef.current = fileContent;
@@ -736,7 +714,7 @@ export default function PreviewDrawer({
         style={width != null ? { width, maxWidth: 'none', minWidth: 'auto' } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
-        {!pipWindow && <div className="drawer-resize-handle" onMouseDown={onDragStart} />}
+        {!pipWindow && <div className="drawer-resize-handle" {...resizeHandleProps} />}
         <div className="drawer-header">
           {/* 常設のヒント帯はやめ、選択で指摘を追加できることはファイル名の tooltip に回す
               （キー操作はサイドバーの ShortcutHints が出している） */}

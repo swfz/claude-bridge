@@ -46,6 +46,11 @@
   background: var(--border);
 }
 
+.drawer-resize-handle:focus-visible {
+  outline: none;
+  background: var(--accent);
+}
+
 .drawer-with-review {
   width: 90%;
   max-width: 1800px;

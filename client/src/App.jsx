@@ -13,8 +13,10 @@ import { activeChoiceOf, clearObservedPending } from './utils/working.js';
 import SubagentDrawer from './components/SubagentDrawer.jsx';
 import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
 import DiffDrawer from './components/DiffDrawer.jsx';
+import DiffPip from './components/DiffPip.jsx';
 import { DIFF_SCOPE_STORAGE_KEY, isDiffCommand, normalizeDiffScope } from './utils/diffView.js';
 import { diffCommentStore } from './utils/diffComments.js';
+import { loadReviewed, migrateReviewed, saveReviewed } from './utils/diffReviewed.js';
 import RefDrawer from './components/RefDrawer.jsx';
 import NewSessionDialog from './components/NewSessionDialog.jsx';
 import PreviewDrawer from './components/PreviewDrawer.jsx';
@@ -244,6 +246,10 @@ export default function App() {
   // Document Picture-in-Picture に出したプレビュー { pipWindow, filePath, markdown, title }。
   // previewData とは別に持ち、activeSessionId / showHome に依存させない（他セッションへ移っても残す）
   const [pipPreview, setPipPreview] = useState(null);
+  // 差分ドロワーを小窓に移したもの: { id, pipWindow, sessionId, openedKey, scope, data }。
+  // diffDrawer とは別に持ち、タブ切替・ホーム表示でも閉じない。小窓はタブにつき 1 つなので pipPreview とは同時に存在しない
+  // （後から開いた方が残り、前の窓の pagehide で自分の state だけを消す）
+  const [pipDiff, setPipDiff] = useState(null);
   // Claude のレート制限（5h/7d ウィンドウの使用率）。サーバーが 3 分間隔で配ってくる
   const [rateLimits, setRateLimits] = useState(null);
 
@@ -425,13 +431,14 @@ export default function App() {
     });
   }, [on]);
 
-  // 差分ドロワーの中身。開いているセッション・範囲と違う応答（範囲の切り替え直後の古い応答）は捨てる
+  // 差分ドロワー（メインと小窓）の中身。それぞれ開いているセッション・範囲と違う応答（範囲の切り替え直後の古い応答・
+  // もう片方が要求したもの）は捨てる。両方が同じセッション・範囲を開いていれば両方に入るが、中身は同じなので構わない
   useEffect(() => {
+    const apply = (prev, msg) =>
+      !prev || prev.sessionId !== msg.sessionId || prev.scope !== msg.scope ? prev : { ...prev, data: msg };
     return on('session_diff', (msg) => {
-      setDiffDrawer((prev) => {
-        if (!prev || prev.sessionId !== msg.sessionId || prev.scope !== msg.scope) return prev;
-        return { ...prev, data: msg };
-      });
+      setDiffDrawer((prev) => apply(prev, msg));
+      setPipDiff((prev) => apply(prev, msg));
     });
   }, [on]);
 
@@ -1551,10 +1558,13 @@ export default function App() {
   const pipSeqRef = useRef(0);
   const handleOpenPip = useCallback(async () => {
     if (!previewData) return;
-    const { filePath, markdown, title } = previewData;
-    // レビューの送信先は「開いたときのセッション」に固定する（小窓は他のタブへ移っても残るため）
-    const sessionId = activeSessionIdRef.current;
-    const key = sessionsRef.current.find((s) => s.id === sessionId)?.claudeSessionId || sessionId;
+    const { filePath, markdown, title, target } = previewData;
+    // レビューの送信先は「開いたときのセッション」に固定する（小窓は他のタブへ移っても残るため）。
+    // 差分の小窓から開いたプレビューは、そのプレビューの送信先（差分の小窓のセッション）を引き継ぐ
+    const sessionId = target ? target.sessionId : activeSessionIdRef.current;
+    const key = target
+      ? target.sessionKey
+      : sessionsRef.current.find((s) => s.id === sessionId)?.claudeSessionId || sessionId;
     try {
       const pipWindow = await openPreviewPipWindow();
       pipSeqRef.current += 1;
@@ -1606,11 +1616,90 @@ export default function App() {
     for (const s of sessions) {
       if (s.claudeSessionId) diffCommentStore.migrateSession(s.id, s.claudeSessionId);
     }
+    // 差分ドロワーの確認済み（localStorage）も同じく付け替える
+    const list = loadReviewed();
+    let next = list;
+    for (const s of sessions) {
+      if (s.claudeSessionId) next = migrateReviewed(next, s.id, s.claudeSessionId);
+    }
+    if (next !== list) saveReviewed(next);
   }, [sessions]);
   const diffSessionId = diffDrawer?.sessionId;
   const handleSubmitDiffComments = useCallback(
     (items, keys) => submitDiffReview(diffSessionId, diffSessionKey, items, keys),
     [submitDiffReview, diffSessionId, diffSessionKey],
+  );
+
+  // 差分ドロワーを小窓に移す。requestWindow は user activation が要るので、クリックから直接（最初の await で）呼ぶ。
+  // 送信先は開いたときのセッション（sessionId）に固定する。sessionKey は下書き・確認済みのキーで、tmux タブでは
+  // 後から claudeSessionId に変わる（migrateSession で移る）ので固定せず、タブが残っている間は sessions から引く
+  const diffDrawerRef = useRef(diffDrawer);
+  diffDrawerRef.current = diffDrawer;
+  const handleOpenDiffPip = useCallback(async () => {
+    if (!diffDrawer) return;
+    const openedKey = diffSessionKey;
+    try {
+      const pipWindow = await openPreviewPipWindow({ width: 1000, height: 720 });
+      // 窓を待つ間に差分が届いている（読み込み中に押した）ことがあるので、最新のドロワーから引き継ぐ
+      const latest = diffDrawerRef.current;
+      if (!latest) {
+        pipWindow.close();
+        return;
+      }
+      const { sessionId, scope, data } = latest;
+      pipSeqRef.current += 1;
+      setPipDiff({ id: pipSeqRef.current, pipWindow, sessionId, openedKey, scope, data });
+      // メイン側のドロワーは閉じる（.diff-drawer-overlay が残ると後ろの画面を操作できない）
+      setDiffDrawer(null);
+    } catch (err) {
+      console.warn('[pip] requestWindow failed', err);
+    }
+  }, [diffDrawer, diffSessionKey]);
+  const handleCloseDiffPip = useCallback((pipWindow) => {
+    setPipDiff((cur) => (cur && cur.pipWindow === pipWindow ? null : cur));
+  }, []);
+  const pipDiffSessionId = pipDiff?.sessionId;
+  const pipDiffTab = pipDiff ? sessions.find((s) => s.id === pipDiff.sessionId) : null;
+  // claudeSessionId を一度見たら openedKey に覚え、タブが閉じてもブリッジ ID には戻さない
+  // （戻すと DiffDrawer の確認済みの付け替えが逆向きに走り、下書きも見えなくなる）
+  const pipDiffClaudeId = pipDiffTab?.claudeSessionId || null;
+  useEffect(() => {
+    if (!pipDiffClaudeId) return;
+    setPipDiff((prev) => (prev && prev.openedKey !== pipDiffClaudeId ? { ...prev, openedKey: pipDiffClaudeId } : prev));
+  }, [pipDiffClaudeId]);
+  const pipDiffSessionKey = pipDiff ? pipDiffClaudeId || pipDiff.openedKey : null;
+  // 小窓のファイル名から開くプレビュー。メイン画面のプレビューで開くが、指摘の送信先と「開いてからの応答」は
+  // 小窓のセッションにする（メイン画面で別のタブ・ホームを見ていても、小窓を開いたセッションへ送る）
+  const handleOpenPreviewFromDiffPip = useCallback(
+    (path) => {
+      if (!pipDiffSessionId) return;
+      setPreviewData({ filePath: path, target: { sessionId: pipDiffSessionId, sessionKey: pipDiffSessionKey } });
+      setDrawerOpenedAt((messagesBySessionRef.current[pipDiffSessionId] || []).length);
+    },
+    [pipDiffSessionId, pipDiffSessionKey],
+  );
+  const requestPipDiff = useCallback(
+    (scope) => {
+      if (!pipDiffSessionId) return;
+      setPipDiff((prev) => (prev ? { ...prev, scope, data: { loading: true } } : prev));
+      send({ type: 'get_session_diff', sessionId: pipDiffSessionId, scope });
+    },
+    [pipDiffSessionId, send],
+  );
+  const handleChangePipDiffScope = useCallback(
+    (scope) => {
+      try {
+        localStorage.setItem(DIFF_SCOPE_STORAGE_KEY, scope);
+      } catch {
+        // 保存できなくても切り替えはする
+      }
+      requestPipDiff(scope);
+    },
+    [requestPipDiff],
+  );
+  const handleSubmitPipDiffComments = useCallback(
+    (items, keys) => submitDiffReview(pipDiffSessionId, pipDiffSessionKey, items, keys),
+    [submitDiffReview, pipDiffSessionId, pipDiffSessionKey],
   );
   const handlePipReviewSubmit = useCallback(
     (target, items) => pipPreview && submitFileReview(pipPreview.sessionId, pipPreview.sessionKey, target, items),
@@ -1825,7 +1914,7 @@ export default function App() {
           attentionIds={attentionIds}
           sensitiveIds={sensitiveIds}
           starredIds={starredIds}
-          pipSessionId={pipPreview?.sessionId}
+          pipSessionId={pipPreview?.sessionId ?? pipDiff?.sessionId}
           contextBySession={contextBySession}
           shareMode={shareMode}
           onHome={() => setShowHome(true)}
@@ -2101,6 +2190,23 @@ export default function App() {
             handleOpenPreview(path);
           }}
           onClose={() => setDiffDrawer(null)}
+          onOpenPip={isDocumentPipSupported() ? handleOpenDiffPip : undefined}
+        />
+      )}
+
+      {pipDiff && (
+        <DiffPip
+          key={pipDiff.id}
+          pipWindow={pipDiff.pipWindow}
+          sessionKey={pipDiffSessionKey}
+          scope={pipDiff.scope}
+          data={pipDiff.data}
+          onSubmitComments={handleSubmitPipDiffComments}
+          onChangeScope={handleChangePipDiffScope}
+          onRefresh={() => requestPipDiff(pipDiff.scope)}
+          // 小窓のファイル名はメイン画面のプレビューで開く（小窓は残す。送信先は小窓のセッション）
+          onOpenPreview={handleOpenPreviewFromDiffPip}
+          onClose={handleCloseDiffPip}
         />
       )}
 
@@ -2114,8 +2220,18 @@ export default function App() {
             setPreviewData(null);
             setDrawerOpenedAt(null);
           }}
-          onReviewSubmit={(target, items) => submitFileReview(activeSessionId, sessionKey, target, items)}
-          responses={drawerOpenedAt != null ? messages.slice(drawerOpenedAt).filter((m) => m.role === 'assistant') : []}
+          onReviewSubmit={(target, items) =>
+            previewData.target
+              ? submitFileReview(previewData.target.sessionId, previewData.target.sessionKey, target, items)
+              : submitFileReview(activeSessionId, sessionKey, target, items)
+          }
+          responses={
+            drawerOpenedAt != null
+              ? (previewData.target ? messagesBySession[previewData.target.sessionId] || [] : messages)
+                  .slice(drawerOpenedAt)
+                  .filter((m) => m.role === 'assistant')
+              : []
+          }
           onOpenPip={isDocumentPipSupported() ? handleOpenPip : undefined}
         />
       )}
