@@ -269,7 +269,14 @@ describe('readSessionDiff', () => {
 
   it('session で編集がすべてリポジトリの外なら差分を取らずに件数だけ返す', async () => {
     const result = await readSessionDiff({ cwd: repo, scope: 'session', editedFiles: ['/elsewhere/a.js'] });
-    assert.deepEqual(result, { root: await realpath(repo), scope: 'session', files: [], truncated: false, outside: 1 });
+    assert.deepEqual(result, {
+      root: await realpath(repo),
+      cwdPrefix: '',
+      scope: 'session',
+      files: [],
+      truncated: false,
+      outside: 1,
+    });
   });
 
   it('session の差分なしのファイルはパス順に、中身なしで並べる', async () => {
@@ -602,5 +609,23 @@ describe('headerPath / untrackedPatch / capPatches の細部', () => {
       ],
     );
     assert.equal(truncated, false);
+  });
+});
+
+describe('readSessionDiff の cwdPrefix', () => {
+  it('cwd のリポジトリ相対のプレフィックスを返す（サブディレクトリなら sub/、ルートなら空）', async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), 'cb-prefix-')));
+    try {
+      await git(dir, 'init', '-q');
+      await mkdir(join(dir, 'sub'));
+      await writeFile(join(dir, 'sub', 'a.js'), 'x\n');
+      const sub = await readSessionDiff({ cwd: join(dir, 'sub'), scope: 'all' });
+      assert.equal(sub.cwdPrefix, 'sub/');
+      assert.equal(sub.root, dir);
+      const top = await readSessionDiff({ cwd: dir, scope: 'session', editedFiles: [] });
+      assert.equal(top.cwdPrefix, '');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -14,6 +14,7 @@ import SubagentDrawer from './components/SubagentDrawer.jsx';
 import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
 import DiffDrawer from './components/DiffDrawer.jsx';
 import DiffPip from './components/DiffPip.jsx';
+import { DiffJumpContext } from './components/DiffJumpContext.js';
 import {
   DIFF_SCOPE_STORAGE_KEY,
   isDiffCommand,
@@ -735,29 +736,50 @@ export default function App() {
     [activeSessionId, requestDiff],
   );
 
-  // 指定したファイル・行（側つき）で差分ドロワーを開き、届いたらそこへスクロールする。
-  // path はリポジトリ相対、side は 'new'（追加・文脈行の新しい行番号）| 'old'（削除行の旧行番号）。
-  // 今は UI から呼ばず、window.claudeBridge.openDiffAt として出しておく（Claude から差分へ誘導する段階で使う）
-  // scope が 'commit' / 'turn' のときは ref（ハッシュ／ターン番号。省けば最新）で対象を選ぶ
+  // 指定したファイル・行（側つき）で差分ドロワーを開き、届いたらそこへスクロールして行カーソルを置く。
+  // path はリポジトリ相対か絶対パス（差分の root・セッションの cwd で相対にして突き合わせる）、side は 'new'
+  // （追加・文脈行の新しい行番号）| 'old'（削除行の旧行番号）、endLine があれば範囲。
+  // 返答の `path:行` のピル（jumpToDiffLine）と window.claudeBridge.openDiffAt から呼ぶ。
+  // scope が 'commit' / 'turn' のときは ref（ハッシュ／ターン番号。省けば最新）で対象を選ぶ。
+  // そのセッションの差分を小窓に出しているときは小窓の方で飛ぶ（チャットを見ながら差分を追えるよう小窓にしているため）
+  const pipJumpRef = useRef(null);
   const openDiffAt = useCallback(
-    ({ path, side = 'new', line, scope, ref } = {}) => {
+    ({ path, side = 'new', line, endLine = null, scope, ref } = {}) => {
       const sessionId = activeSessionIdRef.current;
       if (!sessionId || !path || !Number.isInteger(line)) return false;
       const s = scope ? normalizeDiffScope(scope) : storedDiffScope();
-      requestDiff(
-        sessionId,
-        s,
-        {
-          path,
-          side: side === 'old' ? 'old' : 'new',
-          line,
-          nonce: Date.now(),
-        },
-        ref,
-      );
+      const focus = {
+        path,
+        side: side === 'old' ? 'old' : 'new',
+        line,
+        endLine: Number.isInteger(endLine) && endLine > line ? endLine : null,
+        cwd: sessionsRef.current.find((x) => x.id === sessionId)?.cwd || null,
+        nonce: Date.now(),
+      };
+      if (pipJumpRef.current?.(sessionId, s, focus, ref)) return true;
+      requestDiff(sessionId, s, focus, ref);
       return true;
     },
     [requestDiff],
+  );
+
+  // 返答の `path:行` のピルから差分のその行へ。範囲は今見ている範囲（小窓・ドロワー・保存値の順）を使い、
+  // コミット・ターンを見ているときは作業ツリー全体に切り替える（Claude が書く行番号は今のファイルの行番号）
+  const jumpToDiffLine = useCallback(
+    ({ path, line, endLine = null }) => {
+      const sessionId = activeSessionIdRef.current;
+      const pip = pipDiffRef.current;
+      const drawer = diffDrawerRef.current;
+      const current =
+        pip?.sessionId === sessionId ? pip.scope : drawer?.sessionId === sessionId ? drawer.scope : storedDiffScope();
+      // 飛び元が差分ドロワーより前面のドロワー（Refs のピン・サブエージェントの会話・シェルの出力）の中のピルでも
+      // 差分が隠れないよう、それらは閉じる
+      setShowRefDrawer(false);
+      setSubagentDrawer(null);
+      setShellDrawer(null);
+      return openDiffAt({ path, side: 'new', line, endLine, scope: isRefScope(current) ? 'all' : current });
+    },
+    [openDiffAt],
   );
   useEffect(() => {
     window.claudeBridge = { ...window.claudeBridge, openDiffAt };
@@ -789,6 +811,20 @@ export default function App() {
       if (diffDrawer) requestDiff(diffDrawer.sessionId, scope);
     },
     [diffDrawer, requestDiff],
+  );
+  // 「このセッション」に見つからなかった行を、全体に切り替えて同じ行で開き直す（Bash で書き換えたファイルなど）
+  const handleDiffSearchAll = useCallback(
+    (focus) => {
+      const cur = diffDrawerRef.current;
+      if (!cur) return;
+      try {
+        localStorage.setItem(DIFF_SCOPE_STORAGE_KEY, 'all');
+      } catch {
+        // 保存できなくても切り替えはする
+      }
+      requestDiff(cur.sessionId, 'all', focus ? { ...focus, nonce: Date.now() } : null, null);
+    },
+    [requestDiff],
   );
   const handleChangeDiffRef = useCallback(
     (ref) => {
@@ -1719,9 +1755,14 @@ export default function App() {
   // 小窓のファイル名から開くプレビュー。メイン画面のプレビューで開くが、指摘の送信先と「開いてからの応答」は
   // 小窓のセッションにする（メイン画面で別のタブ・ホームを見ていても、小窓を開いたセッションへ送る）
   const handleOpenPreviewFromDiffPip = useCallback(
-    (path) => {
+    (path, opts) => {
       if (!pipDiffSessionId) return;
-      setPreviewData({ filePath: path, target: { sessionId: pipDiffSessionId, sessionKey: pipDiffSessionKey } });
+      setPreviewData({
+        filePath: path,
+        line: Number.isInteger(opts?.line) ? opts.line : null,
+        lineNonce: Date.now(),
+        target: { sessionId: pipDiffSessionId, sessionKey: pipDiffSessionKey },
+      });
       setDrawerOpenedAt((messagesBySessionRef.current[pipDiffSessionId] || []).length);
     },
     [pipDiffSessionId, pipDiffSessionKey],
@@ -1729,7 +1770,7 @@ export default function App() {
   const pipDiffRef = useRef(pipDiff);
   pipDiffRef.current = pipDiff;
   const requestPipDiff = useCallback(
-    (scope, ref = null, { refreshSources = false } = {}) => {
+    (scope, ref = null, { refreshSources = false, focus = null } = {}) => {
       if (!pipDiffSessionId) return;
       const r = normalizeDiffRef(scope, ref);
       const prevSources = pipDiffRef.current?.sources;
@@ -1741,6 +1782,7 @@ export default function App() {
               scope,
               requestedRef: r,
               ref: r,
+              focus,
               data: { loading: true },
               sources: needSources ? { loading: true } : prev.sources,
             }
@@ -1751,6 +1793,12 @@ export default function App() {
     },
     [pipDiffSessionId, send],
   );
+  // openDiffAt から小窓で飛ぶ口（openDiffAt は小窓の定義より前にあるので ref で渡す）。小窓が別のセッションなら false
+  pipJumpRef.current = (sessionId, scope, focus, ref) => {
+    if (!pipDiffSessionId || pipDiffSessionId !== sessionId) return false;
+    requestPipDiff(scope, ref, { focus });
+    return true;
+  };
   const handleChangePipDiffScope = useCallback(
     (scope) => {
       try {
@@ -1759,6 +1807,17 @@ export default function App() {
         // 保存できなくても切り替えはする
       }
       requestPipDiff(scope);
+    },
+    [requestPipDiff],
+  );
+  const handlePipDiffSearchAll = useCallback(
+    (focus) => {
+      try {
+        localStorage.setItem(DIFF_SCOPE_STORAGE_KEY, 'all');
+      } catch {
+        // 保存できなくても切り替えはする
+      }
+      requestPipDiff('all', null, { focus: focus ? { ...focus, nonce: Date.now() } : null });
     },
     [requestPipDiff],
   );
@@ -1784,8 +1843,13 @@ export default function App() {
     return pipSessionMessages.slice(pipPreview.openedAt).filter((m) => m.role === 'assistant');
   }, [pipPreview, pipSessionMessages]);
 
-  const handleOpenPreview = useCallback((path) => {
-    setPreviewData({ filePath: path });
+  // opts.line: 最初に見せる行（差分に無い行をプレビューで開くとき）。同じファイル・行でも押すたびに寄せ直すよう nonce を持たせる
+  const handleOpenPreview = useCallback((path, opts) => {
+    setPreviewData({
+      filePath: path,
+      line: Number.isInteger(opts?.line) ? opts.line : null,
+      lineNonce: Date.now(),
+    });
     setDrawerOpenedAt(currentMessageCount());
   }, []);
   const handlePreviewMarkdown = useCallback((markdown, title) => {
@@ -1956,382 +2020,389 @@ export default function App() {
     : 0;
 
   return (
-    <div className="app">
-      <TopBar
-        connected={connected}
-        currentSession={currentSessionForBar}
-        viewMode={viewMode}
-        onChangeViewMode={sessionUiVisible && !isReadonly ? setViewMode : null}
-        panels={headerPanels}
-        contextUsage={sessionUiVisible ? latestContextUsage(messages) : null}
-        rateLimits={rateLimits}
-        shareMode={shareMode}
-        onToggleShareMode={handleToggleShareMode}
-        hiddenCount={hiddenSensitiveCount}
-        notifySupported={'Notification' in window}
-        notifyEnabled={notifyEnabled}
-        onToggleNotify={handleToggleNotify}
-        appTheme={appTheme}
-        onToggleTheme={handleToggleTheme}
-      />
-
-      <div className="app-body">
-        <SessionTabs
-          sessions={orderedSessions}
-          groups={tabGroups}
-          groupActions={tabGroupActions}
-          groupColors={tabGroupState.colors}
-          activeSessionId={showHome ? null : activeSessionId}
-          homeActive={showHome}
-          attentionIds={attentionIds}
-          sensitiveIds={sensitiveIds}
-          starredIds={starredIds}
-          pipSessionId={pipPreview?.sessionId ?? pipDiff?.sessionId}
-          contextBySession={contextBySession}
+    <DiffJumpContext.Provider value={jumpToDiffLine}>
+      <div className="app">
+        <TopBar
+          connected={connected}
+          currentSession={currentSessionForBar}
+          viewMode={viewMode}
+          onChangeViewMode={sessionUiVisible && !isReadonly ? setViewMode : null}
+          panels={headerPanels}
+          contextUsage={sessionUiVisible ? latestContextUsage(messages) : null}
+          rateLimits={rateLimits}
           shareMode={shareMode}
-          onHome={() => setShowHome(true)}
-          onSelect={handleSwitchSession}
-          onKill={handleKillSession}
-          onRestart={handleRestartSession}
-          onRemovePast={handleRemovePastSession}
-          onDetachTmux={handleDetachTmux}
-          onTerminateTmux={handleTerminateTmuxTab}
-          onCloseReadonly={handleCloseReadonly}
-          onToggleStar={handleToggleStar}
-          onToggleSensitive={handleToggleSensitive}
-          onNew={() => setShowNewSession(true)}
-          onReorder={handleReorderTab}
+          onToggleShareMode={handleToggleShareMode}
+          hiddenCount={hiddenSensitiveCount}
+          notifySupported={'Notification' in window}
+          notifyEnabled={notifyEnabled}
+          onToggleNotify={handleToggleNotify}
+          appTheme={appTheme}
+          onToggleTheme={handleToggleTheme}
         />
 
-        <div className="app-workspace">
-          <div className="app-content">
-            {showFileExplorer && sessionUiVisible && (
-              <FileExplorer
-                cwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
-                onOpenPreview={handleOpenPreview}
-              />
-            )}
-            {/* 推論中の行・タスクのチップ列・選択肢カード・入力欄は本文の列（ファイラ・右パネルの間）の直下に置く。
-                ファイラや右パネルは画面の下端まで伸び、開くとその幅だけ本文の列が縮む */}
-            <main className={`app-main${showHome ? '' : ' with-bottom'}`}>
-              {showHome ? (
-                <HomeView
-                  dirColorOf={dirColorOfCwd}
-                  runningSessions={runningSessions}
-                  recentSessions={recentSessions}
-                  recentDays={recentDays}
-                  onChangeRecentDays={setRecentDays}
-                  includeHeadless={includeHeadless}
-                  onChangeIncludeHeadless={setIncludeHeadless}
-                  recentPeriod={recentPeriod}
-                  onChangeRecentPeriod={setRecentPeriod}
-                  starred={starredSessions}
-                  onToggleStar={handleToggleStar}
-                  sensitive={sensitiveSessions}
-                  shareMode={shareMode}
-                  onToggleSensitive={handleToggleSensitive}
-                  sessions={sessions}
-                  activeSessionId={activeSessionId}
-                  loading={runningSessions === null}
-                  recentLoading={recentSessions === null}
-                  heatmap={heatmap}
-                  heatmapLoading={heatmapLoading}
-                  onRefreshHeatmap={requestHeatmap}
-                  calendar={calendar}
-                  calendarLoading={calendarLoading}
-                  onRequestCalendar={requestCalendar}
-                  sessionTurns={sessionTurns}
-                  onRequestSessionTurns={requestSessionTurns}
-                  recentExchanges={recentExchanges}
-                  onRequestRecentExchanges={requestRecentExchanges}
-                  error={homeError}
-                  onDismissError={() => setHomeError(null)}
-                  notice={homeNotice}
-                  onDismissNotice={() => setHomeNotice(null)}
-                  restorable={restorable}
-                  onResumeRestorable={(ids) => {
-                    setHomeError(null);
-                    setHomeNotice(null);
-                    send({ type: 'resume_restorable_tabs', ...(ids ? { claudeSessionIds: ids } : {}) });
-                  }}
-                  onDismissRestorable={(ids) =>
-                    send({ type: 'dismiss_restorable_tabs', ...(ids ? { claudeSessionIds: ids } : {}) })
-                  }
-                  onRefresh={() => {
-                    setHomeError(null);
-                    setHomeNotice(null);
-                    send({ type: 'list_running_sessions' });
-                    send({
-                      type: 'list_recent_sessions',
-                      days: recentDays,
-                      starred: starredSessions,
-                      includeHeadless,
-                      ...(recentPeriod ? { period: { from: recentPeriod.from, to: recentPeriod.to } } : {}),
-                    });
-                    requestHeatmap();
-                  }}
-                  onSelectTab={handleSwitchSession}
-                  onAttachTmux={handleAttachTmux}
-                  onTerminateTmux={handleTerminateTmux}
-                  onOpenReadonly={handleOpenReadonly}
-                  onResume={handleResumeSession}
-                  onResumeInTmux={handleResumeInTmux}
+        <div className="app-body">
+          <SessionTabs
+            sessions={orderedSessions}
+            groups={tabGroups}
+            groupActions={tabGroupActions}
+            groupColors={tabGroupState.colors}
+            activeSessionId={showHome ? null : activeSessionId}
+            homeActive={showHome}
+            attentionIds={attentionIds}
+            sensitiveIds={sensitiveIds}
+            starredIds={starredIds}
+            pipSessionId={pipPreview?.sessionId ?? pipDiff?.sessionId}
+            contextBySession={contextBySession}
+            shareMode={shareMode}
+            onHome={() => setShowHome(true)}
+            onSelect={handleSwitchSession}
+            onKill={handleKillSession}
+            onRestart={handleRestartSession}
+            onRemovePast={handleRemovePastSession}
+            onDetachTmux={handleDetachTmux}
+            onTerminateTmux={handleTerminateTmuxTab}
+            onCloseReadonly={handleCloseReadonly}
+            onToggleStar={handleToggleStar}
+            onToggleSensitive={handleToggleSensitive}
+            onNew={() => setShowNewSession(true)}
+            onReorder={handleReorderTab}
+          />
+
+          <div className="app-workspace">
+            <div className="app-content">
+              {showFileExplorer && sessionUiVisible && (
+                <FileExplorer
+                  cwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
+                  onOpenPreview={handleOpenPreview}
                 />
-              ) : activeSessionId ? (
-                effectiveViewMode === 'raw' ? (
-                  <TerminalView sessionId={activeSessionId} on={on} onResize={handleResize} send={send} />
-                ) : (
-                  <ChatView
-                    messages={messages}
-                    sessionCwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
-                    onAddAnchoredReview={handleAddAnchoredReview}
-                    jumpToUuid={jumpToUuid}
-                    onJumpDone={handleJumpDone}
-                    onOpenPreview={handleOpenPreview}
-                    onPreviewMarkdown={handlePreviewMarkdown}
-                    onOpenFileReview={handleOpenFileReview}
-                    onPickMessageForReview={handlePickMessageForReview}
-                    pins={pins}
-                    onTogglePin={handleTogglePin}
-                    onOpenTaskNotice={handleOpenTaskNotice}
-                    sessionId={activeSessionId}
+              )}
+              {/* 推論中の行・タスクのチップ列・選択肢カード・入力欄は本文の列（ファイラ・右パネルの間）の直下に置く。
+                ファイラや右パネルは画面の下端まで伸び、開くとその幅だけ本文の列が縮む */}
+              <main className={`app-main${showHome ? '' : ' with-bottom'}`}>
+                {showHome ? (
+                  <HomeView
+                    dirColorOf={dirColorOfCwd}
+                    runningSessions={runningSessions}
+                    recentSessions={recentSessions}
+                    recentDays={recentDays}
+                    onChangeRecentDays={setRecentDays}
+                    includeHeadless={includeHeadless}
+                    onChangeIncludeHeadless={setIncludeHeadless}
+                    recentPeriod={recentPeriod}
+                    onChangeRecentPeriod={setRecentPeriod}
+                    starred={starredSessions}
+                    onToggleStar={handleToggleStar}
+                    sensitive={sensitiveSessions}
+                    shareMode={shareMode}
+                    onToggleSensitive={handleToggleSensitive}
+                    sessions={sessions}
+                    activeSessionId={activeSessionId}
+                    loading={runningSessions === null}
+                    recentLoading={recentSessions === null}
+                    heatmap={heatmap}
+                    heatmapLoading={heatmapLoading}
+                    onRefreshHeatmap={requestHeatmap}
+                    calendar={calendar}
+                    calendarLoading={calendarLoading}
+                    onRequestCalendar={requestCalendar}
+                    sessionTurns={sessionTurns}
+                    onRequestSessionTurns={requestSessionTurns}
+                    recentExchanges={recentExchanges}
+                    onRequestRecentExchanges={requestRecentExchanges}
+                    error={homeError}
+                    onDismissError={() => setHomeError(null)}
+                    notice={homeNotice}
+                    onDismissNotice={() => setHomeNotice(null)}
+                    restorable={restorable}
+                    onResumeRestorable={(ids) => {
+                      setHomeError(null);
+                      setHomeNotice(null);
+                      send({ type: 'resume_restorable_tabs', ...(ids ? { claudeSessionIds: ids } : {}) });
+                    }}
+                    onDismissRestorable={(ids) =>
+                      send({ type: 'dismiss_restorable_tabs', ...(ids ? { claudeSessionIds: ids } : {}) })
+                    }
+                    onRefresh={() => {
+                      setHomeError(null);
+                      setHomeNotice(null);
+                      send({ type: 'list_running_sessions' });
+                      send({
+                        type: 'list_recent_sessions',
+                        days: recentDays,
+                        starred: starredSessions,
+                        includeHeadless,
+                        ...(recentPeriod ? { period: { from: recentPeriod.from, to: recentPeriod.to } } : {}),
+                      });
+                      requestHeatmap();
+                    }}
+                    onSelectTab={handleSwitchSession}
+                    onAttachTmux={handleAttachTmux}
+                    onTerminateTmux={handleTerminateTmux}
+                    onOpenReadonly={handleOpenReadonly}
+                    onResume={handleResumeSession}
+                    onResumeInTmux={handleResumeInTmux}
                   />
-                )
-              ) : (
-                <div className="empty-state">
-                  <p>セッションがありません</p>
-                  <button className="btn btn-primary" onClick={() => setShowNewSession(true)}>
-                    新しいセッションを作成
-                  </button>
-                </div>
-              )}
-              {!showHome && (
-                <div className="app-main-bottom">
-                  {showWorking && (
-                    <WorkingIndicator
-                      status={activeSession?.status}
-                      waitingFor={activeSession?.waitingFor}
-                      messages={activeMessages}
-                      pendingSince={pendingTurns[activeSessionId]}
-                      runningAgents={runningAgentCount}
-                      runningShells={runningShellCount}
-                    />
-                  )}
-                  {sessionUiVisible && (
-                    <TaskStrip
-                      tasks={subagentTasks[activeSessionId] || EMPTY_TASKS}
-                      shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
-                      onOpenTask={handleOpenSubagentTask}
-                      onOpenShellTask={handleOpenShellTask}
-                    />
-                  )}
-
-                  {activeChoice && (
-                    <ChoicePrompt
-                      prompt={activeChoice.prompt}
-                      waitingFor={activeChoice.waitingFor}
-                      error={choiceError}
-                      onAnswer={handleAnswerChoice}
-                      onRefresh={handleRefreshChoice}
-                    />
-                  )}
-
-                  {isReadonly ? (
-                    <InputBar
-                      key={activeSessionId}
-                      draftKey={activeSessionId}
-                      onSubmit={handleSendToReadonly}
-                      disabled={!activeSession?.claudeSessionId}
-                      placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
-                      slashCommands={slashCommands[activeSessionId] || []}
-                      notice={readonlyNotice}
-                      onLocalCommand={handleLocalCommand}
-                      sessionId={activeSessionId}
-                      shareMode={shareMode}
-                    />
+                ) : activeSessionId ? (
+                  effectiveViewMode === 'raw' ? (
+                    <TerminalView sessionId={activeSessionId} on={on} onResize={handleResize} send={send} />
                   ) : (
-                    <InputBar
-                      key={activeSessionId}
-                      draftKey={activeSessionId}
-                      onSubmit={handleInput}
-                      disabled={!activeSessionId}
-                      slashCommands={slashCommands[activeSessionId] || []}
-                      onSendEscape={handleSendEscape}
-                      onLocalCommand={handleLocalCommand}
+                    <ChatView
+                      messages={messages}
+                      sessionCwd={sessions.find((s) => s.id === activeSessionId)?.cwd}
+                      onAddAnchoredReview={handleAddAnchoredReview}
+                      jumpToUuid={jumpToUuid}
+                      onJumpDone={handleJumpDone}
+                      onOpenPreview={handleOpenPreview}
+                      onPreviewMarkdown={handlePreviewMarkdown}
+                      onOpenFileReview={handleOpenFileReview}
+                      onPickMessageForReview={handlePickMessageForReview}
+                      pins={pins}
+                      onTogglePin={handleTogglePin}
+                      onOpenTaskNotice={handleOpenTaskNotice}
                       sessionId={activeSessionId}
-                      shareMode={shareMode}
                     />
-                  )}
-                </div>
-              )}
-            </main>
+                  )
+                ) : (
+                  <div className="empty-state">
+                    <p>セッションがありません</p>
+                    <button className="btn btn-primary" onClick={() => setShowNewSession(true)}>
+                      新しいセッションを作成
+                    </button>
+                  </div>
+                )}
+                {!showHome && (
+                  <div className="app-main-bottom">
+                    {showWorking && (
+                      <WorkingIndicator
+                        status={activeSession?.status}
+                        waitingFor={activeSession?.waitingFor}
+                        messages={activeMessages}
+                        pendingSince={pendingTurns[activeSessionId]}
+                        runningAgents={runningAgentCount}
+                        runningShells={runningShellCount}
+                      />
+                    )}
+                    {sessionUiVisible && (
+                      <TaskStrip
+                        tasks={subagentTasks[activeSessionId] || EMPTY_TASKS}
+                        shellTasks={shellTasks[activeSessionId] || EMPTY_TASKS}
+                        onOpenTask={handleOpenSubagentTask}
+                        onOpenShellTask={handleOpenShellTask}
+                      />
+                    )}
 
-            {showReviewPanel && chatPanelsVisible && (
-              <ReviewDraftPanel
-                items={reviewItems}
-                incomingAnchor={incomingAnchor}
-                readonly={isReadonly}
-                onSave={handleSaveReview}
-                onSubmit={handleSubmitReview}
-                onClose={() => setShowReviewPanel(false)}
-              />
-            )}
+                    {activeChoice && (
+                      <ChoicePrompt
+                        prompt={activeChoice.prompt}
+                        waitingFor={activeChoice.waitingFor}
+                        error={choiceError}
+                        onAnswer={handleAnswerChoice}
+                        onRefresh={handleRefreshChoice}
+                      />
+                    )}
+
+                    {isReadonly ? (
+                      <InputBar
+                        key={activeSessionId}
+                        draftKey={activeSessionId}
+                        onSubmit={handleSendToReadonly}
+                        disabled={!activeSession?.claudeSessionId}
+                        placeholder="このセッションに送信（claude-bridge → inbox 経由）..."
+                        slashCommands={slashCommands[activeSessionId] || []}
+                        notice={readonlyNotice}
+                        onLocalCommand={handleLocalCommand}
+                        sessionId={activeSessionId}
+                        shareMode={shareMode}
+                      />
+                    ) : (
+                      <InputBar
+                        key={activeSessionId}
+                        draftKey={activeSessionId}
+                        onSubmit={handleInput}
+                        disabled={!activeSessionId}
+                        slashCommands={slashCommands[activeSessionId] || []}
+                        onSendEscape={handleSendEscape}
+                        onLocalCommand={handleLocalCommand}
+                        sessionId={activeSessionId}
+                        shareMode={shareMode}
+                      />
+                    )}
+                  </div>
+                )}
+              </main>
+
+              {showReviewPanel && chatPanelsVisible && (
+                <ReviewDraftPanel
+                  items={reviewItems}
+                  incomingAnchor={incomingAnchor}
+                  readonly={isReadonly}
+                  onSave={handleSaveReview}
+                  onSubmit={handleSubmitReview}
+                  onClose={() => setShowReviewPanel(false)}
+                />
+              )}
+            </div>
           </div>
         </div>
+
+        {showNewSession && (
+          <NewSessionDialog
+            onClose={() => {
+              setShowNewSession(false);
+              setClaudeSessions(null);
+              setFoundClaudeSessions(null);
+              setTmuxPanes(null);
+              setNewSessionError(null);
+              setNewSessionDraft(null);
+            }}
+            onCreate={handleCreateSession}
+            onResume={handleResumeSession}
+            onResumeInTmux={handleResumeInTmux}
+            onFindClaudeSessions={handleFindClaudeSessions}
+            foundClaudeSessions={foundClaudeSessions}
+            onAttachTmux={handleAttachTmux}
+            onOpenReadonly={handleOpenReadonly}
+            onRequestClaudeSessions={handleRequestClaudeSessions}
+            onRequestTmuxPanes={handleRequestTmuxPanes}
+            claudeSessions={claudeSessions}
+            tmuxPanes={tmuxPanes}
+            recentDirs={recentDirs}
+            onRequestRecentDirs={handleRequestRecentDirs}
+            error={newSessionError}
+            initialValues={newSessionError ? newSessionDraft : null}
+          />
+        )}
+
+        {subagentDrawer && (
+          <SubagentDrawer
+            agentId={subagentDrawer.agentId}
+            description={subagentDrawer.description}
+            agentType={subagentDrawer.agentType}
+            status={subagentDrawer.status}
+            messages={subagentDrawer.messages}
+            onRequestTranscript={handleRequestTranscript}
+            onOpenPreview={handleOpenPreview}
+            onClose={() => setSubagentDrawer(null)}
+          />
+        )}
+
+        {showRefDrawer && (
+          <RefDrawer
+            links={links}
+            files={sessionFiles}
+            pins={pins}
+            messages={activeMessages}
+            cwd={activeSession?.cwd}
+            onOpenPreview={handleOpenPreview}
+            onJumpToMessage={handleJumpFromRefs}
+            onUnpin={handleUnpin}
+            onClose={handleCloseRefDrawer}
+          />
+        )}
+
+        {shellDrawer && (
+          <ShellOutputDrawer
+            taskId={shellDrawer.taskId}
+            label={shellDrawer.label}
+            status={shellDrawer.status}
+            exitCode={shellDrawer.exitCode}
+            text={shellDrawer.text}
+            truncated={shellDrawer.truncated}
+            onRequestOutput={handleRequestShellOutput}
+            onClose={() => setShellDrawer(null)}
+          />
+        )}
+
+        {diffDrawer && (
+          <DiffDrawer
+            sessionKey={diffSessionKey}
+            scope={diffDrawer.scope}
+            diffRef={diffDrawer.ref}
+            sources={diffDrawer.sources}
+            data={diffDrawer.data}
+            focusTarget={diffDrawer.focus}
+            onSubmitComments={handleSubmitDiffComments}
+            onChangeScope={handleChangeDiffScope}
+            onChangeRef={handleChangeDiffRef}
+            onSearchAll={handleDiffSearchAll}
+            // 取り直しは「要求した ref」で送る。最新を見ている（null）なら最新を取り直し、‹ › や select で
+            // 選んだものならそれを保つ（resolvedRef で埋めた ref を送ると、最新のつもりが特定のコミットに固定される）
+            onRefresh={() =>
+              requestDiff(diffDrawer.sessionId, diffDrawer.scope, null, diffDrawer.requestedRef, {
+                refreshSources: true,
+              })
+            }
+            onOpenPreview={(path, opts) => {
+              setDiffDrawer(null);
+              handleOpenPreview(path, opts);
+            }}
+            onClose={() => setDiffDrawer(null)}
+            onOpenPip={isDocumentPipSupported() ? handleOpenDiffPip : undefined}
+          />
+        )}
+
+        {pipDiff && (
+          <DiffPip
+            key={pipDiff.id}
+            pipWindow={pipDiff.pipWindow}
+            sessionKey={pipDiffSessionKey}
+            scope={pipDiff.scope}
+            diffRef={pipDiff.ref}
+            focusTarget={pipDiff.focus}
+            sources={pipDiff.sources}
+            data={pipDiff.data}
+            onSubmitComments={handleSubmitPipDiffComments}
+            onChangeScope={handleChangePipDiffScope}
+            onChangeRef={handleChangePipDiffRef}
+            onSearchAll={handlePipDiffSearchAll}
+            onRefresh={() => requestPipDiff(pipDiff.scope, pipDiff.requestedRef, { refreshSources: true })}
+            // 小窓のファイル名はメイン画面のプレビューで開く（小窓は残す。送信先は小窓のセッション）
+            onOpenPreview={handleOpenPreviewFromDiffPip}
+            onClose={handleCloseDiffPip}
+          />
+        )}
+
+        {previewData && (
+          <PreviewDrawer
+            filePath={previewData.filePath}
+            markdown={previewData.markdown}
+            title={previewData.title}
+            reviewMode={previewData.reviewMode}
+            initialLine={previewData.line}
+            initialLineNonce={previewData.lineNonce}
+            onClose={() => {
+              setPreviewData(null);
+              setDrawerOpenedAt(null);
+            }}
+            onReviewSubmit={(target, items) =>
+              previewData.target
+                ? submitFileReview(previewData.target.sessionId, previewData.target.sessionKey, target, items)
+                : submitFileReview(activeSessionId, sessionKey, target, items)
+            }
+            responses={
+              drawerOpenedAt != null
+                ? (previewData.target ? messagesBySession[previewData.target.sessionId] || [] : messages)
+                    .slice(drawerOpenedAt)
+                    .filter((m) => m.role === 'assistant')
+                : []
+            }
+            onOpenPip={isDocumentPipSupported() ? handleOpenPip : undefined}
+          />
+        )}
+
+        {pipPreview && (
+          <PreviewPip
+            key={pipPreview.id}
+            pipWindow={pipPreview.pipWindow}
+            filePath={pipPreview.filePath}
+            markdown={pipPreview.markdown}
+            title={pipPreview.title}
+            onClose={handleClosePip}
+            onReviewSubmit={handlePipReviewSubmit}
+            responses={pipResponses}
+          />
+        )}
       </div>
-
-      {showNewSession && (
-        <NewSessionDialog
-          onClose={() => {
-            setShowNewSession(false);
-            setClaudeSessions(null);
-            setFoundClaudeSessions(null);
-            setTmuxPanes(null);
-            setNewSessionError(null);
-            setNewSessionDraft(null);
-          }}
-          onCreate={handleCreateSession}
-          onResume={handleResumeSession}
-          onResumeInTmux={handleResumeInTmux}
-          onFindClaudeSessions={handleFindClaudeSessions}
-          foundClaudeSessions={foundClaudeSessions}
-          onAttachTmux={handleAttachTmux}
-          onOpenReadonly={handleOpenReadonly}
-          onRequestClaudeSessions={handleRequestClaudeSessions}
-          onRequestTmuxPanes={handleRequestTmuxPanes}
-          claudeSessions={claudeSessions}
-          tmuxPanes={tmuxPanes}
-          recentDirs={recentDirs}
-          onRequestRecentDirs={handleRequestRecentDirs}
-          error={newSessionError}
-          initialValues={newSessionError ? newSessionDraft : null}
-        />
-      )}
-
-      {subagentDrawer && (
-        <SubagentDrawer
-          agentId={subagentDrawer.agentId}
-          description={subagentDrawer.description}
-          agentType={subagentDrawer.agentType}
-          status={subagentDrawer.status}
-          messages={subagentDrawer.messages}
-          onRequestTranscript={handleRequestTranscript}
-          onOpenPreview={handleOpenPreview}
-          onClose={() => setSubagentDrawer(null)}
-        />
-      )}
-
-      {showRefDrawer && (
-        <RefDrawer
-          links={links}
-          files={sessionFiles}
-          pins={pins}
-          messages={activeMessages}
-          cwd={activeSession?.cwd}
-          onOpenPreview={handleOpenPreview}
-          onJumpToMessage={handleJumpFromRefs}
-          onUnpin={handleUnpin}
-          onClose={handleCloseRefDrawer}
-        />
-      )}
-
-      {shellDrawer && (
-        <ShellOutputDrawer
-          taskId={shellDrawer.taskId}
-          label={shellDrawer.label}
-          status={shellDrawer.status}
-          exitCode={shellDrawer.exitCode}
-          text={shellDrawer.text}
-          truncated={shellDrawer.truncated}
-          onRequestOutput={handleRequestShellOutput}
-          onClose={() => setShellDrawer(null)}
-        />
-      )}
-
-      {diffDrawer && (
-        <DiffDrawer
-          sessionKey={diffSessionKey}
-          scope={diffDrawer.scope}
-          diffRef={diffDrawer.ref}
-          sources={diffDrawer.sources}
-          data={diffDrawer.data}
-          focusTarget={diffDrawer.focus}
-          onSubmitComments={handleSubmitDiffComments}
-          onChangeScope={handleChangeDiffScope}
-          onChangeRef={handleChangeDiffRef}
-          // 取り直しは「要求した ref」で送る。最新を見ている（null）なら最新を取り直し、‹ › や select で
-          // 選んだものならそれを保つ（resolvedRef で埋めた ref を送ると、最新のつもりが特定のコミットに固定される）
-          onRefresh={() =>
-            requestDiff(diffDrawer.sessionId, diffDrawer.scope, null, diffDrawer.requestedRef, {
-              refreshSources: true,
-            })
-          }
-          onOpenPreview={(path) => {
-            setDiffDrawer(null);
-            handleOpenPreview(path);
-          }}
-          onClose={() => setDiffDrawer(null)}
-          onOpenPip={isDocumentPipSupported() ? handleOpenDiffPip : undefined}
-        />
-      )}
-
-      {pipDiff && (
-        <DiffPip
-          key={pipDiff.id}
-          pipWindow={pipDiff.pipWindow}
-          sessionKey={pipDiffSessionKey}
-          scope={pipDiff.scope}
-          diffRef={pipDiff.ref}
-          sources={pipDiff.sources}
-          data={pipDiff.data}
-          onSubmitComments={handleSubmitPipDiffComments}
-          onChangeScope={handleChangePipDiffScope}
-          onChangeRef={handleChangePipDiffRef}
-          onRefresh={() => requestPipDiff(pipDiff.scope, pipDiff.requestedRef, { refreshSources: true })}
-          // 小窓のファイル名はメイン画面のプレビューで開く（小窓は残す。送信先は小窓のセッション）
-          onOpenPreview={handleOpenPreviewFromDiffPip}
-          onClose={handleCloseDiffPip}
-        />
-      )}
-
-      {previewData && (
-        <PreviewDrawer
-          filePath={previewData.filePath}
-          markdown={previewData.markdown}
-          title={previewData.title}
-          reviewMode={previewData.reviewMode}
-          onClose={() => {
-            setPreviewData(null);
-            setDrawerOpenedAt(null);
-          }}
-          onReviewSubmit={(target, items) =>
-            previewData.target
-              ? submitFileReview(previewData.target.sessionId, previewData.target.sessionKey, target, items)
-              : submitFileReview(activeSessionId, sessionKey, target, items)
-          }
-          responses={
-            drawerOpenedAt != null
-              ? (previewData.target ? messagesBySession[previewData.target.sessionId] || [] : messages)
-                  .slice(drawerOpenedAt)
-                  .filter((m) => m.role === 'assistant')
-              : []
-          }
-          onOpenPip={isDocumentPipSupported() ? handleOpenPip : undefined}
-        />
-      )}
-
-      {pipPreview && (
-        <PreviewPip
-          key={pipPreview.id}
-          pipWindow={pipPreview.pipWindow}
-          filePath={pipPreview.filePath}
-          markdown={pipPreview.markdown}
-          title={pipPreview.title}
-          onClose={handleClosePip}
-          onReviewSubmit={handlePipReviewSubmit}
-          responses={pipResponses}
-        />
-      )}
-    </div>
+    </DiffJumpContext.Provider>
   );
 }

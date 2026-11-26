@@ -881,6 +881,13 @@ body.light-mode .drawer-iframe,
   user-select: none;
 }
 
+/* 最初に見せる行（返答の `path:行` から開いたとき）。行を探しやすいよう少しの間だけ薄く塗る
+   （今の操作対象ではないのでピンクにしない） */
+.line-initial {
+  background: color-mix(in srgb, var(--warning) 22%, transparent);
+  border-radius: 3px;
+}
+
 /* 行ピックで今指している行/ブロック（今の操作対象＝ピンクの outline と薄い下地） */
 .line-pick-target {
   background: color-mix(in srgb, var(--accent) 12%, transparent);

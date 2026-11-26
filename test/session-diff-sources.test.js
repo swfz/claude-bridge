@@ -460,6 +460,7 @@ describe('readTurnDiff / listDiffSources', () => {
     assert.match(f.patch, /-two\n\+TWO\n/);
     assert.equal(r.turn.index, 1);
     assert.equal(r.turn.prompt, '最初の指示');
+    assert.equal(r.cwdPrefix, '');
   });
 
   it('ターン 3: 再生できないファイルは編集ごとの差分、サブエージェントの編集も時刻で載る', async () => {
@@ -571,6 +572,7 @@ describe('readCommitDiff', () => {
   it('普通のコミット', async () => {
     const r = await readCommitDiff({ cwd: repo, hash: editHash });
     assert.equal(r.merge, false);
+    assert.equal(r.cwdPrefix, '');
     assert.deepEqual(
       r.files.map((f) => [f.path, f.additions, f.deletions]),
       [['a.txt', 1, 1]],
