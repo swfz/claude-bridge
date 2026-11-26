@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExterna
 import { createPortal } from 'react-dom';
 import {
   TbChevronDown,
+  TbChevronLeft,
   TbChevronRight,
   TbLayoutSidebarLeftCollapse,
   TbLayoutSidebarLeftExpand,
@@ -16,7 +17,14 @@ import { EXT_TO_LANG, highlightCode } from '../highlight.js';
 import {
   DIFF_SCOPES,
   absolutePath,
+  adjacentRef,
+  anchorId,
+  diffSourceKey,
+  diffSourceLabel,
+  diffSourceOptions,
   diffStatusLabel,
+  isNoChangeStatus,
+  isRefScope,
   formatDiffComment,
   isCommentableRow,
   lineLabel,
@@ -50,7 +58,7 @@ import {
   subscribeReviewed,
   toggleReviewed,
 } from '../utils/diffReviewed.js';
-import { diffCommentKey, diffCommentStore, isUnsent } from '../utils/diffComments.js';
+import { commentSource, diffCommentKey, diffCommentStore, groupByPath, isUnsent } from '../utils/diffComments.js';
 import { halfScreenJump } from '../utils/pickJump.js';
 import {
   halfPageScrollKey,
@@ -97,8 +105,11 @@ function showsRows(file, rows) {
 }
 
 function isNoChange(file) {
-  return file.status === 'committed' || file.status === 'missing';
+  return isNoChangeStatus(file.status);
 }
+
+// ヘッダの題（範囲ごと）
+const TITLES = { commit: 'コミット', turn: 'ターン' };
 
 // 拡張子から hljs の言語を引き、色付け関数にする（無ければ null）
 function highlighterFor(path) {
@@ -113,7 +124,11 @@ function isTextEntry(el) {
 
 // 入力欄の /diff で開く差分ドロワー。Claude Code の /diff は TUI 内のモーダルで
 // ブラウザからは見えないので、ブリッジがサーバーで git diff を取って出す。
-// data: { loading, files, truncated, error, root, outside } | null
+// data: { loading, files, truncated, error, root, outside, ref, resolvedRef, merge?, turn? } | null
+// scope が commit / turn のときは diffRef（コミットのハッシュ／ターン番号）で対象を選ぶ。候補は sources
+// （diff_sources: {commits, turns, recent} | {loading}）で、選び直しは onChangeRef。
+// 指摘は出どころ（作業ツリー 'wt'／'commit:<hash>'／'turn:<番号>'）ごとに分け、今見ている出どころのものだけを
+// 行・ファイル見出しに出す。別の出どころのものは本文の先頭に「ほかの差分への指摘」としてまとめ、送信の対象には含める
 //
 // 行番号（ガター）のクリック、またはキーボードの行カーソル（↑↓・Enter）でその行へ指摘を書く。
 // 書きかけは utils/diffComments.js の store（モジュールレベル）に置き、閉じても取り直しても残す。
@@ -125,9 +140,12 @@ function isTextEntry(el) {
 export default function DiffDrawer({
   sessionKey,
   scope,
+  diffRef = null,
+  sources = null,
   data,
   focusTarget,
   onChangeScope,
+  onChangeRef,
   onRefresh,
   onOpenPreview,
   onSubmitComments,
@@ -171,9 +189,31 @@ export default function DiffDrawer({
   const files = useMemo(() => data?.files || EMPTY, [data]);
   const ready = !!data && !data.loading;
   const rowsByPath = useMemo(() => new Map(files.map((f) => [f.path, parseDiffRows(f.patch)])), [files]);
+  const perEditPaths = useMemo(() => new Set(files.filter((f) => f.perEdit).map((f) => f.path)), [files]);
   const summary = summarizeDiff(files);
+  // 送信の対象（ヘッダの件数・一括送信）は出どころを問わない
   const unsent = entry.list.filter(isUnsent);
   const sending = entry.list.some((c) => c.sendingId);
+
+  // 今見ている出どころ。commit / turn で ref がまだ分からない（最新を読み込み中）間は null
+  const shownRef = data?.resolvedRef ?? diffRef;
+  const source = diffSourceKey(scope, shownRef);
+  const sourceList = useMemo(() => entry.list.filter((c) => commentSource(c) === source), [entry.list, source]);
+  // パスごとの配列は中身が変わらなければ前の参照を保つ（DiffFile の memo を崩さない）
+  const byPathRef = useRef({});
+  const byPath = useMemo(() => {
+    const next = groupByPath(sourceList, byPathRef.current);
+    byPathRef.current = next;
+    return next;
+  }, [sourceList]);
+  // 別の出どころ（ほかのコミット・ターン・作業ツリー）の未送信・送信中の指摘。ref が決まる前（最新を読み込み中で
+  // source が null）は出さない（出すと全部が一瞬「ほかの差分」に並び、読み込み後に消えて本文が揺れる）
+  const others = useMemo(
+    () =>
+      source == null ? EMPTY : entry.list.filter((c) => commentSource(c) !== source && (isUnsent(c) || c.sendingId)),
+    [entry.list, source],
+  );
+  const refOptions = useMemo(() => diffSourceOptions(scope, sources), [scope, sources]);
 
   const reviewedSet = useMemo(() => new Set(reviewed), [reviewed]);
   const isReviewed = useCallback(
@@ -187,10 +227,10 @@ export default function DiffDrawer({
     (file) => {
       if (isNoChange(file)) return false;
       if (openMap[file.path] != null) return openMap[file.path];
-      const hasComments = (entry.byPath[file.path] || EMPTY).length > 0;
+      const hasComments = (byPath[file.path] || EMPTY).length > 0;
       return !isReviewed(file) && (!shouldCollapseFile(file) || hasComments);
     },
-    [openMap, entry.byPath, isReviewed],
+    [openMap, byPath, isReviewed],
   );
 
   const listOpen = listPref != null ? listPref === '1' : drawerWidth >= FILE_LIST_MIN_DRAWER;
@@ -202,7 +242,7 @@ export default function DiffDrawer({
       buildNavList(
         files
           .filter((f) => isOpen(f) && showsRows(f, rowsByPath.get(f.path)))
-          .map((f) => ({ path: f.path, rows: rowsByPath.get(f.path) })),
+          .map((f) => ({ path: f.path, rows: rowsByPath.get(f.path), byHunk: !!f.perEdit })),
       ),
     [files, isOpen, rowsByPath],
   );
@@ -213,6 +253,24 @@ export default function DiffDrawer({
   useEffect(() => {
     if (focusTarget) setJump(focusTarget);
   }, [focusTarget]);
+
+  // 出どころ（範囲・コミット・ターン）が変わったら、行カーソル・範囲・開閉・開いている指摘欄を捨てる
+  // （{path, side, line} は別のコミットでは別の行を指す）。書きかけの空の指摘欄は消す
+  const prevSourceRef = useRef(source);
+  useEffect(() => {
+    const prev = prevSourceRef.current;
+    prevSourceRef.current = source;
+    if (prev === source) return;
+    setCursor(null);
+    setSelAnchor(null);
+    setOpenMap({});
+    const key = activeKeyRef.current;
+    if (key) {
+      const c = diffCommentStore.snapshot(sessionKey).list.find((x) => x.key === key);
+      if (c && !c.text.trim()) diffCommentStore.remove(sessionKey, key);
+      setActiveKey(null);
+    }
+  }, [source, sessionKey]);
 
   // 開いたら本文にフォーカスを置く（送信欄に残ったままだと Ctrl+D / U が効かず、打鍵が裏の送信欄に入る）
   useEffect(() => {
@@ -284,7 +342,7 @@ export default function DiffDrawer({
   const rowElement = useCallback((c) => {
     if (!c) return null;
     const fileEl = bodyRef.current?.querySelector(`[data-file-path="${CSS.escape(c.path)}"]`);
-    return fileEl?.querySelector(`[data-anchor="${c.side}:${c.line}"]`) || null;
+    return fileEl?.querySelector(`[data-anchor="${anchorId(c.side, c.line, c.hunk)}"]`) || null;
   }, []);
 
   // カーソルが動いたら見える位置へ（見えていればスクロールしない）
@@ -298,10 +356,11 @@ export default function DiffDrawer({
     const list = diffCommentStore.snapshot(sessionKey).list.filter(isUnsent);
     if (list.length === 0 || !onSubmitComments) return;
     const items = list.map((c) => {
-      const rows = rowsByPath.get(c.path);
+      const rows = commentSource(c) === source ? rowsByPath.get(c.path) : null;
       // 「取り直す前の行番号」と添えるのは、そのファイルの行が今の差分にあって、同じ本文の行が引けないときだけ。
       // ファイルごと今の差分に無い（範囲外・コミット済み）・中身を出していない（バイナリ・大きすぎる）ものは
-      // 確かめようがないので、書いたときの行番号のまま注記を付けない
+      // 確かめようがないので、書いたときの行番号のまま注記を付けない。別の出どころ（今は見ていないコミット・
+      // ターン・作業ツリー）の指摘も、今の差分とは比べられないので付けない
       const stale = !!rows && rows.length > 0 && !locateComment(rows, c);
       return { text: formatDiffComment({ ...c, stale }) };
     });
@@ -311,17 +370,17 @@ export default function DiffDrawer({
     );
     setActiveKey(null);
     bodyRef.current?.focus({ preventScroll: true });
-  }, [ready, sessionKey, rowsByPath, onSubmitComments]);
+  }, [ready, sessionKey, rowsByPath, source, onSubmitComments]);
 
   // 指摘欄を開く。同じ行（範囲）の指摘が既にあればそれを開く。replaceKey を渡すとその指摘の範囲を変える（本文は引き継ぐ）
   const openComment = useCallback(
     (path, range, replaceKey = null) => {
       const rows = rowsByPath.get(path);
       const file = files.find((f) => f.path === path);
-      if (!rows || !file || !range) return;
+      if (!rows || !file || !range || !source) return;
       const list = diffCommentStore.snapshot(sessionKey).list;
       const current = activeKeyRef.current ? list.find((c) => c.key === activeKeyRef.current) : null;
-      const key = diffCommentKey({ sessionKey, path, ...range });
+      const key = diffCommentKey({ sessionKey, source, path, ...range });
       if (list.some((c) => c.key === key)) {
         if (current && current.key !== key && !current.text.trim()) diffCommentStore.remove(sessionKey, current.key);
         setActiveKey(key);
@@ -331,6 +390,9 @@ export default function DiffDrawer({
         key,
         path,
         oldPath: file.oldPath || null,
+        source,
+        // 編集ごとの差分（まとめられない）のファイルは行番号が「その編集の時点」なので送信本文で断る
+        ...(file.perEdit ? { perEdit: true } : {}),
         ...range,
         quote: quoteRows(rows, range),
         text: '',
@@ -345,7 +407,7 @@ export default function DiffDrawer({
       }
       setActiveKey(key);
     },
-    [rowsByPath, files, sessionKey],
+    [rowsByPath, files, sessionKey, source],
   );
 
   const handleGutter = useCallback(
@@ -353,23 +415,31 @@ export default function DiffDrawer({
       const rows = rowsByPath.get(path);
       const clicked = rowAnchor(rows?.[idx]);
       if (!clicked) return;
-      setCursor({ path, side: clicked.side, line: clicked.line });
+      const byHunk = perEditPaths.has(path);
+      setCursor({ path, side: clicked.side, line: clicked.line, ...(byHunk ? { hunk: rows[idx].hunk } : {}) });
       setSelAnchor(null);
       const list = diffCommentStore.snapshot(sessionKey).list;
       const current = activeKeyRef.current ? list.find((c) => c.key === activeKeyRef.current) : null;
       // Shift+クリックは「今書いている指摘」の先頭行から押した行までに範囲を変える。
       // 同じファイル・同じ側で途切れないときだけで、それ以外（指摘欄が開いていない・側が違う・途切れる・
       // 対象行が見つからない指摘）は普通のクリックと同じく押した 1 行の指摘にする
-      if (shift && current && current.path === path && !current.sendingId && current.side === clicked.side) {
+      if (
+        shift &&
+        current &&
+        commentSource(current) === source &&
+        current.path === path &&
+        !current.sendingId &&
+        current.side === clicked.side
+      ) {
         const loc = locateComment(rows, current);
         if (loc) {
-          openComment(path, rangeFromRows(rows, loc.startIdx, idx), current.key);
+          openComment(path, rangeFromRows(rows, loc.startIdx, idx, byHunk), current.key);
           return;
         }
       }
-      openComment(path, rangeFromRows(rows, null, idx));
+      openComment(path, rangeFromRows(rows, null, idx, byHunk));
     },
-    [rowsByPath, sessionKey, openComment],
+    [rowsByPath, sessionKey, openComment, perEditPaths, source],
   );
 
   const handleChangeText = useCallback((key, text) => diffCommentStore.update(sessionKey, key, { text }), [sessionKey]);
@@ -522,13 +592,18 @@ export default function DiffDrawer({
     return () => hostDoc.removeEventListener('keydown', handler);
   }, [hostDoc]);
 
-  // 未送信の指摘を順に見せる（ヘッダの件数のクリック）
+  // 未送信の指摘を順に見せる（ヘッダの件数のクリック）。今見ている出どころのものだけを順に見せ、
+  // 無ければ「ほかの差分への指摘」へスクロールする
   const jumpSeq = useRef(0);
   const handleJumpNext = useCallback(() => {
-    if (unsent.length === 0) return;
-    const c = unsent[jumpSeq.current++ % unsent.length];
-    setJump({ path: c.path, side: c.side, line: c.end, nonce: Date.now() });
-  }, [unsent]);
+    const here = unsent.filter((c) => commentSource(c) === source);
+    if (here.length === 0) {
+      bodyRef.current?.querySelector('[data-diff-others]')?.scrollIntoView({ block: 'start' });
+      return;
+    }
+    const c = here[jumpSeq.current++ % here.length];
+    setJump({ path: c.path, side: c.side, line: c.end, hunk: c.hunk ?? null, nonce: Date.now() });
+  }, [unsent, source]);
   const handleJumpDone = useCallback(() => setJump(null), []);
   const handleSetOpen = useCallback((path, open) => setOpenMap((m) => ({ ...m, [path]: open })), []);
 
@@ -570,7 +645,21 @@ export default function DiffDrawer({
 
   const presentPaths = useMemo(() => new Set(files.map((f) => f.path)), [files]);
   // 今の差分に無いファイルへの指摘（範囲を「このセッション」に切り替えた・コミット済みになった等）
-  const absent = ready ? entry.list.filter((c) => !presentPaths.has(c.path)) : EMPTY;
+  const absent = ready ? sourceList.filter((c) => !presentPaths.has(c.path)) : EMPTY;
+  const refScope = isRefScope(scope);
+  const sourcesLoading = refScope && (!sources || sources.loading);
+  const handleSelectRef = (value) => {
+    onChangeRef?.(value);
+    // select にフォーカスが残ると ↑↓ が行カーソルではなく対象の切り替えになる
+    focusBody();
+  };
+  const handleStepRef = (direction) => {
+    const next = adjacentRef(refOptions, shownRef, direction);
+    if (next != null) onChangeRef?.(next);
+    // 端に着くとボタンが disabled になりフォーカスが document.body へ落ちる。残っても続く Enter が送りを
+    // 押し直すので、どちらにしても本文へ戻す
+    focusBody();
+  };
   const splitTooNarrow = viewPref === 'split' && mode === 'unified' && bodyWidth > 0;
 
   // 小窓では overlay（暗幕・クリックで閉じる）を持たず窓いっぱいに広げる。.diff-drawer-overlay を付けないのは、
@@ -597,7 +686,21 @@ export default function DiffDrawer({
             )}
           </button>
           <div className="diff-drawer-title-area">
-            <span className="diff-drawer-title">未コミットの差分</span>
+            {/* 題の行は高さを固定し、コミット・ターンの選択を出し入れしても右側の要素・ヘッダの高さを動かさない */}
+            <div className="diff-drawer-title-row">
+              <span className="diff-drawer-title">{TITLES[scope] || '未コミットの差分'}</span>
+              {refScope && (
+                <RefPicker
+                  scope={scope}
+                  options={refOptions}
+                  value={shownRef}
+                  loading={sourcesLoading}
+                  error={sources?.error}
+                  onSelect={handleSelectRef}
+                  onStep={handleStepRef}
+                />
+              )}
+            </div>
             <div className="diff-drawer-meta">
               {!data?.loading && !data?.error && (
                 <span className="diff-drawer-summary">
@@ -707,7 +810,7 @@ export default function DiffDrawer({
           {listOpen && (
             <FileList
               files={ready ? files : EMPTY}
-              byPath={entry.byPath}
+              byPath={byPath}
               currentPath={currentPath}
               isReviewed={isReviewed}
               reviewedCount={reviewedCount}
@@ -723,6 +826,29 @@ export default function DiffDrawer({
           >
             {data?.loading && <div className="diff-drawer-empty">読み込み中...</div>}
             {data?.error && <div className="diff-drawer-error">{data.error}</div>}
+            {others.length > 0 && (
+              <div className="diff-orphans diff-others" data-diff-others="">
+                <div className="diff-drawer-note">ほかの差分への指摘（送信の対象に含みます）</div>
+                {others.map((c) => (
+                  <CommentBox
+                    key={c.key}
+                    comment={c}
+                    showPath
+                    sourceLabel={diffSourceLabel(commentSource(c)) || '作業ツリー'}
+                    active={c.key === activeKey}
+                    {...commentHandlers}
+                  />
+                ))}
+              </div>
+            )}
+            {ready && data.merge && (
+              <div className="diff-drawer-note">マージコミットのため、1 つ目の親との差分を出しています</div>
+            )}
+            {ready && scope === 'commit' && sources?.recent && (
+              <div className="diff-drawer-note">
+                このセッションのコミットが見つからないため、リポジトリの直近のコミットから選べます
+              </div>
+            )}
             {absent.length > 0 && (
               <div className="diff-orphans" data-diff-orphans="">
                 <div className="diff-drawer-note">今の差分に無いファイルへの指摘</div>
@@ -739,9 +865,7 @@ export default function DiffDrawer({
               </div>
             )}
             {ready && !data.error && files.length === 0 && (
-              <div className="diff-drawer-empty">
-                {scope === 'session' ? 'このセッションで編集したファイルはありません' : '未コミットの変更はありません'}
-              </div>
+              <div className="diff-drawer-empty">{emptyMessage(scope, data)}</div>
             )}
             {ready && data.outside > 0 && (
               <div className="diff-drawer-note">リポジトリ外のファイル {data.outside} 件は対象外です</div>
@@ -749,16 +873,16 @@ export default function DiffDrawer({
             {ready &&
               files.map((file) => (
                 <DiffFile
-                  key={`${scope}:${file.path}`}
+                  key={`${source}:${file.path}`}
                   file={file}
                   rows={rowsByPath.get(file.path)}
                   root={data.root}
                   mode={mode}
                   open={isOpen(file)}
                   reviewed={isReviewed(file)}
-                  comments={entry.byPath[file.path] || EMPTY}
-                  activeKey={activeKey && entry.byPath[file.path]?.some((c) => c.key === activeKey) ? activeKey : null}
-                  cursorAnchor={cursor?.path === file.path ? `${cursor.side}:${cursor.line}` : null}
+                  comments={byPath[file.path] || EMPTY}
+                  activeKey={activeKey && byPath[file.path]?.some((c) => c.key === activeKey) ? activeKey : null}
+                  cursorAnchor={cursor?.path === file.path ? anchorId(cursor.side, cursor.line, cursor.hunk) : null}
                   selection={selection && nav[cursorIdx]?.path === file.path ? selection : null}
                   jump={jump?.path === file.path ? jump : null}
                   onJumpDone={handleJumpDone}
@@ -778,6 +902,61 @@ export default function DiffDrawer({
     </div>
   );
   return pipWindow ? createPortal(content, hostDoc.body) : content;
+}
+
+function emptyMessage(scope, data) {
+  if (scope === 'session') return 'このセッションで編集したファイルはありません';
+  if (scope === 'commit') return data.resolvedRef ? 'このコミットには差分がありません' : 'コミットがありません';
+  if (scope === 'turn') {
+    return data.resolvedRef
+      ? 'このターンにリポジトリ内のファイルの編集はありません'
+      : 'このセッションで編集したターンはありません';
+  }
+  return '未コミットの変更はありません';
+}
+
+// コミット・ターンの選択（‹ 古い / select / 新しい ›）。候補は新しい順
+function RefPicker({ scope, options, value, loading, error, onSelect, onStep }) {
+  const current = value == null ? '' : String(value);
+  const idx = options.findIndex((o) => o.value === current);
+  const noun = scope === 'commit' ? 'コミット' : 'ターン';
+  return (
+    <div className="diff-ref" role="group" aria-label={`${noun}を選ぶ`}>
+      <button
+        className="diff-ref-step"
+        onClick={() => onStep('older')}
+        disabled={idx < 0 || idx >= options.length - 1}
+        title={`ひとつ前の${noun}`}
+        aria-label={`ひとつ前の${noun}`}
+      >
+        <TbChevronLeft aria-hidden="true" />
+      </button>
+      <select
+        className="diff-ref-select"
+        value={idx < 0 ? '' : current}
+        onChange={(e) => onSelect(e.target.value)}
+        disabled={loading || options.length === 0}
+        title={error || (idx >= 0 ? options[idx].label : '')}
+        aria-label={noun}
+      >
+        {idx < 0 && <option value="">{loading ? '読み込み中…' : error ? '読み込めませんでした' : '候補なし'}</option>}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <button
+        className="diff-ref-step"
+        onClick={() => onStep('newer')}
+        disabled={idx <= 0}
+        title={`ひとつ後の${noun}`}
+        aria-label={`ひとつ後の${noun}`}
+      >
+        <TbChevronRight aria-hidden="true" />
+      </button>
+    </div>
+  );
 }
 
 // ドロワー左のファイル一覧。今見ているファイルは中立色の下地で示す（行カーソルが「今の操作対象」のピンク）
@@ -855,6 +1034,8 @@ const DiffFile = memo(function DiffFile({
 }) {
   const fileRef = useRef(null);
   const label = diffStatusLabel(file.status);
+  // 編集ごとの差分（別の編集の hunk が同じ行番号を持つ）は目印に hunk 番号も入れる
+  const byHunk = !!file.perEdit;
   const { dir, name } = splitPath(file.path);
   const noChange = isNoChange(file);
   const previewPath = file.status === 'deleted' || file.status === 'missing' ? null : absolutePath(root, file.path);
@@ -894,6 +1075,7 @@ const DiffFile = memo(function DiffFile({
     if (selection && rows) {
       rows.forEach((row, i) => {
         const a = rowAnchor(row);
+        if (selection.hunk != null && row.hunk !== selection.hunk) return;
         if (a && a.side === selection.side && a.line >= selection.start && a.line <= selection.end) target.add(i);
       });
     }
@@ -904,11 +1086,11 @@ const DiffFile = memo(function DiffFile({
     if (cursorAnchor && rows) {
       rows.forEach((row, i) => {
         const a = rowAnchor(row);
-        if (a && `${a.side}:${a.line}` === cursorAnchor) add(i, 'cursor');
+        if (a && anchorId(a.side, a.line, byHunk ? row.hunk : null) === cursorAnchor) add(i, 'cursor');
       });
     }
     return { boxesAfter, rowCls, stale };
-  }, [comments, rows, activeKey, selection, cursorAnchor, splitLines]);
+  }, [comments, rows, activeKey, selection, cursorAnchor, splitLines, byHunk]);
 
   // 外から指定された行（focusTarget / 未送信の指摘を順に見る）へスクロールする。畳んでいれば開く
   useEffect(() => {
@@ -917,8 +1099,14 @@ const DiffFile = memo(function DiffFile({
       onSetOpen(file.path, true);
       return;
     }
+    // hunk の分からない指定（openDiffAt）でも編集ごとの差分の行に当たるよう、前方一致も見る
+    const base = anchorId(jump.side, jump.line);
     const el =
-      fileRef.current?.querySelector(`[data-anchor="${jump.side}:${jump.line}"]`) ||
+      fileRef.current?.querySelector(
+        jump.hunk != null && byHunk
+          ? `[data-anchor="${anchorId(jump.side, jump.line, jump.hunk)}"]`
+          : `[data-anchor="${base}"], [data-anchor^="${base}:"]`,
+      ) ||
       fileRef.current?.querySelector('.diff-comment.stale') ||
       null;
     if (el) {
@@ -927,7 +1115,7 @@ const DiffFile = memo(function DiffFile({
       setTimeout(() => el.classList.remove('flash'), 1500);
     }
     onJumpDone();
-  }, [jump, open, noChange, onJumpDone, onSetOpen, file.path]);
+  }, [jump, open, noChange, onJumpDone, onSetOpen, file.path, byHunk]);
 
   const unsentCount = comments.filter(isUnsent).length;
   const reviewable = canMarkReviewed(file);
@@ -965,6 +1153,14 @@ const DiffFile = memo(function DiffFile({
           </span>
         )}
         {label && <span className="diff-file-label">{label}</span>}
+        {file.perEdit && (
+          <span
+            className="diff-file-label diff-file-peredit"
+            title="ターン開始時点の内容が記録に無い（または途中で別の書き換えが入った）ため、編集ごとの差分を時刻順に並べています。行番号はそれぞれの編集の時点のものです"
+          >
+            編集ごと{file.editCount > 1 ? ` ×${file.editCount}` : ''}
+          </span>
+        )}
         {!noChange && (
           <span className="diff-file-stat">
             <span className="diff-add">+{file.additions}</span> <span className="diff-del">−{file.deletions}</span>
@@ -1006,7 +1202,7 @@ const DiffFile = memo(function DiffFile({
               {splitLines.map((line, k) => (
                 <SplitLineWithComments key={k} boxes={renderBoxes(k)}>
                   {line.type === 'hunk' ? (
-                    <DiffRow row={rows[line.idx]} idx={line.idx} path={file.path} cls="" html={null} />
+                    <DiffRow row={rows[line.idx]} idx={line.idx} path={file.path} cls="" html={null} byHunk={byHunk} />
                   ) : (
                     <SplitRow
                       left={line.left == null ? null : rows[line.left]}
@@ -1018,6 +1214,7 @@ const DiffFile = memo(function DiffFile({
                       leftHtml={html?.[line.left] ?? null}
                       rightHtml={html?.[line.right] ?? null}
                       path={file.path}
+                      byHunk={byHunk}
                       onGutter={onGutter}
                     />
                   )}
@@ -1035,6 +1232,7 @@ const DiffFile = memo(function DiffFile({
                       path={file.path}
                       cls={rowCls.get(i) || ''}
                       html={html?.[i] ?? null}
+                      byHunk={byHunk}
                       onGutter={onGutter}
                     />
                   </SplitLineWithComments>
@@ -1096,10 +1294,13 @@ function Gutter({ row, idx, path, onGutter, numbers }) {
   );
 }
 
-const DiffRow = memo(function DiffRow({ row, idx, path, cls, html, onGutter }) {
+const DiffRow = memo(function DiffRow({ row, idx, path, cls, html, byHunk, onGutter }) {
   const anchor = rowAnchor(row);
   return (
-    <div className={`diff-line ${row.kind}${cls}`} data-anchor={anchor ? `${anchor.side}:${anchor.line}` : undefined}>
+    <div
+      className={`diff-line ${row.kind}${cls}`}
+      data-anchor={anchor ? anchorId(anchor.side, anchor.line, byHunk ? row.hunk : null) : undefined}
+    >
       <Gutter row={row} idx={idx} path={path} onGutter={onGutter} numbers={[row.oldLine, row.newLine]} />
       <LineText row={row} html={html} />
     </div>
@@ -1118,6 +1319,7 @@ const SplitRow = memo(function SplitRow({
   leftHtml,
   rightHtml,
   path,
+  byHunk,
   onGutter,
 }) {
   const cell = (row, idx, cls, html, side) => {
@@ -1134,7 +1336,7 @@ const SplitRow = memo(function SplitRow({
     return (
       <div
         className={`diff-line diff-cell ${row.kind}${cls}`}
-        data-anchor={anchor && !mirror ? `${anchor.side}:${anchor.line}` : undefined}
+        data-anchor={anchor && !mirror ? anchorId(anchor.side, anchor.line, byHunk ? row.hunk : null) : undefined}
       >
         <Gutter
           row={row}
@@ -1155,11 +1357,22 @@ const SplitRow = memo(function SplitRow({
   );
 });
 
-function CommentBox({ comment, active, stale, showPath, onChange, onConfirm, onDelete, onSubmitAll, onFocus }) {
+function CommentBox({
+  comment,
+  active,
+  stale,
+  showPath,
+  sourceLabel,
+  onChange,
+  onConfirm,
+  onDelete,
+  onSubmitAll,
+  onFocus,
+}) {
   const sending = !!comment.sendingId;
-  const where = `${showPath ? `${comment.side === 'old' && comment.oldPath ? comment.oldPath : comment.path} ` : ''}${
-    comment.side === 'old' ? '削除行 ' : ''
-  }${lineLabel(comment)}`;
+  const where = `${sourceLabel ? `${sourceLabel} ` : ''}${
+    showPath ? `${comment.side === 'old' && comment.oldPath ? comment.oldPath : comment.path} ` : ''
+  }${comment.side === 'old' ? '削除行 ' : ''}${lineLabel(comment)}`;
   return (
     <div
       className={`diff-comment${active ? ' active' : ''}${stale ? ' stale' : ''}${sending ? ' sending' : ''}`}

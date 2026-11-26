@@ -4,14 +4,24 @@
 // InputBar の drafts / PreviewDrawer の reviewDrafts と同じくモジュールレベルに置く（リロードで消えるのは許容）。
 // 送信結果（submit_review_result）はドロワーが閉じた後に届くこともあるので、App からも同じ store を触る。
 //
-// 指摘: {key, path, oldPath, side: 'new'|'old', start, end, quote, text, sendingId}
-// キーは配列の添字ではなく「sessionKey + パス + 側 + 行番号（範囲は開始-終了）」。差分を取り直して
-// 行の並びが変わっても、同じ行を指す指摘と対応が崩れないようにするため（scope は入れない。
-// 全体／このセッションで同じファイルの行番号は変わらない）。
+// 指摘: {key, path, oldPath, side: 'new'|'old', start, end, hunk?, source?, perEdit?, quote, text, sendingId}
+// キーは配列の添字ではなく「sessionKey + 出どころ + パス + 側 + 行番号（範囲は開始-終了）」。差分を取り直して
+// 行の並びが変わっても、同じ行を指す指摘と対応が崩れないようにするため。
+// 出どころ（source）は 'wt'（作業ツリー。全体／このセッションで同じファイルの行番号は変わらないので共通）、
+// 'commit:<hash>'、'turn:<番号>'。作業ツリーのキーは出どころを入れない従来の形のまま（第 1・2 段階の下書きと同じ）。
+// それ以外は sessionKey の直後に出どころを入れる（2 つ目の欄が new / old ではないので作業ツリーのキーと衝突しない）。
+// hunk は編集ごとの差分（perEdit。別の編集の hunk が同じ行番号を持つ）でだけ入れる。
 
 // パスは | を含み得るので最後に置く（DOM の属性・セレクタにも使うので NUL などの区切りは使わない）
-export function diffCommentKey({ sessionKey, path, side, start, end }) {
-  return [sessionKey, side, `${start}-${end}`, path].join('|');
+export function diffCommentKey({ sessionKey, source, path, side, start, end, hunk }) {
+  const range = hunk == null ? `${start}-${end}` : `${start}-${end}@${hunk}`;
+  const head = !source || source === 'wt' ? [sessionKey] : [sessionKey, source];
+  return [...head, side, range, path].join('|');
+}
+
+// 指摘の出どころ（古い下書きは source を持たない＝作業ツリー）
+export function commentSource(comment) {
+  return comment?.source || 'wt';
 }
 
 // 送る対象（本文があり、送信中でないもの）

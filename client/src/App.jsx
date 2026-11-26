@@ -14,7 +14,14 @@ import SubagentDrawer from './components/SubagentDrawer.jsx';
 import ShellOutputDrawer from './components/ShellOutputDrawer.jsx';
 import DiffDrawer from './components/DiffDrawer.jsx';
 import DiffPip from './components/DiffPip.jsx';
-import { DIFF_SCOPE_STORAGE_KEY, isDiffCommand, normalizeDiffScope } from './utils/diffView.js';
+import {
+  DIFF_SCOPE_STORAGE_KEY,
+  isDiffCommand,
+  isRefScope,
+  isSameDiffRequest,
+  normalizeDiffRef,
+  normalizeDiffScope,
+} from './utils/diffView.js';
 import { diffCommentStore } from './utils/diffComments.js';
 import { loadReviewed, migrateReviewed, saveReviewed } from './utils/diffReviewed.js';
 import RefDrawer from './components/RefDrawer.jsx';
@@ -158,8 +165,13 @@ export default function App() {
   const [subagentDrawer, setSubagentDrawer] = useState(null);
   // 出力を表示中のシェルタスク（null なら閉じている）
   const [shellDrawer, setShellDrawer] = useState(null);
-  // 入力欄の /diff で開く差分ドロワー: { sessionId, scope, data: {loading} | session_diff の中身 }
+  // 入力欄の /diff で開く差分ドロワー:
+  //   { sessionId, scope, requestedRef, ref, focus, data: {loading} | session_diff の中身, sources }
+  // requestedRef は要求したときの ref（null＝最新。応答の照合に使う）、ref は今見ている ref（最新を要求したときは
+  // 応答の resolvedRef で埋める）。sources はコミット・ターンの候補（diff_sources）
   const [diffDrawer, setDiffDrawer] = useState(null);
+  const diffDrawerRef = useRef(diffDrawer);
+  diffDrawerRef.current = diffDrawer;
   // セッション内でやり取りしたリンク・ファイルの一覧のドロワー（Refs）
   const [showRefDrawer, setShowRefDrawer] = useState(false);
   // 「未解決／続きをやる」印を付けた claudeSessionId（localStorage のみ）
@@ -433,10 +445,20 @@ export default function App() {
 
   // 差分ドロワー（メインと小窓）の中身。それぞれ開いているセッション・範囲と違う応答（範囲の切り替え直後の古い応答・
   // もう片方が要求したもの）は捨てる。両方が同じセッション・範囲を開いていれば両方に入るが、中身は同じなので構わない
+  // 照合は (sessionId, scope, 要求した ref)。コミット・ターンの連続切り替えで古い応答が後から届いても捨てる
   useEffect(() => {
     const apply = (prev, msg) =>
-      !prev || prev.sessionId !== msg.sessionId || prev.scope !== msg.scope ? prev : { ...prev, data: msg };
+      !isSameDiffRequest(prev, msg) ? prev : { ...prev, ref: prev.ref ?? msg.resolvedRef ?? null, data: msg };
     return on('session_diff', (msg) => {
+      setDiffDrawer((prev) => apply(prev, msg));
+      setPipDiff((prev) => apply(prev, msg));
+    });
+  }, [on]);
+
+  // コミット・ターンの候補。開いているセッションのものだけ入れる
+  useEffect(() => {
+    const apply = (prev, msg) => (!prev || prev.sessionId !== msg.sessionId ? prev : { ...prev, sources: msg });
+    return on('diff_sources', (msg) => {
       setDiffDrawer((prev) => apply(prev, msg));
       setPipDiff((prev) => apply(prev, msg));
     });
@@ -679,11 +701,26 @@ export default function App() {
     setShowRefDrawer(false);
   }, [activeSessionId, showHome]);
 
-  // focus: 差分が届いた後にスクロールして見せる行（{path, side, line, nonce}）。openDiffAt から渡す
+  // focus: 差分が届いた後にスクロールして見せる行（{path, side, line, nonce}）。openDiffAt から渡す。
+  // ref: コミット・ターンの対象（null＝最新）。コミット・ターンの候補は、同じセッションで取得済みなら使い回し、
+  // refreshSources（取り直す）なら取り直す
   const requestDiff = useCallback(
-    (sessionId, scope, focus = null) => {
-      setDiffDrawer({ sessionId, scope, focus, data: { loading: true } });
-      send({ type: 'get_session_diff', sessionId, scope });
+    (sessionId, scope, focus = null, ref = null, { refreshSources = false } = {}) => {
+      const r = normalizeDiffRef(scope, ref);
+      const prev = diffDrawerRef.current;
+      const keep = prev?.sessionId === sessionId && prev.sources && !refreshSources ? prev.sources : null;
+      const needSources = isRefScope(scope) && (!keep || keep.error);
+      setDiffDrawer({
+        sessionId,
+        scope,
+        requestedRef: r,
+        ref: r,
+        focus,
+        data: { loading: true },
+        sources: needSources ? { loading: true } : keep,
+      });
+      send({ type: 'get_session_diff', sessionId, scope, ref: r });
+      if (needSources) send({ type: 'get_diff_sources', sessionId });
     },
     [send],
   );
@@ -701,16 +738,23 @@ export default function App() {
   // 指定したファイル・行（側つき）で差分ドロワーを開き、届いたらそこへスクロールする。
   // path はリポジトリ相対、side は 'new'（追加・文脈行の新しい行番号）| 'old'（削除行の旧行番号）。
   // 今は UI から呼ばず、window.claudeBridge.openDiffAt として出しておく（Claude から差分へ誘導する段階で使う）
+  // scope が 'commit' / 'turn' のときは ref（ハッシュ／ターン番号。省けば最新）で対象を選ぶ
   const openDiffAt = useCallback(
-    ({ path, side = 'new', line, scope } = {}) => {
+    ({ path, side = 'new', line, scope, ref } = {}) => {
       const sessionId = activeSessionIdRef.current;
       if (!sessionId || !path || !Number.isInteger(line)) return false;
-      requestDiff(sessionId, scope ? normalizeDiffScope(scope) : storedDiffScope(), {
-        path,
-        side: side === 'old' ? 'old' : 'new',
-        line,
-        nonce: Date.now(),
-      });
+      const s = scope ? normalizeDiffScope(scope) : storedDiffScope();
+      requestDiff(
+        sessionId,
+        s,
+        {
+          path,
+          side: side === 'old' ? 'old' : 'new',
+          line,
+          nonce: Date.now(),
+        },
+        ref,
+      );
       return true;
     },
     [requestDiff],
@@ -743,6 +787,12 @@ export default function App() {
         // 保存できなくても切り替えはする
       }
       if (diffDrawer) requestDiff(diffDrawer.sessionId, scope);
+    },
+    [diffDrawer, requestDiff],
+  );
+  const handleChangeDiffRef = useCallback(
+    (ref) => {
+      if (diffDrawer) requestDiff(diffDrawer.sessionId, diffDrawer.scope, null, ref);
     },
     [diffDrawer, requestDiff],
   );
@@ -1633,8 +1683,6 @@ export default function App() {
   // 差分ドロワーを小窓に移す。requestWindow は user activation が要るので、クリックから直接（最初の await で）呼ぶ。
   // 送信先は開いたときのセッション（sessionId）に固定する。sessionKey は下書き・確認済みのキーで、tmux タブでは
   // 後から claudeSessionId に変わる（migrateSession で移る）ので固定せず、タブが残っている間は sessions から引く
-  const diffDrawerRef = useRef(diffDrawer);
-  diffDrawerRef.current = diffDrawer;
   const handleOpenDiffPip = useCallback(async () => {
     if (!diffDrawer) return;
     const openedKey = diffSessionKey;
@@ -1646,9 +1694,9 @@ export default function App() {
         pipWindow.close();
         return;
       }
-      const { sessionId, scope, data } = latest;
+      const { sessionId, scope, requestedRef, ref, data, sources } = latest;
       pipSeqRef.current += 1;
-      setPipDiff({ id: pipSeqRef.current, pipWindow, sessionId, openedKey, scope, data });
+      setPipDiff({ id: pipSeqRef.current, pipWindow, sessionId, openedKey, scope, requestedRef, ref, data, sources });
       // メイン側のドロワーは閉じる（.diff-drawer-overlay が残ると後ろの画面を操作できない）
       setDiffDrawer(null);
     } catch (err) {
@@ -1678,11 +1726,28 @@ export default function App() {
     },
     [pipDiffSessionId, pipDiffSessionKey],
   );
+  const pipDiffRef = useRef(pipDiff);
+  pipDiffRef.current = pipDiff;
   const requestPipDiff = useCallback(
-    (scope) => {
+    (scope, ref = null, { refreshSources = false } = {}) => {
       if (!pipDiffSessionId) return;
-      setPipDiff((prev) => (prev ? { ...prev, scope, data: { loading: true } } : prev));
-      send({ type: 'get_session_diff', sessionId: pipDiffSessionId, scope });
+      const r = normalizeDiffRef(scope, ref);
+      const prevSources = pipDiffRef.current?.sources;
+      const needSources = isRefScope(scope) && (refreshSources || !prevSources || prevSources.error);
+      setPipDiff((prev) =>
+        prev
+          ? {
+              ...prev,
+              scope,
+              requestedRef: r,
+              ref: r,
+              data: { loading: true },
+              sources: needSources ? { loading: true } : prev.sources,
+            }
+          : prev,
+      );
+      send({ type: 'get_session_diff', sessionId: pipDiffSessionId, scope, ref: r });
+      if (needSources) send({ type: 'get_diff_sources', sessionId: pipDiffSessionId });
     },
     [pipDiffSessionId, send],
   );
@@ -1694,6 +1759,13 @@ export default function App() {
         // 保存できなくても切り替えはする
       }
       requestPipDiff(scope);
+    },
+    [requestPipDiff],
+  );
+  const handleChangePipDiffRef = useCallback(
+    (ref) => {
+      const cur = pipDiffRef.current;
+      if (cur) requestPipDiff(cur.scope, ref);
     },
     [requestPipDiff],
   );
@@ -2180,11 +2252,20 @@ export default function App() {
         <DiffDrawer
           sessionKey={diffSessionKey}
           scope={diffDrawer.scope}
+          diffRef={diffDrawer.ref}
+          sources={diffDrawer.sources}
           data={diffDrawer.data}
           focusTarget={diffDrawer.focus}
           onSubmitComments={handleSubmitDiffComments}
           onChangeScope={handleChangeDiffScope}
-          onRefresh={() => requestDiff(diffDrawer.sessionId, diffDrawer.scope)}
+          onChangeRef={handleChangeDiffRef}
+          // 取り直しは「要求した ref」で送る。最新を見ている（null）なら最新を取り直し、‹ › や select で
+          // 選んだものならそれを保つ（resolvedRef で埋めた ref を送ると、最新のつもりが特定のコミットに固定される）
+          onRefresh={() =>
+            requestDiff(diffDrawer.sessionId, diffDrawer.scope, null, diffDrawer.requestedRef, {
+              refreshSources: true,
+            })
+          }
           onOpenPreview={(path) => {
             setDiffDrawer(null);
             handleOpenPreview(path);
@@ -2200,10 +2281,13 @@ export default function App() {
           pipWindow={pipDiff.pipWindow}
           sessionKey={pipDiffSessionKey}
           scope={pipDiff.scope}
+          diffRef={pipDiff.ref}
+          sources={pipDiff.sources}
           data={pipDiff.data}
           onSubmitComments={handleSubmitPipDiffComments}
           onChangeScope={handleChangePipDiffScope}
-          onRefresh={() => requestPipDiff(pipDiff.scope)}
+          onChangeRef={handleChangePipDiffRef}
+          onRefresh={() => requestPipDiff(pipDiff.scope, pipDiff.requestedRef, { refreshSources: true })}
           // 小窓のファイル名はメイン画面のプレビューで開く（小窓は残す。送信先は小窓のセッション）
           onOpenPreview={handleOpenPreviewFromDiffPip}
           onClose={handleCloseDiffPip}

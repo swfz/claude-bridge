@@ -96,7 +96,7 @@ const pushReader = createIncrementalReader({
 });
 
 // セッション本体とサブエージェント（<sessionId>/subagents/agent-*.jsonl）の JSONL のパス
-async function sessionJsonlPaths(filePath) {
+export async function sessionJsonlPaths(filePath) {
   const subDir = join(dirname(filePath), basename(filePath, '.jsonl'), 'subagents');
   let entries = [];
   try {

@@ -212,7 +212,7 @@ export function attachCommitHashes(turns, logText) {
   }
 }
 
-async function resolveCommitHashes(turns, cwd) {
+export async function resolveCommitHashes(turns, cwd) {
   if (!cwd || !turns.some((t) => t.commits.length > 0)) return;
   // since はシェルに埋め込むので、自分で作った ISO 形式だけを通す
   const since = new Date(Date.parse(turns[0].startedAt) - 60 * 60 * 1000).toISOString();

@@ -5,11 +5,12 @@
 // 左右に並べる表示でも同じ順にする（削除の塊を上から読み、続けて追加の塊を読む）。
 import { isContiguousSide, rowAnchor } from './diffView.js';
 
-// files: [{path, rows}]（開いていて行を出しているファイルだけ、表示順）
-// → [{path, idx, side, line, hunkStart, fileStart}]
+// files: [{path, rows, byHunk?}]（開いていて行を出しているファイルだけ、表示順）
+// → [{path, idx, side, line, hunk?, hunkStart, fileStart}]。hunk は byHunk（編集ごとの差分。別の編集の hunk が
+// 同じ行番号を持つ）のファイルだけに付け、カーソルの照合にも使う
 export function buildNavList(files) {
   const nav = [];
-  for (const { path, rows } of files || []) {
+  for (const { path, rows, byHunk } of files || []) {
     let fileStart = true;
     let hunkStart = false;
     (rows || []).forEach((row, idx) => {
@@ -19,7 +20,9 @@ export function buildNavList(files) {
       }
       const a = rowAnchor(row);
       if (!a) return;
-      nav.push({ path, idx, side: a.side, line: a.line, hunkStart: hunkStart || fileStart, fileStart });
+      const item = { path, idx, side: a.side, line: a.line, hunkStart: hunkStart || fileStart, fileStart };
+      if (byHunk) item.hunk = row.hunk;
+      nav.push(item);
       fileStart = false;
       hunkStart = false;
     });
@@ -27,14 +30,23 @@ export function buildNavList(files) {
   return nav;
 }
 
-// カーソル（{path, side, line}）の位置。無ければ -1
+// カーソル（{path, side, line, hunk?}）の位置。無ければ -1
 export function findNavIndex(nav, cursor) {
   if (!cursor) return -1;
-  return nav.findIndex((n) => n.path === cursor.path && n.side === cursor.side && n.line === cursor.line);
+  return nav.findIndex(
+    (n) =>
+      n.path === cursor.path &&
+      n.side === cursor.side &&
+      n.line === cursor.line &&
+      (cursor.hunk == null || n.hunk === cursor.hunk),
+  );
 }
 
 export function navCursor(item) {
-  return item ? { path: item.path, side: item.side, line: item.line } : null;
+  if (!item) return null;
+  const c = { path: item.path, side: item.side, line: item.line };
+  if (item.hunk != null) c.hunk = item.hunk;
+  return c;
 }
 
 // 1 行ずつの移動。カーソルが無ければ（どちら向きでも）先頭に置く。端では止まる
@@ -73,6 +85,9 @@ export function navRange(nav, anchor, index) {
   const b = nav[index];
   if (!b) return null;
   const a = anchor == null ? b : nav[anchor] || b;
-  if (a.path !== b.path || a.side !== b.side) return { side: b.side, start: b.line, end: b.line };
-  return { side: b.side, start: Math.min(a.line, b.line), end: Math.max(a.line, b.line) };
+  const hunk = b.hunk != null ? { hunk: b.hunk } : {};
+  if (a.path !== b.path || a.side !== b.side || a.hunk !== b.hunk) {
+    return { side: b.side, start: b.line, end: b.line, ...hunk };
+  }
+  return { side: b.side, start: Math.min(a.line, b.line), end: Math.max(a.line, b.line), ...hunk };
 }

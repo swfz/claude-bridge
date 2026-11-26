@@ -27,7 +27,7 @@ const MAX_PATHSPECS = 500;
 // コミットが 1 つも無いリポジトリで HEAD の代わりに比べる空の tree
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
-function git(args, cwd) {
+export function git(args, cwd) {
   return execFileAsync('git', ['-c', 'core.quotepath=false', ...args], {
     cwd,
     timeout: GIT_TIMEOUT_MS,
