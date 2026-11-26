@@ -162,10 +162,18 @@ export async function readSessionDiff({ cwd, scope = 'all', editedFiles = [] }) 
   if (!cwd) throw new Error('セッションの作業ディレクトリが分かりません');
   let root;
   let realCwd;
+  // cwd のリポジトリ相対のプレフィックス（'' か 'sub/'）。クライアントが cwd 起点のパス（返答の `path:行`）を
+  // 差分の path に直すのに使う（cwd がシンボリックリンク等で root と表記が違っても正しく前置できる）
+  let cwdPrefix;
   try {
-    const [{ stdout }, real] = await Promise.all([git(['rev-parse', '--show-toplevel'], cwd), realpath(cwd)]);
+    const [{ stdout }, real, { stdout: prefix }] = await Promise.all([
+      git(['rev-parse', '--show-toplevel'], cwd),
+      realpath(cwd),
+      git(['rev-parse', '--show-prefix'], cwd),
+    ]);
     root = stdout.trim();
     realCwd = real;
+    cwdPrefix = prefix.trim();
   } catch {
     throw new Error('git リポジトリではないか、作業ディレクトリが削除されています');
   }
@@ -178,7 +186,7 @@ export async function readSessionDiff({ cwd, scope = 'all', editedFiles = [] }) 
     const relPaths = editedFiles.map((p) => toRepoRelative(p, { cwd, realCwd, root }));
     outside = relPaths.filter((p) => !p).length;
     sessionFiles = [...new Set(relPaths.filter((p) => p))].sort();
-    if (sessionFiles.length === 0) return { root, scope, files: [], truncated: false, outside };
+    if (sessionFiles.length === 0) return { root, cwdPrefix, scope, files: [], truncated: false, outside };
     // 上限を超えた分は git に聞かないので「差分なし」とも言えない。並べずに truncated で知らせる
     overLimit = sessionFiles.length > MAX_PATHSPECS;
     sessionFiles = sessionFiles.slice(0, MAX_PATHSPECS);
@@ -240,6 +248,7 @@ export async function readSessionDiff({ cwd, scope = 'all', editedFiles = [] }) 
   const capped = capPatches(files);
   return {
     root,
+    cwdPrefix,
     scope,
     files: capped.files,
     truncated: capped.truncated || overLimit || untrackedPaths.length > MAX_UNTRACKED_FILES,

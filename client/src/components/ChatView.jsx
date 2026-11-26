@@ -13,6 +13,10 @@ import { createPortal } from 'react-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
+import { remarkFileLineRefs } from '../utils/remarkFileLineRefs.js';
+import { rehypeMarkBlockCode } from '../utils/rehypeMarkBlockCode.js';
+import { parseFileLineRef } from '../utils/fileLineRef.js';
+import { DiffJumpContext } from './DiffJumpContext.js';
 import { PREVIEWABLE_EXTS, getExt } from '../utils/previewExts.js';
 import { useStickToBottom } from '../hooks/useStickToBottom.js';
 import { useNumberPick } from '../hooks/useNumberPick.js';
@@ -355,18 +359,52 @@ function preprocessFileUrls(text) {
 // 本文中の code / a 要素が全部アンマウント→再マウントされる（FilePreview が存在確認からやり直して
 // チップ⇄プレーン表示がチラつく）。ハンドラは要素の型に混ぜず context で渡す。
 const MarkdownHandlersContext = createContext({ sessionCwd: null, onOpenPreview: null, onOpenFileReview: null });
-const REMARK_PLUGINS = [remarkGfm, remarkAlert];
+// remarkFileLineRefs は地の文の `path:行` をインラインコードに切り出す（gfm の自動リンクより後に置く。リンクは触らない）
+const REMARK_PLUGINS = [remarkGfm, remarkAlert, remarkFileLineRefs];
 // 行ピック（#N.M）で「表示中のどのブロックがソースの何行目か」を引けるようにする
-const REHYPE_PLUGINS = [rehypeSourceLine];
+// rehypeMarkBlockCode は言語の無いコードブロックをインラインコードと見分けるための印（中身をピルにしない）
+const REHYPE_PLUGINS = [rehypeSourceLine, rehypeMarkBlockCode];
 const identityUrl = (url) => url;
 
 // react-markdown は hast の node も props で渡してくるので DOM に漏らさないよう抜く
 // eslint-disable-next-line no-unused-vars
 function MdCode({ className, children, node, ...props }) {
   const { sessionCwd, onOpenPreview, onOpenFileReview } = useContext(MarkdownHandlersContext);
+  const onOpenDiffAt = useContext(DiffJumpContext);
+  const { 'data-block': block, ...domProps } = props;
+  // 言語の無いコードブロックは従来どおりの見た目で、中身をピルにしない
+  if (!className && block) {
+    return (
+      <code className="inline-code" {...domProps}>
+        {children}
+      </code>
+    );
+  }
   const isInline = !className;
   if (isInline) {
     const text = String(children).trim();
+    // `path:行`（インラインコード、または地の文から remarkFileLineRefs が切り出したもの = data-bare）。
+    // 行の接尾辞を外してパスを解決し、行（範囲）を持たせたピルにする。クリックで差分のその行へ
+    const bare = props['data-bare'] === 'true';
+    const ref = parseFileLineRef(text);
+    const refPath = ref ? resolveFilePath(ref.path, sessionCwd) : null;
+    if (refPath) {
+      return (
+        <FilePreview
+          href={`file://${refPath}`}
+          cwd={sessionCwd}
+          line={ref.line}
+          endLine={ref.endLine}
+          bare={bare}
+          raw={text}
+          onOpenPreview={onOpenPreview}
+          onOpenFileReview={onOpenFileReview}
+          onOpenDiffAt={onOpenDiffAt}
+        />
+      );
+    }
+    // 地の文から切り出したが解決できない（プレビューできない拡張子・cwd が分からない相対パス）ものは素の文字に戻す
+    if (bare) return <>{text}</>;
     // インラインコード内の file:// URL を FilePreview に変換
     if (isFileUrl(text)) {
       return (
@@ -385,8 +423,9 @@ function MdCode({ className, children, node, ...props }) {
         />
       );
     }
+    const { 'data-bare': _bare, ...rest } = props;
     return (
-      <code className="inline-code" {...props}>
+      <code className="inline-code" {...rest}>
         {children}
       </code>
     );

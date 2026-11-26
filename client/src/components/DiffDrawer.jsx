@@ -23,6 +23,8 @@ import {
   diffSourceLabel,
   diffSourceOptions,
   diffStatusLabel,
+  findRowIndex,
+  isContiguousSide,
   isNoChangeStatus,
   isRefScope,
   formatDiffComment,
@@ -60,6 +62,7 @@ import {
 } from '../utils/diffReviewed.js';
 import { commentSource, diffCommentKey, diffCommentStore, groupByPath, isUnsent } from '../utils/diffComments.js';
 import { halfScreenJump } from '../utils/pickJump.js';
+import { displayRef, jumpMissReason, matchDiffFile, relativeToRoot } from '../utils/fileLineRef.js';
 import {
   halfPageScrollKey,
   isConfirmShortcut,
@@ -132,7 +135,10 @@ function isTextEntry(el) {
 //
 // 行番号（ガター）のクリック、またはキーボードの行カーソル（↑↓・Enter）でその行へ指摘を書く。
 // 書きかけは utils/diffComments.js の store（モジュールレベル）に置き、閉じても取り直しても残す。
-// focusTarget（{path, side, line, nonce}）を渡すと、差分が届いた後にその行へスクロールする（Claude から開く口）。
+// focusTarget（{path, side, line, endLine?, cwd?, nonce}）を渡すと、差分が届いた後にその行へスクロールし、
+// 行カーソル（endLine があれば範囲）を置く（返答の `path:行` のピル・openDiffAt から開く口）。path は差分の
+// リポジトリ相対でも絶対パスでもよい（root・cwd で相対にして突き合わせる）。差分にその行が無ければ、題の行に
+// 「… は差分に含まれていません · プレビューで開く」の注記を出し、ファイルが差分にあればそこまでスクロールする。
 //
 // pipWindow を渡すと小窓（Document Picture-in-Picture）に描く（DiffPip.jsx）。そのときは
 // createPortal で PiP の body に流し、キー・スクロール・幅の計測は PiP の document / window で扱う
@@ -146,6 +152,7 @@ export default function DiffDrawer({
   focusTarget,
   onChangeScope,
   onChangeRef,
+  onSearchAll,
   onRefresh,
   onOpenPreview,
   onSubmitComments,
@@ -250,9 +257,9 @@ export default function DiffDrawer({
   const anchorIdx = findNavIndex(nav, selAnchor);
   const selection = cursorIdx >= 0 && anchorIdx >= 0 ? navRange(nav, anchorIdx, cursorIdx) : null;
 
-  useEffect(() => {
-    if (focusTarget) setJump(focusTarget);
-  }, [focusTarget]);
+  // 差分に無い行へ飛ぼうとしたときの注記（{label, previewPath, line}）
+  const [jumpMiss, setJumpMiss] = useState(null);
+  const handledFocusRef = useRef(null);
 
   // 出どころ（範囲・コミット・ターン）が変わったら、行カーソル・範囲・開閉・開いている指摘欄を捨てる
   // （{path, side, line} は別のコミットでは別の行を指す）。書きかけの空の指摘欄は消す
@@ -264,6 +271,7 @@ export default function DiffDrawer({
     setCursor(null);
     setSelAnchor(null);
     setOpenMap({});
+    setJumpMiss(null);
     const key = activeKeyRef.current;
     if (key) {
       const c = diffCommentStore.snapshot(sessionKey).list.find((x) => x.key === key);
@@ -633,6 +641,51 @@ export default function DiffDrawer({
     setCurrentPath(path);
   }, []);
 
+  // 外から指定された行（focusTarget）。差分が届いてから 1 回だけ処理する（同じ nonce の指定は繰り返さない）
+  useEffect(() => {
+    if (!focusTarget || !ready || data?.error || handledFocusRef.current === focusTarget) return;
+    handledFocusRef.current = focusTarget;
+    const side = focusTarget.side === 'old' ? 'old' : 'new';
+    const { line, endLine } = focusTarget;
+    const where = { root: data.root, cwd: focusTarget.cwd, cwdPrefix: data.cwdPrefix };
+    const file = matchDiffFile(files, focusTarget.path, where);
+    const rows = file ? rowsByPath.get(file.path) : null;
+    const idx = rows ? findRowIndex(rows, side, line) : -1;
+    if (file && idx >= 0) {
+      const hunk = file.perEdit ? rows[idx].hunk : null;
+      const at = (n, i) => ({ path: file.path, side, line: n, ...(file.perEdit ? { hunk: rows[i].hunk } : {}) });
+      const endIdx = endLine > line ? findRowIndex(rows, side, endLine, hunk) : -1;
+      if (endIdx >= 0 && isContiguousSide(rows, idx, endIdx, side)) {
+        // 範囲: 先頭を範囲の起点、末尾をカーソルにする（Enter でその範囲の指摘欄が開く）
+        setSelAnchor(at(line, idx));
+        setCursor(at(endLine, endIdx));
+      } else {
+        setSelAnchor(null);
+        setCursor(at(line, idx));
+      }
+      setJumpMiss(null);
+      setJump({ path: file.path, side, line, hunk, nonce: focusTarget.nonce });
+      return;
+    }
+    // 差分に無い（ファイルに変更が無い・変更の無い部分の行・行を出していない・このセッションの範囲に無い・
+    // 場所を特定できない）: 中立な注記を出し、分かる理由は文言と title で出し分ける。ファイルが差分にあればそこまで寄せる
+    setCursor(null);
+    setSelAnchor(null);
+    const rel = file?.path || relativeToRoot(focusTarget.path, where);
+    const previewPath = focusTarget.path.startsWith('/') ? focusTarget.path : rel ? absolutePath(data.root, rel) : null;
+    const reason = jumpMissReason({ file, rows, scope, rel });
+    // 題の行の残りの幅は狭いので、表示はファイル名と行だけにし、リポジトリ相対のパスは title に回す
+    setJumpMiss({
+      label: displayRef(focusTarget.path, { line, endLine }),
+      full: displayRef(focusTarget.path, { line, endLine }, rel),
+      ...reason,
+      previewPath,
+      line,
+      focus: focusTarget,
+    });
+    if (file) handleSelectFile(file.path);
+  }, [focusTarget, ready, data, files, rowsByPath, handleSelectFile, scope]);
+
   const handleChangeView = (value) => {
     setViewPref(value);
     writeStorage(DIFF_VIEW_STORAGE_KEY, value);
@@ -688,7 +741,10 @@ export default function DiffDrawer({
           <div className="diff-drawer-title-area">
             {/* 題の行は高さを固定し、コミット・ターンの選択を出し入れしても右側の要素・ヘッダの高さを動かさない */}
             <div className="diff-drawer-title-row">
-              <span className="diff-drawer-title">{TITLES[scope] || '未コミットの差分'}</span>
+              {/* 注記を出している間は題を外して幅を譲る（範囲はトグルで分かる。行の高さは固定なので何も動かない） */}
+              {!(jumpMiss && !refScope) && (
+                <span className="diff-drawer-title">{TITLES[scope] || '未コミットの差分'}</span>
+              )}
               {refScope && (
                 <RefPicker
                   scope={scope}
@@ -699,6 +755,38 @@ export default function DiffDrawer({
                   onSelect={handleSelectRef}
                   onStep={handleStepRef}
                 />
+              )}
+              {/* 差分に無い行へ飛ぼうとしたときの注記。題の行（高さ固定）の空きに置くので、出し入れでヘッダは動かない */}
+              {jumpMiss && (
+                <span className="diff-jump-miss" role="status">
+                  <span className="diff-jump-miss-text" title={`${jumpMiss.full}: ${jumpMiss.title}`}>
+                    {jumpMiss.label} は{jumpMiss.text}
+                  </span>
+                  {jumpMiss.searchAll && onSearchAll && (
+                    <button className="diff-jump-miss-open" onClick={() => onSearchAll(jumpMiss.focus)}>
+                      全体で探す
+                    </button>
+                  )}
+                  {jumpMiss.previewPath && (
+                    <button
+                      className="diff-jump-miss-open"
+                      onClick={() => onOpenPreview(jumpMiss.previewPath, { line: jumpMiss.line })}
+                    >
+                      プレビューで開く
+                    </button>
+                  )}
+                  <button
+                    className="diff-jump-miss-close"
+                    onClick={() => {
+                      setJumpMiss(null);
+                      focusBody();
+                    }}
+                    title="注記を閉じる"
+                    aria-label="注記を閉じる"
+                  >
+                    <TbX aria-hidden="true" />
+                  </button>
+                </span>
               )}
             </div>
             <div className="diff-drawer-meta">

@@ -45,6 +45,11 @@
   font-weight: 600;
 }
 
+/* `path:行` の行（`:42` / `:42-50`）。ファイル名の後ろに薄く添える */
+.file-line {
+  color: var(--text-secondary);
+}
+
 .file-link:hover .file-name {
   text-decoration: underline;
   text-underline-offset: 3px;

@@ -76,6 +76,8 @@ export default function PreviewDrawer({
   responses,
   onOpenPip,
   pipWindow,
+  initialLine,
+  initialLineNonce,
 }) {
   // 小窓（Document Picture-in-Picture）に出しているときは、キー・選択・ドラッグを PiP 窓の
   // document / window で扱う。メインの document に張るとメイン画面で打つキーを横取りするため
@@ -597,6 +599,28 @@ export default function PreviewDrawer({
   });
   pickRef.current = pick;
   pickActiveRef.current = pick.active;
+
+  // 最初に見せる行（返答の `path:行` から、差分に無い行をプレビューで開いたとき）。本文が描けたら 1 回だけ
+  // その行（Markdown はその行を含むブロック）へ寄せて軽く光らせる。同じファイル・行で開き直しても nonce で寄せ直す。
+  // 強調はタイマーだけで外す（deps の変化で cleanup が先に外さないように）
+  const shownLineRef = useRef(null);
+  useEffect(() => {
+    const body = bodyRef.current;
+    const key = `${filePath}:${initialLine}:${initialLineNonce}`;
+    if (!body || !Number.isInteger(initialLine) || initialLine < 1 || shownLineRef.current === key) return;
+    const el = isCodeView
+      ? body.querySelector(
+          showTable ? `.drawer-table [data-line="${initialLine}"]` : `pre.drawer-text [data-line="${initialLine}"]`,
+        )
+      : markdownToRender
+        ? blockForLine(collectSourceBlocks(body), initialLine)
+        : null;
+    if (!el) return;
+    shownLineRef.current = key;
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('line-initial');
+    setTimeout(() => el.classList.remove('line-initial'), 2000);
+  }, [filePath, initialLine, initialLineNonce, isCodeView, showTable, markdownToRender, fileContent]);
 
   // 打鍵中の対象を強調して、見えていなければスクロールで寄せる
   useEffect(() => {

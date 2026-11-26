@@ -420,8 +420,12 @@ export function clearDiffSourcesCache() {
 async function repoOf(cwd) {
   if (!cwd) return null;
   try {
-    const [{ stdout }, realCwd] = await Promise.all([git(['rev-parse', '--show-toplevel'], cwd), realpath(cwd)]);
-    return { root: stdout.trim(), realCwd };
+    const [{ stdout }, realCwd, { stdout: prefix }] = await Promise.all([
+      git(['rev-parse', '--show-toplevel'], cwd),
+      realpath(cwd),
+      git(['rev-parse', '--show-prefix'], cwd),
+    ]);
+    return { root: stdout.trim(), realCwd, cwdPrefix: prefix.trim() };
   } catch {
     return null;
   }
@@ -470,7 +474,14 @@ export async function readCommitDiff({ cwd, hash }) {
     )
     .sort((a, b) => a.path.localeCompare(b.path));
   const capped = capPatches(files);
-  return { root: repo.root, files: capped.files, truncated: capped.truncated, outside: 0, merge: parents > 1 };
+  return {
+    root: repo.root,
+    cwdPrefix: repo.cwdPrefix,
+    files: capped.files,
+    truncated: capped.truncated,
+    outside: 0,
+    merge: parents > 1,
+  };
 }
 
 // ‹ › で行き来するたびに JSONL を全文走査しないよう、ターンの差分を JSONL（本体・サブエージェント）の
@@ -576,6 +587,8 @@ async function buildTurnDiff({ filePath, cwd, index }) {
   const turn = turns[index - 1];
   return {
     root,
+    // git で読めなければ root は cwd そのもの（プレフィックスは空）
+    cwdPrefix: repo ? repo.cwdPrefix : '',
     files: capped.files,
     truncated: capped.truncated,
     outside,
