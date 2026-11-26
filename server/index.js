@@ -59,6 +59,7 @@ import { listShellTasks, readShellTaskOutput } from './shell-tasks.js';
 import { readRateLimits } from './rate-limits.js';
 import { listSlashCommands } from './slash-commands.js';
 import { readSessionDiff } from './session-diff.js';
+import { listDiffSources, readCommitDiff, readTurnDiff } from './session-diff-sources.js';
 import { readSessionEditedFiles } from './session-completion.js';
 import {
   getActivityCalendar,
@@ -885,6 +886,32 @@ function resolveClaudeTarget(session) {
         }
       : jsonlWatcher.getSessionMeta(session.id);
   return meta?.claudeSessionId && meta?.projectDir ? meta : null;
+}
+
+// 差分ドロワーの範囲。知らない値は作業ツリー全体（従来どおり）
+function normalizeDiffScopeParam(value) {
+  return ['session', 'commit', 'turn'].includes(value) ? value : 'all';
+}
+
+// 差分の ref。commit はハッシュ（16 進 7〜40 桁）、turn は 1 以上の整数（数字の文字列も受ける）。それ以外・不正は null
+function normalizeDiffRef(scope, value) {
+  if (scope === 'commit') return typeof value === 'string' && /^[0-9a-f]{7,40}$/.test(value) ? value : null;
+  if (scope === 'turn') {
+    const n = typeof value === 'string' && /^\d{1,9}$/.test(value) ? Number(value) : value;
+    return Number.isInteger(n) && n >= 1 ? n : null;
+  }
+  return null;
+}
+
+// 差分の読み先（JSONL と cwd）。どちらもクライアントからは受け取らずセッションから解決する
+async function resolveDiffTarget(sessionId) {
+  const session = findSession(sessionId);
+  if (!session) throw new Error('セッションが見つかりません');
+  const target = resolveClaudeTarget(session);
+  const filePath = target ? join(CLAUDE_PROJECTS_DIR, target.projectDir, `${target.claudeSessionId}.jsonl`) : null;
+  let cwd = session.cwd;
+  if (!cwd && filePath) cwd = (await readSessionSummary(filePath)).cwd;
+  return { filePath, cwd };
 }
 
 // ピン/レビューの保存キーを解決する。claudeSessionId を優先し、無ければ
@@ -1976,23 +2003,72 @@ wss.on('connection', (ws) => {
 
       // 入力欄の /diff で開く差分ドロワー。cwd と JSONL のパスはクライアントから受け取らず、
       // セッションから解決する（任意のディレクトリで git を走らせないため）
+      //   scope: 'all' | 'session' … 作業ツリー、'commit' | 'turn' … ref（ハッシュ／ターン番号）の差分。
+      //   ref を省くと最新（直近のコミット／最後に編集したターン）。応答には要求した ref（照合用）と
+      //   実際に出した resolvedRef を返す
       case 'get_session_diff': {
-        const scope = msg.scope === 'session' ? 'session' : 'all';
+        const scope = normalizeDiffScopeParam(msg.scope);
+        const ref = normalizeDiffRef(scope, msg.ref);
         try {
-          const session = findSession(msg.sessionId);
-          if (!session) throw new Error('セッションが見つかりません');
-          const target = resolveClaudeTarget(session);
-          const filePath = target
-            ? join(CLAUDE_PROJECTS_DIR, target.projectDir, `${target.claudeSessionId}.jsonl`)
-            : null;
-          let cwd = session.cwd;
-          if (!cwd && filePath) cwd = (await readSessionSummary(filePath)).cwd;
+          const { filePath, cwd } = await resolveDiffTarget(msg.sessionId);
+          if (scope === 'commit' || scope === 'turn') {
+            if (!filePath) throw new Error('セッションの記録（JSONL）がまだ見つかりません');
+            if (msg.ref != null && ref == null) throw new Error('差分の指定が正しくありません');
+            const sources = await listDiffSources({ filePath, cwd });
+            let result;
+            let resolvedRef;
+            if (scope === 'commit') {
+              const hit = ref == null ? sources.commits[0] : sources.commits.find((c) => c.hash === ref);
+              if (ref != null && !hit) throw new Error('このセッションのコミットではありません');
+              resolvedRef = hit?.hash ?? null;
+              result = hit
+                ? { ...(await readCommitDiff({ cwd, hash: hit.hash })), commit: hit }
+                : { files: [], truncated: false, outside: 0 };
+            } else {
+              const hit = ref == null ? sources.turns[0] : sources.turns.find((t) => t.index === ref);
+              if (ref != null && !hit) throw new Error('編集のあったターンではありません');
+              resolvedRef = hit?.index ?? null;
+              result = hit
+                ? await readTurnDiff({ filePath, cwd, index: hit.index })
+                : { files: [], truncated: false, outside: 0 };
+            }
+            sendTo(ws, { type: 'session_diff', sessionId: msg.sessionId, ...result, scope, ref, resolvedRef });
+            break;
+          }
           if (scope === 'session' && !filePath) throw new Error('セッションの記録（JSONL）がまだ見つかりません');
           const editedFiles = scope === 'session' ? await readSessionEditedFiles(filePath) : [];
           const result = await readSessionDiff({ cwd, scope, editedFiles });
-          sendTo(ws, { type: 'session_diff', sessionId: msg.sessionId, ...result });
+          sendTo(ws, { type: 'session_diff', sessionId: msg.sessionId, ...result, ref: null, resolvedRef: null });
         } catch (e) {
-          sendTo(ws, { type: 'session_diff', sessionId: msg.sessionId, scope, files: [], error: e.message });
+          sendTo(ws, {
+            type: 'session_diff',
+            sessionId: msg.sessionId,
+            scope,
+            ref,
+            resolvedRef: null,
+            files: [],
+            error: e.message,
+          });
+        }
+        break;
+      }
+
+      // 差分ドロワーの「コミット」「ターン」で選べる候補
+      case 'get_diff_sources': {
+        try {
+          const { filePath, cwd } = await resolveDiffTarget(msg.sessionId);
+          if (!filePath) throw new Error('セッションの記録（JSONL）がまだ見つかりません');
+          const sources = await listDiffSources({ filePath, cwd });
+          sendTo(ws, { type: 'diff_sources', sessionId: msg.sessionId, ...sources });
+        } catch (e) {
+          sendTo(ws, {
+            type: 'diff_sources',
+            sessionId: msg.sessionId,
+            commits: [],
+            turns: [],
+            recent: false,
+            error: e.message,
+          });
         }
         break;
       }

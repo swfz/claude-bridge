@@ -89,6 +89,71 @@
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 題の行。コミット・ターンの選択（.diff-ref）を出し入れしても高さが変わらないよう固定する。
+   title-area は flex: 1 なので、出し入れで右側の要素（範囲・取り直す・送信）は動かない */
+.diff-drawer-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  min-width: 0;
+}
+
+.diff-ref {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 0 1 360px;
+}
+
+.diff-ref-select {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 22px;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  text-overflow: ellipsis;
+}
+
+.diff-ref-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.diff-ref-select:disabled {
+  color: var(--text-secondary);
+}
+
+.diff-ref-step {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.diff-ref-step:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.diff-ref-step:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .diff-drawer-meta {
@@ -97,13 +162,16 @@
   min-width: 0;
   font-size: 12px;
   color: var(--text-secondary);
+  /* 1 行に保つ（折り返すとヘッダの高さが変わり、範囲・取り直す・送信が上下に動く）。溢れた分は切る */
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .diff-drawer-root {
   font-family: monospace;
 }
 
-/* 範囲（全体 / このセッション）。表示（1列 / 左右）の .diff-segmented と同じ形・同じ中立色にそろえる */
+/* 範囲（全体 / このセッション / コミット / ターン）。表示（1列 / 左右）の .diff-segmented と同じ形・同じ中立色にそろえる */
 .diff-drawer-scope {
   display: flex;
   padding: 2px;
@@ -504,6 +572,13 @@ button.diff-gutter {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+}
+
+/* 行の外（今の差分に無い・ほかの差分への指摘）は .diff-lines の外なので 100cqi が画面幅を指してしまう。
+   本文の幅に収める */
+.diff-orphans .diff-comment,
+.diff-file-stale .diff-comment {
+  width: auto;
 }
 
 .diff-file-stale .diff-comment {

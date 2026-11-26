@@ -75,6 +75,8 @@ describe('diffView: 表示文言と境界', () => {
     assert.deepEqual(DIFF_SCOPES, [
       { value: 'all', label: '全体' },
       { value: 'session', label: 'このセッション' },
+      { value: 'commit', label: 'コミット' },
+      { value: 'turn', label: 'ターン' },
     ]);
     assert.equal(DIFF_SCOPE_STORAGE_KEY, 'diffDrawerScope');
   });
