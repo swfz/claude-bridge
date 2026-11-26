@@ -61,6 +61,8 @@ export function useGlobalKeys({ tabs, activeId, onSelectTab, onHome, onToggleSha
         if (isTextEntry(document.activeElement)) return;
         // ピック中は「対象を半画面分先へ飛ばす」操作（ChatView / PreviewDrawer 側）に譲る
         if (document.querySelector('.msg-pick-hud, .line-pick-hud')) return;
+        // 差分ドロワーは自分で扱う（行カーソルがあれば半画面分先の行へ、無ければ本文をスクロール）
+        if (document.querySelector('.diff-drawer-overlay')) return;
         const el = scrollContainer();
         if (!el) return;
         e.preventDefault();

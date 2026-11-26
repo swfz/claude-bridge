@@ -88,6 +88,14 @@ body.light-mode {
   --cal-5: #b5c193;
   --cal-6: #a9becd;
   --cal-7: #e1ad97;
+  /* 差分ドロワーの構文ハイライト（ライトだけ。ダークは全体に当たる hljs の github-dark をそのまま使う）。github light 相当 */
+  --syntax-comment: #6a737d;
+  --syntax-keyword: #cf222e;
+  --syntax-number: #0550ae;
+  --syntax-string: #0a3069;
+  --syntax-title: #8250df;
+  --syntax-tag: #116329;
+  --syntax-builtin: #953800;
 }
 
 /* スクロールバーはどこでも細く・薄くし、カーソルが乗っている領域だけ少し濃くする

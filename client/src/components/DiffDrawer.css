@@ -10,8 +10,9 @@
 
 .diff-drawer {
   position: relative;
-  width: 60%;
-  max-width: 1100px;
+  /* ファイル一覧と左右に並べる表示が入る幅（1280px の画面で 1024px） */
+  width: 80%;
+  max-width: 1400px;
   min-width: 400px;
   height: 100%;
   background: var(--bg-primary);
@@ -22,10 +23,49 @@
 }
 
 @media (max-width: 640px) {
+  /* 狭い画面では幅を覚えていても画面いっぱい（つまみの inline style より優先する） */
   .diff-drawer {
-    width: 100%;
+    width: 100% !important;
     min-width: 0;
   }
+  .diff-drawer-resize {
+    display: none;
+  }
+}
+
+/* 左端の幅のつまみ。ドロワーの外へはみ出さず、内側に重ねるだけ（出し入れ・ホバーで周りを動かさない） */
+.diff-drawer-resize {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.diff-drawer-resize:hover,
+.diff-drawer-resize:active {
+  background: var(--border);
+}
+
+.diff-drawer-resize:focus-visible {
+  outline: none;
+  background: var(--accent);
+}
+
+/* 小窓（Document Picture-in-Picture）では窓いっぱいに広げる。幅は窓に従う */
+.diff-drawer-pip-host {
+  height: 100vh;
+  display: flex;
+}
+
+.diff-drawer-pip-host .diff-drawer {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  border-left: none;
+  box-shadow: none;
 }
 
 .diff-drawer-header {
@@ -63,20 +103,29 @@
   font-family: monospace;
 }
 
+/* 範囲（全体 / このセッション）。表示（1列 / 左右）の .diff-segmented と同じ形・同じ中立色にそろえる */
 .diff-drawer-scope {
   display: flex;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
 }
 
 .diff-scope-btn {
   background: none;
   border: none;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
   color: var(--text-secondary);
-  font-size: 12px;
-  padding: 4px 10px;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.diff-scope-btn:hover:not(.active) {
+  color: var(--text-primary);
 }
 
 .diff-scope-btn.active {
@@ -101,8 +150,15 @@
   color: var(--text-primary);
 }
 
+.diff-drawer-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .diff-drawer-body {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 12px 16px;
   display: flex;
@@ -517,4 +573,315 @@ button.diff-gutter {
 
 .diff-drawer-body:focus {
   outline: none;
+}
+
+/* ── ヘッダの追加分 ───────────────────────────────── */
+.diff-drawer-header > button,
+.diff-drawer-review,
+.diff-segmented,
+.diff-drawer-scope {
+  flex-shrink: 0;
+}
+
+.diff-list-toggle {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.diff-list-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.diff-drawer-reviewed {
+  white-space: nowrap;
+}
+
+/* 表示（1列 / 左右）。ActivityPanel の .activity-segmented と同じ形 */
+.diff-segmented {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+}
+
+.diff-segment {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.diff-segment:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+.diff-segment.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+/* ── ファイル一覧 ─────────────────────────────────── */
+.diff-filelist {
+  flex: 0 0 220px;
+  width: 220px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-filelist-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 12px 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.diff-filelist-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 4px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 12px;
+  /* 高さ固定（中身の出し入れで一覧が動かないように） */
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.diff-filelist-item:hover {
+  background: var(--bg-secondary);
+}
+
+/* 今見ているファイル。場所を示すだけなので中立色（今の操作対象＝ピンクは行カーソル） */
+.diff-filelist-item.current {
+  background: var(--bg-surface);
+}
+
+.diff-filelist-item.reviewed .diff-filelist-file {
+  color: var(--text-secondary);
+}
+
+.diff-filelist-name {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.diff-filelist-file {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.diff-filelist-dir {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+  min-width: 0;
+}
+
+.diff-filelist-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.diff-filelist-label {
+  font-family: inherit;
+}
+
+.diff-filelist-stat {
+  margin-right: auto;
+}
+
+.diff-filelist-comments {
+  min-width: 2ch;
+  text-align: right;
+  color: var(--warning);
+}
+
+.diff-filelist-comments.empty,
+.diff-filelist-check.empty {
+  visibility: hidden;
+}
+
+.diff-filelist-check {
+  display: flex;
+  color: var(--text-primary);
+}
+
+/* ── ファイル見出しの「確認済み」 ───────────────────────── */
+.diff-file-reviewed {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.diff-file-reviewed svg {
+  font-size: 14px;
+}
+
+.diff-file-reviewed:hover,
+.diff-file-reviewed.on {
+  color: var(--text-primary);
+}
+
+/* ── 本文の記号と構文ハイライト ─────────────────────────── */
+.diff-sign {
+  display: inline-block;
+  width: 1.5ch;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+/* hljs のトークン色。ダークは全体に当たる github-dark をそのまま使い、ライトはテーマ変数で上書きする */
+body.light-mode .diff-lines .hljs-comment,
+body.light-mode .diff-lines .hljs-quote {
+  color: var(--syntax-comment);
+}
+body.light-mode .diff-lines .hljs-keyword,
+body.light-mode .diff-lines .hljs-selector-tag,
+body.light-mode .diff-lines .hljs-subst,
+body.light-mode .diff-lines .hljs-meta .hljs-keyword,
+body.light-mode .diff-lines .hljs-template-tag,
+body.light-mode .diff-lines .hljs-type {
+  color: var(--syntax-keyword);
+}
+body.light-mode .diff-lines .hljs-number,
+body.light-mode .diff-lines .hljs-literal,
+body.light-mode .diff-lines .hljs-variable,
+body.light-mode .diff-lines .hljs-template-variable,
+body.light-mode .diff-lines .hljs-attr,
+body.light-mode .diff-lines .hljs-attribute,
+body.light-mode .diff-lines .hljs-operator,
+body.light-mode .diff-lines .hljs-selector-attr,
+body.light-mode .diff-lines .hljs-selector-class,
+body.light-mode .diff-lines .hljs-selector-id {
+  color: var(--syntax-number);
+}
+body.light-mode .diff-lines .hljs-string,
+body.light-mode .diff-lines .hljs-doctag,
+body.light-mode .diff-lines .hljs-regexp,
+body.light-mode .diff-lines .hljs-meta .hljs-string {
+  color: var(--syntax-string);
+}
+body.light-mode .diff-lines .hljs-title,
+body.light-mode .diff-lines .hljs-title.class_,
+body.light-mode .diff-lines .hljs-title.function_,
+body.light-mode .diff-lines .hljs-section {
+  color: var(--syntax-title);
+}
+body.light-mode .diff-lines .hljs-name,
+body.light-mode .diff-lines .hljs-tag,
+body.light-mode .diff-lines .hljs-selector-pseudo {
+  color: var(--syntax-tag);
+}
+body.light-mode .diff-lines .hljs-built_in,
+body.light-mode .diff-lines .hljs-symbol,
+body.light-mode .diff-lines .hljs-bullet,
+body.light-mode .diff-lines .hljs-meta,
+body.light-mode .diff-lines .hljs-params {
+  color: var(--syntax-builtin);
+}
+body.light-mode .diff-lines .hljs-code,
+body.light-mode .diff-lines .hljs-formula {
+  color: var(--syntax-comment);
+}
+/* github-dark は Markdown の太字・斜体を本文色（#c9d1d9）で塗るので、ライトでは本文の色に戻す（太字・斜体はそのまま） */
+body.light-mode .diff-lines .hljs-strong,
+body.light-mode .diff-lines .hljs-emphasis {
+  color: inherit;
+}
+/* diff 言語の追加・削除は暗い下地を持つ。行の背景で既に示しているので、ライトでは下地を外して文字色だけにする */
+body.light-mode .diff-lines .hljs-addition {
+  color: var(--syntax-tag);
+  background-color: transparent;
+}
+body.light-mode .diff-lines .hljs-deletion {
+  color: var(--syntax-keyword);
+  background-color: transparent;
+}
+
+/* ── 行カーソル（今の操作対象） ─────────────────────────── */
+.diff-line.cursor {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.diff-line.cursor:not(.target) {
+  box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* ── 左右に並べる表示 ─────────────────────────────── */
+.diff-split-line {
+  display: flex;
+}
+
+.diff-cell {
+  flex: 1 1 50%;
+  width: 50%;
+  min-width: 0;
+}
+
+.diff-cell + .diff-cell {
+  border-left: 1px solid var(--border);
+}
+
+/* 左右表示は横スクロールせず折り返す（片側の幅に収める） */
+.diff-lines.split {
+  overflow-x: hidden;
+}
+
+.diff-lines.split .diff-line-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.diff-gutter.single {
+  flex-basis: var(--diff-ln-w);
+  width: var(--diff-ln-w);
+}
+
+.diff-cell.empty {
+  background: var(--bg-secondary);
 }

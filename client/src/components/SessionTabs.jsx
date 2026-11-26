@@ -417,7 +417,7 @@ export default function SessionTabs({
     // Star / センシティブはホームと同じ claudeSessionId 単位。付け外しは展開表示のホバーボタンとホーム
     const isStarredTab = Boolean(session.claudeSessionId && starredIds?.has(session.claudeSessionId));
     const isSensitiveTab = Boolean(session.claudeSessionId && sensitiveIds?.has(session.claudeSessionId));
-    // プレビューを小窓（PiP）に出しているセッション。小窓は他のタブへ移っても残るので、どこから開いたかを示す
+    // プレビューか差分を小窓（PiP）に出しているセッション。小窓は他のタブへ移っても残るので、どこから開いたかを示す
     const isPipTab = Boolean(pipSessionId) && session.id === pipSessionId;
     const className = `tab ${session.id === activeSessionId ? 'active' : ''} ${!session.alive ? 'dead' : ''} ${hasAttention ? 'tab-attention' : ''}${dndClassOf(session)}`;
     const dot = statusDotOf(session, { isWaiting, hasAttention });
@@ -425,7 +425,7 @@ export default function SessionTabs({
     if (collapsed) {
       // 折りたたみ時はアイコン相当（頭文字＋状態）だけ。詳細は tooltip に逃がす
       const typeLabel = TYPE_LABELS[session.type || 'pty'] ? ` [${TYPE_LABELS[session.type || 'pty']}]` : '';
-      const markLabel = `${isStarredTab ? ' / ★ Star' : ''}${isSensitiveTab ? ' / 🔒 共有時は非表示' : ''}${isPipTab ? ' / ⧉ 小窓でプレビュー中' : ''}`;
+      const markLabel = `${isStarredTab ? ' / ★ Star' : ''}${isSensitiveTab ? ' / 🔒 共有時は非表示' : ''}${isPipTab ? ' / ⧉ 小窓に表示中' : ''}`;
       return (
         <div
           key={session.id}
@@ -471,7 +471,7 @@ export default function SessionTabs({
           {isPipTab && (
             <TbPictureInPicture
               className="tab-mark tab-mark-pip"
-              title="このセッションのプレビューを小窓に出しています（レビューはこのセッションへ送られます）"
+              title="このセッションのプレビューか差分を小窓に出しています（指摘はこのセッションへ送られます）"
             />
           )}
           <span className="tab-name" title={session.name}>
